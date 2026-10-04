@@ -30,5 +30,5 @@
 
 ## 5. Final checks
 
-- [ ] 5.1 Add a matrix of `ubuntu-latest` and `macos-latest` to the job in `.github/workflows/ci.yml`; verify by opening a pull request for the branch and confirming with `gh run watch` that `npm test` passes on both
-- [ ] 5.2 Run `npm test` and `openspec validate build-controller --strict` and verify both pass; verify with `git status` in a fixture run's repository that the invoking checkout is clean after a default-branch run and that no hooks were installed
+- [x] 5.1 Add a matrix of `ubuntu-latest` and `macos-latest` to the job in `.github/workflows/ci.yml`; verify by opening a pull request for the branch and confirming with `gh run watch` that `npm test` passes on both
+- [x] 5.2 Run `npm test` and `openspec validate build-controller --strict` and verify both pass; verify with `git status` in a fixture run's repository that the invoking checkout is clean after a default-branch run and that no hooks were installed
