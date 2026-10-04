@@ -6,6 +6,16 @@ import { test } from "node:test";
 import { isAlive } from "../src/state.js";
 import { makeRepo, type Repo, runLoop, startLoop, writeFile } from "./helpers.js";
 
+// A killed process stays visible until its parent reaps it, so wait for it to go.
+async function gone(pid: number): Promise<boolean> {
+  const deadline = Date.now() + 2_000;
+  while (isAlive(pid)) {
+    if (Date.now() > deadline) return false;
+    await sleep(25);
+  }
+  return true;
+}
+
 // A fixture step whose shell, the process group leader, waits on a child process.
 // Both record their PIDs, so a test can check that stopping ends the whole group.
 function sleepingStep(repo: Repo) {
@@ -92,8 +102,8 @@ test("a second advancement is refused while one is live, and stop ends the step 
   assert.equal(result.status, 1);
   assert.match(result.stdout, /\] implementation: stopped by the user \(fixture\)\n/);
   assert.match(result.stdout, /Cause: stopped by the user\nRecovery: loop resume add-thing\n/);
-  assert.equal(isAlive(step.pid()), false);
-  assert.equal(isAlive(step.child()), false);
+  assert.ok(await gone(step.pid()));
+  assert.ok(await gone(step.child()));
 
   const statusAfter = runLoop(repo, ["status", "add-thing"]);
   assert.match(statusAfter.stdout, /^Run add-thing: stopped at implementation\nCause: stopped by the user\nRecovery: loop resume add-thing\n/);
@@ -118,8 +128,8 @@ for (const signal of ["SIGINT", "SIGHUP"] as const) {
     const result = await running.exited;
     assert.equal(result.status, 1);
     assert.match(result.stdout, /Cause: stopped by the user\n/);
-    assert.equal(isAlive(step.pid()), false);
-    assert.equal(isAlive(step.child()), false);
+    assert.ok(await gone(step.pid()));
+    assert.ok(await gone(step.child()));
   });
 }
 

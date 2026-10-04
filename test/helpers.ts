@@ -119,7 +119,6 @@ export function runLoop(repo: Repo, args: string[], cwd = repo.top): Result {
 
 export interface Running {
   child: ChildProcess;
-  stdout(): string;
   waitFor(pattern: RegExp): Promise<void>;
   exited: Promise<Result>;
 }
@@ -133,7 +132,6 @@ export function startLoop(repo: Repo, args: string[], cwd = repo.top): Running {
   const exited = new Promise<Result>((resolve) => child.on("close", (status) => resolve({ status, stdout, stderr })));
   return {
     child,
-    stdout: () => stdout,
     async waitFor(pattern) {
       const deadline = Date.now() + 10_000;
       while (!pattern.test(stdout)) {

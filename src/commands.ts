@@ -100,11 +100,10 @@ export async function stop(change: string): Promise<number> {
   const dir = runDir(topLevel(process.cwd()), change);
   existingState(dir, change);
   const holder = lockHolder(dir);
-  if (!holder?.alive) {
+  if (!holder?.alive || !signal(holder.pid)) {
     process.stdout.write(`Run ${change} is not advancing.\n`);
     return 0;
   }
-  process.kill(holder.pid, "SIGTERM");
   while (lockHolder(dir)?.pid === holder.pid && isAlive(holder.pid)) await sleep(100);
   process.stdout.write(`Stopped run ${change}.\n`);
   return 0;
@@ -131,6 +130,17 @@ export async function status(change: string): Promise<number> {
   const stages = STAGES.map((stage) => `  ${stage.padEnd(width)}  ${state.stages[stage]}\n`).join("");
   process.stdout.write(`Run ${change}: ${summary}\nBranch: ${state.branch}\nStages:\n${stages}${locations(dir, state)}`);
   return 0;
+}
+
+// Asks the advancing process to stop. Returns false when it exited before the signal arrived.
+function signal(pid: number): boolean {
+  try {
+    process.kill(pid, "SIGTERM");
+    return true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ESRCH") return false;
+    throw error;
+  }
 }
 
 function existingState(dir: string, change: string): RunState {
