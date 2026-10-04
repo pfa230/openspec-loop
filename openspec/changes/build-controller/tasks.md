@@ -24,9 +24,9 @@
 
 ## 4. Supervision skill
 
-- [ ] 4.1 Verify how a Codex session runs a long command in the background and reads its output as it grows, or whether it must poll `loop status` instead, by running a slow fixture run from Codex; record the working method and the Codex version in the skill
-- [ ] 4.2 Write `skills/openspec-loop/SKILL.md`: start `loop run <change>` in the background, relay each new progress line to the user as it appears, read the report and name the transcripts when the command exits, run `loop stop` or `loop resume` only with the user's agreement, and give the Claude and Codex methods for background output; verify the file exists and that every command it names is one of the four `loop` commands
-- [ ] 4.3 In a disposable repository with `openspec/loop.yaml` and a fixture with a slow step, copy the skill into `.claude/skills/openspec-loop/` and `.agents/skills/openspec-loop/`, then verify that a Claude session running a change proposed on its own branch, and a Codex session running a change proposed on the default branch, each start the run, relay its progress lines as they appear, stop it, report the stop, and resume it to completion after the user agrees; verify that the same sequence from a plain terminal prints the same lines and report
+- [x] 4.1 Verify how a Codex session runs a long command in the background and reads its output as it grows, or whether it must poll `loop status` instead, by running a slow fixture run from Codex; record the working method and the Codex version in the skill
+- [x] 4.2 Write `skills/openspec-loop/SKILL.md`: start `loop run <change>` in the background, relay each new progress line to the user as it appears, read the report and name the transcripts when the command exits, run `loop stop` or `loop resume` only with the user's agreement, and give the Claude and Codex methods for background output; verify the file exists and that every command it names is one of the four `loop` commands
+- [x] 4.3 In a disposable repository with `openspec/loop.yaml` and a fixture with a slow step, copy the skill into `.claude/skills/openspec-loop/` and `.agents/skills/openspec-loop/`, then verify that a Claude session running a change proposed on its own branch, and a Codex session running a change proposed on the default branch, each start the run, relay its progress lines as they appear, stop it, report the stop, and resume it to completion after the user agrees; verify that the same sequence from a plain terminal prints the same lines and report
 
 ## 5. Final checks
 
