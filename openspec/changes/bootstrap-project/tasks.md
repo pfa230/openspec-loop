@@ -10,7 +10,7 @@
 
 ## 3. CI
 
-- [ ] 3.1 Add `.github/workflows/ci.yml` running `npm ci` and `npm test` on Node 24 for pushes to `main` and for pull requests; verify by opening a pull request for the branch, since a branch push alone does not trigger the workflow, and confirming its run passes with `gh run watch`
+- [x] 3.1 Add `.github/workflows/ci.yml` running `npm ci` and `npm test` on Node 24 for pushes to `main` and for pull requests; verify by opening a pull request for the branch, since a branch push alone does not trigger the workflow, and confirming its run passes with `gh run watch`
 
 ## 4. Documentation and agent instructions
 
@@ -19,5 +19,5 @@
 
 ## 5. Clean-checkout verification
 
-- [ ] 5.1 Clone the branch into a temporary directory, run `npm ci` and `npm test`, and verify they pass; verify with `rg` that no tracked file outside `openspec/` references the legacy checkout or its paths
-- [ ] 5.2 Run `openspec validate bootstrap-project --strict` and verify it passes
+- [x] 5.1 Clone the branch into a temporary directory, run `npm ci` and `npm test`, and verify they pass; verify with `rg` that no tracked file outside `openspec/` references the legacy checkout or its paths
+- [x] 5.2 Run `openspec validate bootstrap-project --strict` and verify it passes
