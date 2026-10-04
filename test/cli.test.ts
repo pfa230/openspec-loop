@@ -1,15 +1,19 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
 import { test } from "node:test";
-import { fileURLToPath } from "node:url";
+import { loop, makeRepo, runLoop } from "./helpers.js";
 
-const root = new URL("../../", import.meta.url);
-const pkg = JSON.parse(readFileSync(new URL("package.json", root), "utf8"));
+test("loop prints usage and exits 2", (t) => {
+  const repo = makeRepo(t);
+  for (const args of [[], ["run"], ["unknown", "add-thing"], ["run", "add-thing", "extra"]]) {
+    const result = loop(args, { cwd: repo.top, env: repo.env });
+    assert.equal(result.status, 2, args.join(" "));
+    assert.match(result.stderr, /^Usage: loop /);
+  }
+});
 
-test("loop prints usage and exits 2", () => {
-  const bin = fileURLToPath(new URL(pkg.bin.loop, root));
-  const result = spawnSync(process.execPath, [bin], { encoding: "utf8" });
+test("status of a change with no run exits 2", (t) => {
+  const repo = makeRepo(t);
+  const result = runLoop(repo, ["status", "add-thing"]);
   assert.equal(result.status, 2);
-  assert.match(result.stderr, /^Usage: loop /);
+  assert.match(result.stderr, /add-thing has no run; start one with `loop run add-thing`/);
 });
