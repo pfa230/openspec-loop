@@ -38,12 +38,13 @@ The commands work from any checkout of the repository:
 
 A run accepts one advancement at a time. If the process advancing it dies, `loop resume` takes the run over and redoes the step that was in progress.
 
-Each run keeps its state in the repository's Git directory, at `.git/openspec-loop/<change>/`: `state.json`, the transcripts of every step under `transcripts/`, and, for a run started on the default branch, its worktree under `worktree/`. Nothing is written to your checkouts. To discard a run and start over:
+Each run keeps its state in the repository's Git directory, at `.git/openspec-loop/<change>/` in a regular clone; the report and `loop status` print the exact paths. The run directory holds `state.json`, the transcripts of every step under `transcripts/`, and, for a run started on the default branch, its worktree under `worktree/`. Nothing is written to your checkouts. To discard a run and start over:
 
 ```sh
-git worktree remove --force .git/openspec-loop/<change>/worktree   # a run started on the default branch
-git branch -D loop/<change>                                          # likewise
-rm -rf .git/openspec-loop/<change>
+dir="$(git rev-parse --path-format=absolute --git-common-dir)/openspec-loop/<change>"
+git worktree remove --force "$dir/worktree"   # only for a run started on the default branch
+git branch -D loop/<change>                   # likewise
+rm -rf "$dir"
 ```
 
 ### Fixture stages

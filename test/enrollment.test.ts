@@ -4,18 +4,6 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { makeRepo, runLoop, writeFile } from "./helpers.js";
 
-test("a proposal committed on the default branch runs", (t) => {
-  const repo = makeRepo(t);
-  const result = runLoop(repo, ["run", "add-thing"]);
-  assert.equal(result.status, 0, result.stderr);
-});
-
-test("a proposal committed on a change branch runs", (t) => {
-  const repo = makeRepo(t, { branch: "add-thing" });
-  const result = runLoop(repo, ["run", "add-thing"]);
-  assert.equal(result.status, 0, result.stderr);
-});
-
 test("a proposal missing from the invoking branch is refused", (t) => {
   const repo = makeRepo(t, { branch: "add-thing" });
   repo.git("switch", "--quiet", "main");
@@ -56,13 +44,6 @@ for (const [name, dirty] of Object.entries(dirtyStates)) {
   });
 }
 
-test("a default-branch checkout with uncommitted changes is accepted", (t) => {
-  const repo = makeRepo(t);
-  writeFile(repo.top, "notes.txt", "draft\n");
-  const result = runLoop(repo, ["run", "add-thing"]);
-  assert.equal(result.status, 0, result.stderr);
-});
-
 test("a detached HEAD is refused", (t) => {
   const repo = makeRepo(t);
   repo.git("checkout", "--quiet", "--detach");
@@ -71,7 +52,7 @@ test("a detached HEAD is refused", (t) => {
   assert.match(result.stderr, /detached HEAD/);
 });
 
-test("the default-branch path creates loop/<change> at the invoking HEAD in its own worktree", (t) => {
+test("the default-branch path creates loop/<change> at the invoking HEAD and accepts a dirty checkout", (t) => {
   const repo = makeRepo(t);
   const head = repo.git("rev-parse", "HEAD");
   writeFile(repo.top, "notes.txt", "draft\n");

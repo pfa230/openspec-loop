@@ -6,16 +6,22 @@ import { test } from "node:test";
 import { isAlive } from "../src/state.js";
 import { makeRepo, type Repo, runLoop, startLoop, writeFile } from "./helpers.js";
 
-// A fixture step that records its PID, which is also its process group, and then sleeps.
+// A fixture step whose shell, the process group leader, waits on a child process.
+// Both record their PIDs, so a test can check that stopping ends the whole group.
 function sleepingStep(repo: Repo) {
-  const pidFile = join(repo.root, "step.pid");
-  const pid = () => (existsSync(pidFile) ? Number(readFileSync(pidFile, "utf8")) : 0);
+  const read = (name: string) => () => {
+    const path = join(repo.root, name);
+    return existsSync(path) ? Number(readFileSync(path, "utf8")) : 0;
+  };
+  const pid = read("step.pid");
+  const child = read("child.pid");
   return {
-    command: `echo $$ > ${pidFile}; exec sleep 30`,
+    command: `echo $$ > ${join(repo.root, "step.pid")}; sleep 30 & echo $! > ${join(repo.root, "child.pid")}; wait`,
     pid,
+    child,
     async started() {
       const deadline = Date.now() + 10_000;
-      while (!(pid() > 0)) {
+      while (!(pid() > 0 && child() > 0)) {
         if (Date.now() > deadline) throw new Error("the fixture step did not start");
         await sleep(25);
       }
@@ -59,7 +65,7 @@ test("resume of a completed run reports it complete", (t) => {
   assert.equal(runLoop(repo, ["run", "add-thing"]).status, 0);
   const result = runLoop(repo, ["resume", "add-thing"]);
   assert.equal(result.status, 0);
-  assert.match(result.stdout, /^Run add-thing is complete\./);
+  assert.match(result.stdout, /^Run add-thing is complete\. Every stage was a fixture; no stage did real work\.\n/);
 });
 
 test("a second advancement is refused while one is live, and stop ends the step at once", async (t) => {
@@ -87,6 +93,7 @@ test("a second advancement is refused while one is live, and stop ends the step 
   assert.match(result.stdout, /\] implementation: stopped by the user \(fixture\)\n/);
   assert.match(result.stdout, /Cause: stopped by the user\nRecovery: loop resume add-thing\n/);
   assert.equal(isAlive(step.pid()), false);
+  assert.equal(isAlive(step.child()), false);
 
   const statusAfter = runLoop(repo, ["status", "add-thing"]);
   assert.match(statusAfter.stdout, /^Run add-thing: stopped at implementation\nCause: stopped by the user\nRecovery: loop resume add-thing\n/);
@@ -112,6 +119,7 @@ for (const signal of ["SIGINT", "SIGHUP"] as const) {
     assert.equal(result.status, 1);
     assert.match(result.stdout, /Cause: stopped by the user\n/);
     assert.equal(isAlive(step.pid()), false);
+    assert.equal(isAlive(step.child()), false);
   });
 }
 
@@ -123,6 +131,8 @@ test("a run whose controller died with its step shows as interrupted, and resume
   await running.waitFor(/implementation: started/);
   await step.started();
   const controller = running.child.pid!;
+  // Freeze the controller first, so it cannot record the step's death before it dies too.
+  process.kill(controller, "SIGSTOP");
   process.kill(-step.pid(), "SIGKILL");
   running.child.kill("SIGKILL");
   await running.exited;

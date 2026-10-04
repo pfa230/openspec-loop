@@ -8,6 +8,8 @@ export function progress(message: string): void {
   process.stdout.write(`[${time}] ${message}\n`);
 }
 
+export const FIXTURE_NOTE = "Every stage was a fixture; no stage did real work.";
+
 export function locations(dir: string, state: RunState): string {
   return `Worktree: ${state.worktree}\nRun directory: ${dir}\nTranscripts: ${join(dir, "transcripts")}\n`;
 }
@@ -54,7 +56,7 @@ export async function advance(dir: string, state: RunState, fixture: Fixture): P
       progress(`${stage}: complete (fixture)`);
     }
     process.stdout.write(
-      `Run ${state.change} completed. Every stage was a fixture; no stage did real work.\n${locations(dir, state)}`,
+      `Run ${state.change} completed. ${FIXTURE_NOTE}\n${locations(dir, state)}`,
     );
     return 0;
   } finally {

@@ -1,8 +1,8 @@
-import { mkdirSync } from "node:fs";
+import { existsSync, mkdirSync } from "node:fs";
 import { setTimeout as sleep } from "node:timers/promises";
 import { join } from "node:path";
 import { readConfig } from "./config.js";
-import { advance, locations, progress } from "./controller.js";
+import { advance, FIXTURE_NOTE, locations, progress } from "./controller.js";
 import { loadFixture } from "./fixture.js";
 import { git, gitMessage, gitSucceeds, topLevel } from "./git.js";
 import { checkOpenSpec } from "./openspec.js";
@@ -25,10 +25,21 @@ export async function run(change: string): Promise<number> {
   checkOpenSpec();
   const fixture = loadFixture();
   const dir = runDir(top, change);
+  mkdirSync(dir, { recursive: true });
+  acquireLock(dir, change);
+  try {
+    return await advance(dir, enroll(top, dir, change, config.defaultBranch), fixture);
+  } catch (error) {
+    releaseLock(dir);
+    throw error;
+  }
+}
+
+// Checks the change can run and creates its run. Called under the run's lock.
+function enroll(top: string, dir: string, change: string, defaultBranch: string): RunState {
   if (readState(dir)) {
     throw new Refusal(`${change} already has a run; see \`loop status ${change}\` or continue it with \`loop resume ${change}\``);
   }
-
   let branch: string;
   try {
     branch = git(top, "symbolic-ref", "--quiet", "--short", "HEAD");
@@ -40,33 +51,25 @@ export async function run(change: string): Promise<number> {
   if (!gitSucceeds(top, "cat-file", "-e", `${head}:${proposal}`)) {
     throw new Refusal(`${proposal} is not committed on ${branch}; commit the proposal on the branch you run \`loop run\` from`);
   }
-  const onDefaultBranch = branch === config.defaultBranch;
+  const onDefaultBranch = branch === defaultBranch;
   if (!onDefaultBranch && git(top, "status", "--porcelain", "--untracked-files=all") !== "") {
     throw new Refusal(`worktree ${top} has uncommitted changes; commit or remove them before running ${change} on ${branch}`);
   }
 
-  mkdirSync(dir, { recursive: true });
-  acquireLock(dir, change);
-  let state: RunState;
-  try {
-    let worktree = top;
-    if (onDefaultBranch) {
-      branch = `loop/${change}`;
-      worktree = join(dir, "worktree");
-      try {
-        git(top, "worktree", "add", "--quiet", "-b", branch, worktree, head);
-      } catch (error) {
-        throw new Refusal(gitMessage(error));
-      }
-      progress(`created branch ${branch} at ${head.slice(0, 7)} in worktree ${worktree}`);
+  let worktree = top;
+  if (onDefaultBranch) {
+    branch = `loop/${change}`;
+    worktree = join(dir, "worktree");
+    try {
+      git(top, "worktree", "add", "--quiet", "-b", branch, worktree, head);
+    } catch (error) {
+      throw new Refusal(gitMessage(error));
     }
-    state = { change, branch, worktree, stages: pendingStages(), current: null, stop: null };
-    writeState(dir, state);
-  } catch (error) {
-    releaseLock(dir);
-    throw error;
+    progress(`created branch ${branch} at ${head.slice(0, 7)} in worktree ${worktree}`);
   }
-  return advance(dir, state, fixture);
+  const state: RunState = { change, branch, worktree, stages: pendingStages(), current: null, stop: null };
+  writeState(dir, state);
+  return state;
 }
 
 export async function resume(change: string): Promise<number> {
@@ -75,12 +78,19 @@ export async function resume(change: string): Promise<number> {
   checkOpenSpec();
   const fixture = loadFixture();
   const dir = runDir(top, change);
-  const state = existingState(dir, change);
+  if (!existsSync(dir)) throw noRun(change);
   const deadPid = acquireLock(dir, change);
+  let state: RunState;
+  try {
+    state = existingState(dir, change);
+  } catch (error) {
+    releaseLock(dir);
+    throw error;
+  }
   if (deadPid !== undefined) progress(`took over run ${change} from process ${deadPid}, which died`);
   if (STAGES.every((stage) => state.stages[stage] === "complete")) {
     releaseLock(dir);
-    process.stdout.write(`Run ${change} is complete.\n${locations(dir, state)}`);
+    process.stdout.write(`Run ${change} is complete. ${FIXTURE_NOTE}\n${locations(dir, state)}`);
     return 0;
   }
   return advance(dir, state, fixture);
@@ -109,7 +119,7 @@ export async function status(change: string): Promise<number> {
   if (holder?.alive) {
     summary = `advancing in process ${holder.pid}${state.current ? `, at ${state.current}` : ""}`;
   } else if (STAGES.every((stage) => state.stages[stage] === "complete")) {
-    summary = "complete";
+    summary = `complete. ${FIXTURE_NOTE}`;
   } else if (state.stop && !holder) {
     summary = `stopped at ${state.stop.stage}\nCause: ${state.stop.cause}\nRecovery: ${state.stop.recovery}`;
   } else {
@@ -125,8 +135,12 @@ export async function status(change: string): Promise<number> {
 
 function existingState(dir: string, change: string): RunState {
   const state = readState(dir);
-  if (!state) throw new Refusal(`${change} has no run; start one with \`loop run ${change}\``);
+  if (!state) throw noRun(change);
   return state;
+}
+
+function noRun(change: string): Refusal {
+  return new Refusal(`${change} has no run; start one with \`loop run ${change}\``);
 }
 
 function pendingStages(): RunState["stages"] {

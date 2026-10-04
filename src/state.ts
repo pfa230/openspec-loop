@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync, linkSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { git } from "./git.js";
 import { Refusal } from "./refusal.js";
@@ -36,7 +36,9 @@ export function writeState(dir: string, state: RunState): void {
   renameSync(`${path}.tmp`, path);
 }
 
+// Only a positive PID names one process; 0 and negative values signal whole process groups.
 export function isAlive(pid: number): boolean {
+  if (!Number.isInteger(pid) || pid <= 0) return false;
   try {
     process.kill(pid, 0);
     return true;
@@ -58,30 +60,36 @@ export function lockHolder(dir: string): LockHolder | undefined {
     return undefined;
   }
   const pid = Number(text);
-  // A lock that names no PID is being written by another advancement.
-  return { pid, alive: Number.isInteger(pid) ? isAlive(pid) : true };
+  return { pid, alive: isAlive(pid) };
 }
 
 // Takes the run's lock for this process. Returns the PID of a dead advancement it took over, if any.
+// The lock is linked into place already holding the PID, so no reader ever sees it empty.
 export function acquireLock(dir: string, change: string): number | undefined {
   const path = join(dir, "lock");
-  let takenOver: number | undefined;
-  for (let attempt = 0; attempt < 2; attempt++) {
-    try {
-      writeFileSync(path, String(process.pid), { flag: "wx" });
-      return takenOver;
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+  const mine = `${path}.${process.pid}`;
+  writeFileSync(mine, String(process.pid));
+  try {
+    let takenOver: number | undefined;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        linkSync(mine, path);
+        return takenOver;
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+      }
+      const holder = lockHolder(dir);
+      if (!holder) continue;
+      if (holder.alive) {
+        throw new Refusal(`run ${change} is already advancing in process ${holder.pid} (lock ${path})`);
+      }
+      unlinkSync(path);
+      takenOver = holder.pid;
     }
-    const holder = lockHolder(dir);
-    if (!holder) continue;
-    if (holder.alive) {
-      throw new Refusal(`run ${change} is already advancing in process ${holder.pid} (lock ${path})`);
-    }
-    unlinkSync(path);
-    takenOver = holder.pid;
+    throw new Refusal(`could not take the lock ${path}`);
+  } finally {
+    unlinkSync(mine);
   }
-  throw new Refusal(`could not take the lock ${path}`);
 }
 
 export function releaseLock(dir: string): void {
