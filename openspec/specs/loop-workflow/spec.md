@@ -16,15 +16,23 @@ Every mechanism, configuration option and guarantee in the loop SHALL serve a co
 
 ### Requirement: Explicit enrollment
 
-A run SHALL act only on the change named in `loop run`, and its responsibility SHALL cover only that change and the result it delivers. The loop SHALL refuse a run whose proposal is not committed on the run's base, as defined in Integration and delivery. OpenSpec artifacts, commits and native OpenSpec commands outside a run SHALL NOT enroll work, and the loop SHALL NOT enforce rules on them. The loop SHALL install no git hooks and SHALL NOT police repository-wide OpenSpec edits or archives.
+A run SHALL act only on the change named in `loop run`, and its responsibility SHALL cover only that change and the result it delivers. The loop SHALL refuse a run whose proposal is not committed on the change's branch, as defined in Integration and delivery, and a run that would use the invoking worktree while it has uncommitted changes. OpenSpec artifacts, commits and native OpenSpec commands outside a run SHALL NOT enroll work, and the loop SHALL NOT enforce rules on them. The loop SHALL install no git hooks and SHALL NOT police repository-wide OpenSpec edits or archives.
 
 #### Scenario: Run enrolls one change
-- **WHEN** the user runs `loop run` with a change whose proposal is on the run's base
+- **WHEN** the user runs `loop run` with a change whose proposal is committed on the change's branch
 - **THEN** the loop starts a run owning that change and no other
 
 #### Scenario: Proposal not on the default branch
-- **WHEN** the user runs `loop run` with a change whose proposal is not committed on the run's base
+- **WHEN** the user runs `loop run` on the default branch with a change whose proposal is not committed there
 - **THEN** the loop refuses the run and says where the proposal must be
+
+#### Scenario: Proposal not on the change branch
+- **WHEN** the user runs `loop run` on a branch other than the default branch with a change whose proposal is not committed on that branch
+- **THEN** the loop refuses the run and says where the proposal must be
+
+#### Scenario: Uncommitted changes in the worktree
+- **WHEN** the user runs `loop run` on a branch other than the default branch and that worktree has uncommitted changes
+- **THEN** the loop refuses the run and names the worktree
 
 #### Scenario: Native work outside a run
 - **WHEN** someone creates, edits, archives or deletes an OpenSpec change outside any run
@@ -32,11 +40,15 @@ A run SHALL act only on the change named in `loop run`, and its responsibility S
 
 ### Requirement: Attended proposal
 
-Proposals SHALL be native OpenSpec artifacts authored with the user through native OpenSpec proposing and committed on the default branch. The decisions the plan depends on SHALL be recorded in the design. The loop SHALL accept a committed proposal as it is.
+Proposals SHALL be native OpenSpec artifacts authored with the user through native OpenSpec proposing and committed on the change's branch: on the default branch before the run branches from it, or on a branch of its own. The decisions the plan depends on SHALL be recorded in the design. The loop SHALL accept a committed proposal as it is.
 
 #### Scenario: Proposal from native proposing
-- **WHEN** the user writes a proposal with native `/opsx:propose` and commits it on the default branch
+- **WHEN** the user writes a proposal with native `/opsx:propose`, commits it on the default branch and runs `loop run` there
 - **THEN** `loop run` accepts the change without further preparation
+
+#### Scenario: Proposal on its own branch
+- **WHEN** the user proposes in a worktree on a branch of its own, commits the proposal there and runs `loop run` in that worktree
+- **THEN** the run proceeds in that worktree without further preparation
 
 ### Requirement: Controller ownership
 
@@ -168,7 +180,15 @@ Before archiving, the controller SHALL check that every earlier stage is complet
 
 ### Requirement: Integration and delivery
 
-The run SHALL work on its own branch in its own worktree, started from its base, and SHALL preserve unrelated work in every checkout. The base is the remote's default branch in `pr` mode and the local default branch in `local` and `merge` modes. Before the pre-archive gate, the loop SHALL integrate the change with the current base; a conflict or a failed required check SHALL return to the implementer as findings. Only `merge` mode SHALL change the local default branch, and only by fast-forward when every checkout holding it is clean; otherwise the run SHALL stop and name the checkout. Before integrating in `merge` mode, the loop SHALL fast-forward a local default branch that is behind its remote, and SHALL stop the run when it is ahead or has diverged. Every action outside the run's worktree, such as updating or pushing a branch or opening a pull request, SHALL be reported as its own progress line. The configuration SHALL select one delivery mode: `local`, where the run stops with the archived change committed on its branch and pushes nothing; `pr`, where the loop pushes the change branch and opens a pull request on the repository's GitHub remote; or `merge`, where the loop fast-forwards the default branch to the change branch and pushes it. A failed fast-forward or a rejected push SHALL stop the run.
+The run SHALL work on the change's branch. When `loop run` is given on a branch other than the default branch, that branch is the change's branch and the run works in its worktree; when it is given on the default branch, the loop creates the change's branch from that commit in a worktree of its own. The run SHALL preserve unrelated work in every checkout. The base, which the loop integrates the change with and delivers it to, is the remote's default branch in `pr` mode and the local default branch in `local` and `merge` modes. Before the pre-archive gate, the loop SHALL integrate the change with the current base; a conflict or a failed required check SHALL return to the implementer as findings. Only `merge` mode SHALL change the local default branch, and only by fast-forward when every checkout holding it is clean; otherwise the run SHALL stop and name the checkout. Before integrating in `merge` mode, the loop SHALL fast-forward a local default branch that is behind its remote, and SHALL stop the run when it is ahead or has diverged. Every action outside the run's worktree, such as updating or pushing a branch or opening a pull request, SHALL be reported as its own progress line. The configuration SHALL select one delivery mode: `local`, where the run stops with the archived change committed on its branch and pushes nothing; `pr`, where the loop pushes the change branch and opens a pull request on the repository's GitHub remote; or `merge`, where the loop fast-forwards the default branch to the change branch and pushes it. A failed fast-forward or a rejected push SHALL stop the run.
+
+#### Scenario: Run on the default branch
+- **WHEN** the user runs `loop run` on the default branch
+- **THEN** the loop creates a new branch for the change from that commit in a worktree of its own, and enrollment leaves the default branch and the invoking checkout untouched
+
+#### Scenario: Run on a change branch
+- **WHEN** the user runs `loop run` in a worktree on a branch of its own
+- **THEN** the run commits on that branch in that worktree, in every delivery mode
 
 #### Scenario: Local delivery
 - **WHEN** the run completes in `local` mode
@@ -218,6 +238,14 @@ The loop SHALL provide deterministic `run`, `status`, `stop` and `resume` comman
 - **WHEN** the user stops a run during an implementer turn
 - **THEN** the turn ends, the run reports how to resume, and resume redoes the interrupted step
 
+#### Scenario: Run already exists
+- **WHEN** the user runs `loop run` for a change that already has a run
+- **THEN** the loop refuses and names `loop status` and `loop resume` for that run
+
+#### Scenario: Advancing process died
+- **WHEN** the process advancing a run dies without stopping the run, and the user resumes it
+- **THEN** the loop takes over the run and treats the step that was in progress as interrupted
+
 ### Requirement: Progress and usage reporting
 
 As the run proceeds, the loop SHALL print each step when it starts and when it ends, naming the stage and, for a worker step, the role and the role's harness and model. The end line SHALL add the outcome, such as the verdict with finding counts by severity, the check results or the failure, and, for a worker step, its usage and cost. Usage and cost SHALL be shown as the harness reports them; a value the harness does not report SHALL be shown as unavailable, not as zero. The loop SHALL keep every worker's transcript and SHALL name where it is in the report.
@@ -253,3 +281,22 @@ The loop SHALL run OpenSpec through the `openspec` command on PATH, the same CLI
 #### Scenario: Native setup only
 - **WHEN** a repository has only native OpenSpec setup with its default schema
 - **THEN** `loop run` needs no loop-specific schema or OpenSpec configuration
+### Requirement: Loop configuration
+
+The loop SHALL read its configuration from `openspec/loop.yaml` in the checkout where `loop run` or `loop resume` is given, each time either is given. The configuration SHALL name the default branch, and the loop SHALL take it from the configuration and SHALL NOT detect it. A missing file, unparseable YAML, a missing field, an unknown key or a value of the wrong type SHALL refuse the command and name the problem.
+
+#### Scenario: Configuration missing
+- **WHEN** the user runs `loop run` in a checkout without `openspec/loop.yaml`
+- **THEN** the loop refuses the run and names the missing file
+
+#### Scenario: Unknown key
+- **WHEN** the configuration contains a key the loop does not know, such as a misspelled field name
+- **THEN** the loop refuses the command and names the key
+
+#### Scenario: Configured default branch
+- **WHEN** the configuration names `trunk` as the default branch and the user runs `loop run` on `trunk`
+- **THEN** the loop creates the change's branch from `trunk`, whatever the remote's HEAD points to
+
+#### Scenario: Configuration changed while stopped
+- **WHEN** the user edits the configuration while a run is stopped and then resumes it
+- **THEN** the resumed run uses the edited configuration
