@@ -279,6 +279,11 @@ test("a completed run whose plan cannot be read shows the stop in status", (t) =
   repo.gitIn(repo.worktree, "rm", "-r", "--quiet", "openspec/changes/add-thing");
   assert.equal(runLoop(repo, ["resume", "add-thing"]).status, 1);
   assert.match(runLoop(repo, ["status", "add-thing"]).stdout, /^Run add-thing: stopped at proposal-review\nCause: execution failure of the loop: ENOENT/);
+
+  repo.gitIn(repo.worktree, "checkout", "--quiet", "HEAD", "--", "openspec/changes/add-thing");
+  assert.equal(runLoop(repo, ["resume", "add-thing"]).status, 0);
+  assert.equal(state(repo).stop, null);
+  assert.match(runLoop(repo, ["status", "add-thing"]).stdout, /^Run add-thing: complete\./);
 });
 
 test("a completed run whose plan changed is reviewed again on resume", (t) => {
