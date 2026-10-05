@@ -3,7 +3,7 @@ import { delimiter, join, resolve } from "node:path";
 import { parse } from "yaml";
 import { Refusal } from "./refusal.js";
 
-export const ROLES = ["proposalReviewer", "planReviser"] as const;
+export const ROLES = ["proposalReviewer", "planReviser", "implementer", "implementationReviewer"] as const;
 export type Role = (typeof ROLES)[number];
 
 export interface Config {
@@ -11,7 +11,9 @@ export interface Config {
   worktrees: string;
   agents: Record<string, string[]>;
   roles: Record<Role, string>;
-  attempts: { proposalReview: number };
+  attempts: { proposalReview: number; implementation: number };
+  // The required checks: shell commands run in the run's worktree. Empty means none.
+  checks: string[];
 }
 
 // An agent a role runs: its alias and its command, the first element resolved to an absolute path.
@@ -23,16 +25,23 @@ export interface Agent {
 export const CONFIG_PATH = "openspec/loop.yaml";
 export const LOCAL_CONFIG_PATH = "openspec/loop.local.yaml";
 
-const ATTEMPTS = ["proposalReview"] as const;
+const ATTEMPTS = ["proposalReview", "implementation"] as const;
 
-type Settings = { defaultBranch?: string; worktrees?: string; agents: Record<string, string[]>; roles: Record<string, string>; attempts: Record<string, number> };
+type Settings = {
+  defaultBranch?: string;
+  worktrees?: string;
+  agents: Record<string, string[]>;
+  roles: Record<string, string>;
+  attempts: Record<string, number>;
+  checks?: string[];
+};
 
 // Reads the committed configuration and, when it exists, the local one, whose entries replace the committed ones.
 export function readConfig(top: string): Config {
   const committedPath = join(top, CONFIG_PATH);
   const committedText = readText(committedPath);
   if (committedText === undefined) {
-    throw new Refusal(`${committedPath} not found; it must name the default branch, the worktrees directory, agents, roles and attempts`);
+    throw new Refusal(`${committedPath} not found; it must name the default branch, the worktrees directory, agents, roles, attempts and checks`);
   }
   const committed = parseFile(committedPath, committedText);
   const localPath = join(top, LOCAL_CONFIG_PATH);
@@ -44,12 +53,14 @@ export function readConfig(top: string): Config {
     agents: { ...committed.agents, ...local?.agents },
     roles: { ...committed.roles, ...local?.roles },
     attempts: { ...committed.attempts, ...local?.attempts },
+    checks: local?.checks ?? committed.checks,
   };
   const missing = [
     merged.defaultBranch === undefined ? "defaultBranch" : undefined,
     merged.worktrees === undefined ? "worktrees" : undefined,
     ...ROLES.filter((role) => merged.roles[role] === undefined).map((role) => `roles.${role}`),
     ...ATTEMPTS.filter((key) => merged.attempts[key] === undefined).map((key) => `attempts.${key}`),
+    merged.checks === undefined ? "checks" : undefined,
   ].filter((field) => field !== undefined);
   if (missing.length > 0) {
     throw new Refusal(`${committedPath} is missing ${missing.map((field) => `"${field}"`).join(", ")}`);
@@ -95,7 +106,7 @@ function parseFile(path: string, text: string): Settings {
     throw new Refusal(`${path} is not valid YAML: ${(error as Error).message}`);
   }
   const top = mapping(path, "", doc);
-  unknownKeys(path, "", top, ["defaultBranch", "worktrees", "agents", "roles", "attempts"]);
+  unknownKeys(path, "", top, ["defaultBranch", "worktrees", "agents", "roles", "attempts", "checks"]);
   const { defaultBranch } = top;
   if (defaultBranch !== undefined && (typeof defaultBranch !== "string" || defaultBranch === "")) {
     throw new Refusal(`${path}: "defaultBranch" must be a non-empty branch name`);
@@ -122,12 +133,17 @@ function parseFile(path: string, text: string): Settings {
       throw new Refusal(`${path}: "attempts.${key}" must be a positive integer`);
     }
   }
+  const { checks } = top;
+  if (checks !== undefined && (!Array.isArray(checks) || !checks.every((check) => typeof check === "string" && check !== ""))) {
+    throw new Refusal(`${path}: "checks" must be a list of non-empty commands`);
+  }
   return {
     defaultBranch,
     worktrees,
     agents: agents as Record<string, string[]>,
     roles: roles as Record<string, string>,
     attempts: attempts as Record<string, number>,
+    checks: checks as string[] | undefined,
   };
 }
 

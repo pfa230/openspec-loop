@@ -23,6 +23,8 @@ export interface RunState {
   approvedPlan: string | null;
   // The verdict record of a review whose plan reviser turn has not yet been committed.
   owedReview: string | null;
+  // The findings record the next implementer turn must address: failed checks, or an implementation review.
+  owedFindings: string | null;
 }
 
 export function runDir(top: string, change: string): string {
