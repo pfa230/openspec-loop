@@ -13,13 +13,14 @@ The loop is under construction. Its contract is [`openspec/specs/loop-workflow/s
 
 ## Configuration
 
-Commit `openspec/loop.yaml` in the repository. It names the default branch, which the loop does not detect, the agents that do the work, the role each agent fills, and the attempt budgets:
+Commit `openspec/loop.yaml` in the repository. It names the default branch, which the loop does not detect, the directory for the worktrees the loop creates, the agents that do the work, the role each agent fills, and the attempt budgets:
 
 ```yaml
 defaultBranch: main
+worktrees: .worktrees
 agents:
   gpt: [loop-codex, -m, gpt-5.5, -s, read-only]
-  opus: [loop-claude, --model, opus, --permission-mode, bypassPermissions]
+  opus: [loop-claude, --model, opus, --permission-mode, acceptEdits]
 roles:
   proposalReviewer: gpt
   planReviser: opus
@@ -27,11 +28,12 @@ attempts:
   proposalReview: 3
 ```
 
+- `worktrees` is the directory where a run started on the default branch gets its worktree, at `<worktrees>/<change>`. A relative path is relative to the repository's main worktree, whichever checkout you run from; an absolute path is used as written. A run keeps the worktree it was created with, so changing `worktrees` affects only new runs. The loop never edits ignore rules: when the directory lies inside a checkout, add it to `.gitignore`, or to `.git/info/exclude` for one clone only, because an unignored worktree makes that checkout dirty.
 - `agents` maps an alias of your choice to the command that runs that agent. Define one agent per harness and model you use, such as `opus` and `fable`, or `deepseek` and `mimo` on OpenCode. Progress lines name agents by alias.
 - `roles` assigns an agent to each role. The proposal reviewer judges the plan; the plan reviser revises it and applies minor plan fixes. One agent may fill both roles: every turn runs in a fresh context.
 - `attempts.proposalReview` bounds how many proposal reviews one advancement runs.
 
-Put settings you do not want to commit, such as your own agents, in `openspec/loop.local.yaml` beside it, and add that file to `.gitignore`. A value set there replaces the committed one: `defaultBranch` as a whole, and `agents`, `roles` and `attempts` entry by entry, so a local file can add one agent and point one role at it:
+Put settings you do not want to commit, such as your own agents, in `openspec/loop.local.yaml` beside it, and add that file to `.gitignore`. A value set there replaces the committed one: `defaultBranch` and `worktrees` as a whole, and `agents`, `roles` and `attempts` entry by entry, so a local file can add one agent and point one role at it:
 
 ```yaml
 agents:
@@ -48,14 +50,14 @@ An agent's command is an adapter followed by arguments for its harness. The pack
 
 | Adapter | Harness | Read-only reviewer arguments | Editing reviser arguments |
 |---|---|---|---|
-| `loop-claude` | Claude Code 2.1.289 | `--permission-mode plan` | `--permission-mode bypassPermissions` |
+| `loop-claude` | Claude Code 2.1.289 | `--permission-mode plan` | `--permission-mode acceptEdits` |
 | `loop-codex` | Codex 0.160.0 | `-s read-only` | `-s workspace-write` |
 | `loop-agy` | Antigravity 1.2.12 | none | `--dangerously-skip-permissions` |
 | `loop-opencode` | OpenCode 1.18.34 | `--agent plan` | none |
 
 Add the model flag of the harness (`--model`, `-m`) to choose a model. Without restriction arguments, a harness runs with its own defaults; headless Claude Code and Codex cannot edit files by default.
 
-Claude Code refuses to edit any path inside a `.git` directory without `bypassPermissions`, even with `--permission-mode acceptEdits`. A run started on the default branch works in a worktree inside the repository's Git directory, so an editing Claude agent needs `bypassPermissions` there. Run it inside a sandbox if you want to limit what it can do: put the sandbox command first, for example `[ai-jail, --exec, ..., loop-claude, ...]`.
+Claude Code refuses to edit any path inside a `.git` directory without `bypassPermissions`, even with `--permission-mode acceptEdits`. A `worktrees` directory inside the repository's Git directory therefore needs `bypassPermissions` for an editing Claude agent. Run such an agent inside a sandbox if you want to limit what it can do: put the sandbox command first, for example `[ai-jail, --exec, ..., loop-claude, ...]`.
 
 OpenCode has no way to enforce a reply schema, so `loop-opencode` asks for bare JSON and fails the step when the final message is anything else.
 
@@ -65,7 +67,7 @@ To use another tool, write your own adapter. The loop runs the agent's command w
 
 Propose the change with native `/opsx:propose` and commit it. The proposal must be committed on the branch the run works on, which you choose by where you give `loop run`:
 
-- **On the default branch.** Commit the proposal on the default branch and run `loop run <change>` there. The loop creates branch `loop/<change>` from that commit in a worktree of its own and leaves your checkout untouched.
+- **On the default branch.** Commit the proposal on the default branch and run `loop run <change>` there. The loop creates branch `loop/<change>` from that commit in a worktree under `worktrees` and leaves your checkout's files and index untouched.
 - **On a branch of its own.** Create a worktree on a new branch, propose and commit there, and run `loop run <change>` in that worktree. The run works in that worktree, which must have no uncommitted changes.
 
 The commands work from any checkout of the repository:
@@ -79,13 +81,12 @@ The commands work from any checkout of the repository:
 
 A run accepts one advancement at a time. If the process advancing it dies, `loop resume` takes the run over and redoes the step that was in progress.
 
-Each run keeps its state in the repository's Git directory, at `.git/openspec-loop/<change>/` in a regular clone; the report and `loop status` print the exact paths. The run directory holds `state.json`, the transcripts of every step under `transcripts/`, and, for a run started on the default branch, its worktree under `worktree/`. Nothing is written to your checkouts. To discard a run and start over:
+Each run keeps its state in the repository's Git directory, at `.git/openspec-loop/<change>/` in a regular clone: `state.json` and the transcripts of every step under `transcripts/`. A run started on the default branch works in its worktree under `worktrees`. The report and `loop status` print the exact paths. To discard a run and start over, note the `Worktree` and `Run directory` lines of `loop status <change>`, then:
 
 ```sh
-dir="$(git rev-parse --path-format=absolute --git-common-dir)/openspec-loop/<change>"
-git worktree remove --force "$dir/worktree"   # only for a run started on the default branch
-git branch -D loop/<change>                   # likewise
-rm -rf "$dir"
+git worktree remove --force <worktree>   # only for a run started on the default branch
+git branch -D loop/<change>              # likewise
+rm -rf <run directory>
 ```
 
 ### Proposal review
