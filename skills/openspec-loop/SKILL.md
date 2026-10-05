@@ -10,7 +10,7 @@ The loop runs a committed OpenSpec change unattended. You supervise it only thro
 - `loop run <change>` starts a run and advances it in the foreground. It prints a progress line, prefixed with the time, as each step starts and ends, then a report. It exits 0 when the run completes, 1 when it stops, and 2 when it refuses to start.
 - `loop status <change>` shows the run's state, branch, stages and locations.
 - `loop stop <change>` ends the current step at once; the running `loop run` then prints its stop report.
-- `loop resume <change>` continues a stopped or interrupted run. It advances in the foreground like `loop run`, with the same output and exit statuses.
+- `loop resume <change>` continues a stopped or interrupted run with a fresh attempt budget; `loop resume <change> --attempts <n>` sets that budget. It advances in the foreground like `loop run`, with the same output and exit statuses.
 
 ## Rules
 
@@ -18,7 +18,7 @@ The loop runs a committed OpenSpec change unattended. You supervise it only thro
 - Relay each progress line to the user as it appears, in order and unchanged. Do not batch them until the run ends.
 - When the command exits, show the user the report. On a stop, name the stopped stage, the cause and the recovery the report gives, and say where the transcripts are.
 - Run `loop stop` only when the user asks. Run `loop resume` only after the user agrees, even when the report names it as the recovery.
-- Do not edit the run's state, worktree or transcripts, and do not investigate a failure by changing anything. Read the report, `loop status` and the transcripts, and tell the user what they show.
+- Do not edit the run's state, worktree or transcripts, and do not investigate a failure by changing anything. Read the report, `loop status` and the transcripts, and tell the user what they show. The one exception is answering a decision stop, below, and only with the user's agreement.
 
 ## Watching a run in Claude Code
 
@@ -33,3 +33,7 @@ Verified with Codex CLI 0.160.0. Start the command with `exec_command` and a sho
 ## Stopping and resuming
 
 To stop, run `loop stop <change>` from any checkout of the repository; the watched `loop run` prints the stop report and exits 1. To continue after the user agrees, start `loop resume <change>` and watch it the same way. If `loop status` shows the run as interrupted, the process advancing it died; `loop resume` takes the run over and redoes the interrupted step.
+
+## Answering a decision stop
+
+When the report's cause says a review needs decisions the plan does not record, show the user each question exactly as the report lists it. The questions are the user's to answer; do not answer them yourself. When the user has answered, offer to record the answers. With the user's agreement, write each decision into the change's `design.md` in the run's worktree that the report's recovery names, and commit it there on the run's branch with `git commit`. Then resume with `loop resume <change>` once the user agrees, and watch the run as before. The resumed run reviews the plan again.
