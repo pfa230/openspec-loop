@@ -5,7 +5,11 @@
   "description": "Runs a proposed OpenSpec change to a reviewed, tested and delivered result",
   "type": "module",
   "bin": {
-    "loop": "dist/src/cli.js"
+    "loop": "dist/src/cli.js",
+    "loop-claude": "dist/src/adapters/claude.js",
+    "loop-codex": "dist/src/adapters/codex.js",
+    "loop-agy": "dist/src/adapters/agy.js",
+    "loop-opencode": "dist/src/adapters/opencode.js"
   },
   "files": [
     "dist/src"
