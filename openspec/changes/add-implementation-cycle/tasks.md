@@ -34,4 +34,4 @@
 
 ## 6. Final checks
 
-- [ ] 6.1 Run `openspec validate add-implementation-cycle --strict` and `npm test`, and verify on the pull request with `gh run watch` that CI passes on Linux and macOS
+- [x] 6.1 Run `openspec validate add-implementation-cycle --strict` and `npm test`, and verify on the pull request with `gh run watch` that CI passes on Linux and macOS
