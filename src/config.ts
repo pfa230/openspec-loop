@@ -1,5 +1,5 @@
 import { accessSync, constants, readFileSync, statSync } from "node:fs";
-import { delimiter, isAbsolute, join, resolve } from "node:path";
+import { delimiter, join, resolve } from "node:path";
 import { parse } from "yaml";
 import { Refusal } from "./refusal.js";
 
@@ -59,7 +59,7 @@ export function resolveRoles(top: string, config: Config): Record<Role, Agent> {
   const agents = {} as Record<Role, Agent>;
   for (const role of ROLES) {
     const alias = config.roles[role];
-    const command = config.agents[alias];
+    const command = Object.hasOwn(config.agents, alias) ? config.agents[alias] : undefined;
     if (command === undefined) {
       throw new Refusal(`role ${role} names agent "${alias}", which the configuration does not define`);
     }
@@ -97,18 +97,18 @@ function parseFile(path: string, text: string): Settings {
   if (defaultBranch !== undefined && (typeof defaultBranch !== "string" || defaultBranch === "")) {
     throw new Refusal(`${path}: "defaultBranch" must be a non-empty branch name`);
   }
-  const agents = mapping(path, "agents", top.agents ?? {});
+  const agents = mapping(path, "agents", top.agents === undefined ? {} : top.agents);
   for (const [alias, command] of Object.entries(agents)) {
     if (!Array.isArray(command) || command.length === 0 || !command.every((part) => typeof part === "string" && part !== "")) {
       throw new Refusal(`${path}: "agents.${alias}" must be a non-empty list of non-empty strings`);
     }
   }
-  const roles = mapping(path, "roles", top.roles ?? {});
+  const roles = mapping(path, "roles", top.roles === undefined ? {} : top.roles);
   unknownKeys(path, "roles.", roles, ROLES);
   for (const [role, alias] of Object.entries(roles)) {
     if (typeof alias !== "string" || alias === "") throw new Refusal(`${path}: "roles.${role}" must be an agent alias`);
   }
-  const attempts = mapping(path, "attempts", top.attempts ?? {});
+  const attempts = mapping(path, "attempts", top.attempts === undefined ? {} : top.attempts);
   unknownKeys(path, "attempts.", attempts, ATTEMPTS);
   for (const [key, value] of Object.entries(attempts)) {
     if (!Number.isInteger(value) || (value as number) < 1) {
@@ -138,9 +138,9 @@ function unknownKeys(path: string, prefix: string, value: Record<string, unknown
 }
 
 function onPath(name: string): string | undefined {
+  // As a shell does: relative entries, and an empty one, are relative to the current directory.
   for (const dir of (process.env.PATH ?? "").split(delimiter)) {
-    if (dir === "" || !isAbsolute(dir)) continue;
-    const path = join(dir, name);
+    const path = resolve(dir, name);
     if (executable(path)) return path;
   }
   return undefined;

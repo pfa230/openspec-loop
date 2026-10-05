@@ -10,8 +10,11 @@ function parseArgs(argv: string[]): [keyof typeof COMMANDS, string, number | und
   const [name, change, ...extra] = argv;
   if (name === undefined || !Object.hasOwn(COMMANDS, name) || change === undefined) return undefined;
   if (extra.length === 0) return [name as keyof typeof COMMANDS, change, undefined];
-  if (name !== "resume" || extra.length !== 2 || extra[0] !== "--attempts" || !/^[1-9]\d*$/.test(extra[1])) return undefined;
-  return [name, change, Number(extra[1])];
+  const attempts = Number(extra[1]);
+  if (name !== "resume" || extra.length !== 2 || extra[0] !== "--attempts" || !/^[1-9]\d*$/.test(extra[1]) || !Number.isSafeInteger(attempts)) {
+    return undefined;
+  }
+  return [name, change, attempts];
 }
 
 const parsed = parseArgs(process.argv.slice(2));
