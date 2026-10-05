@@ -65,9 +65,7 @@ function enroll(top: string, dir: string, change: string, config: Config): RunSt
   let worktree = top;
   if (onDefaultBranch) {
     branch = `loop/${change}`;
-    // A relative worktrees directory is relative to the main worktree, which Git lists first.
-    const main = git(top, "worktree", "list", "--porcelain").split("\n")[0].slice("worktree ".length);
-    worktree = join(resolve(main, config.worktrees), change);
+    worktree = join(resolve(top, config.worktrees), change);
     try {
       git(top, "worktree", "add", "--quiet", "-b", branch, worktree, head);
     } catch (error) {

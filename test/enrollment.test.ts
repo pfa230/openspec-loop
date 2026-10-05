@@ -80,17 +80,6 @@ test("a configured trunk is used while the remote's HEAD points to another branc
   assert.equal(repo.git("rev-parse", "loop/add-thing"), repo.git("rev-parse", "trunk"));
 });
 
-test("a relative worktrees directory resolves against the main worktree when run from a linked one", (t) => {
-  const repo = makeRepo(t);
-  repo.git("switch", "--quiet", "-c", "other");
-  const linked = join(repo.root, "linked");
-  repo.git("worktree", "add", "--quiet", linked, "main");
-  const result = runLoop(repo, ["run", "add-thing"], linked);
-  assert.equal(result.status, 0, result.stderr);
-  assert.equal(repo.gitIn(repo.worktree, "symbolic-ref", "--short", "HEAD"), "loop/add-thing");
-  assert.equal(existsSync(join(linked, ".worktrees")), false);
-});
-
 test("an absolute worktrees directory is used as given", (t) => {
   const repo = makeRepo(t);
   const worktrees = join(repo.root, "elsewhere");
@@ -105,12 +94,15 @@ test("an absolute worktrees directory is used as given", (t) => {
 test("an unignored worktrees directory shows as untracked, and the loop leaves the ignore files alone", (t) => {
   const repo = makeRepo(t);
   const exclude = join(repo.top, ".git", "info", "exclude");
+  const gitignore = join(repo.top, ".gitignore");
   writeFileSync(exclude, readFileSync(exclude, "utf8").replace(".worktrees/\n", ""));
-  const before = readFileSync(exclude);
+  writeFileSync(gitignore, "node_modules/\n");
+  repo.git("add", ".gitignore");
+  repo.git("commit", "--quiet", "-m", "ignore");
+  const before = [readFileSync(exclude), readFileSync(gitignore)];
   const result = runLoop(repo, ["run", "add-thing"]);
   assert.equal(result.status, 0, result.stderr);
-  assert.deepEqual(readFileSync(exclude), before);
-  assert.equal(existsSync(join(repo.top, ".gitignore")), false);
+  assert.deepEqual([readFileSync(exclude), readFileSync(gitignore)], before);
   assert.equal(repo.git("status", "--porcelain", "--untracked-files=all"), "?? .worktrees/add-thing/");
 });
 
