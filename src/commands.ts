@@ -1,8 +1,8 @@
 import { existsSync, mkdirSync } from "node:fs";
 import { setTimeout as sleep } from "node:timers/promises";
 import { join } from "node:path";
-import { readConfig } from "./config.js";
-import { advance, FIXTURE_NOTE, locations, progress } from "./controller.js";
+import { readConfig, resolveRoles } from "./config.js";
+import { advance, FIXTURE_NOTE, locations, planChanged, progress, type Setup } from "./controller.js";
 import { loadFixture } from "./fixture.js";
 import { git, gitMessage, gitSucceeds, topLevel } from "./git.js";
 import { checkOpenSpec } from "./openspec.js";
@@ -21,18 +21,24 @@ import {
 
 export async function run(change: string): Promise<number> {
   const top = topLevel(process.cwd());
-  const config = readConfig(top);
-  checkOpenSpec();
-  const fixture = loadFixture();
+  const setup = prepare(top, undefined);
   const dir = runDir(top, change);
   mkdirSync(dir, { recursive: true });
   acquireLock(dir, change);
   try {
-    return await advance(dir, enroll(top, dir, change, config.defaultBranch), fixture);
+    return await advance(dir, enroll(top, dir, change, setup.config.defaultBranch), setup);
   } catch (error) {
     releaseLock(dir);
     throw error;
   }
+}
+
+// Reads what an advancement needs, refusing before anything advances.
+function prepare(top: string, attempts: number | undefined): Setup {
+  const config = readConfig(top);
+  const agents = resolveRoles(top, config);
+  checkOpenSpec();
+  return { config, agents, fixture: loadFixture(), attempts };
 }
 
 // Checks the change can run and creates its run. Called under the run's lock.
@@ -67,16 +73,14 @@ function enroll(top: string, dir: string, change: string, defaultBranch: string)
     }
     progress(`created branch ${branch} at ${head.slice(0, 7)} in worktree ${worktree}`);
   }
-  const state: RunState = { change, branch, worktree, stages: pendingStages(), current: null, stop: null };
+  const state: RunState = { change, branch, worktree, stages: pendingStages(), current: null, stop: null, approvedPlan: null, owedReview: null };
   writeState(dir, state);
   return state;
 }
 
-export async function resume(change: string): Promise<number> {
+export async function resume(change: string, attempts?: number): Promise<number> {
   const top = topLevel(process.cwd());
-  readConfig(top);
-  checkOpenSpec();
-  const fixture = loadFixture();
+  const setup = prepare(top, attempts);
   const dir = runDir(top, change);
   if (!existsSync(dir)) throw noRun(change);
   const deadPid = acquireLock(dir, change);
@@ -88,12 +92,12 @@ export async function resume(change: string): Promise<number> {
     throw error;
   }
   if (deadPid !== undefined) progress(`took over run ${change} from process ${deadPid}, which died`);
-  if (STAGES.every((stage) => state.stages[stage] === "complete")) {
+  if (STAGES.every((stage) => state.stages[stage] === "complete") && !planChanged(state)) {
     releaseLock(dir);
     process.stdout.write(`Run ${change} is complete. ${FIXTURE_NOTE}\n${locations(dir, state)}`);
     return 0;
   }
-  return advance(dir, state, fixture);
+  return advance(dir, state, setup);
 }
 
 export async function stop(change: string): Promise<number> {

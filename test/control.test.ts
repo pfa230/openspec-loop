@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { test } from "node:test";
 import { isAlive } from "../src/state.js";
-import { makeRepo, type Repo, runLoop, startLoop, writeFile } from "./helpers.js";
+import { configYaml, makeRepo, type Repo, runLoop, startLoop, writeFile } from "./helpers.js";
 
 // A killed process stays visible until its parent reaps it, so wait for it to go.
 async function gone(pid: number): Promise<boolean> {
@@ -54,11 +54,11 @@ test("resume reads the configuration again", (t) => {
   const repo = makeRepo(t, { fixture: { implementation: "exit 1" } });
   assert.equal(runLoop(repo, ["run", "add-thing"]).status, 1);
   repo.setFixture({});
-  writeFile(repo.top, "openspec/loop.yaml", "defaultBranch: main\ndelivery: merge\n");
+  writeFile(repo.top, "openspec/loop.yaml", `${configYaml()}delivery: merge\n`);
   const refused = runLoop(repo, ["resume", "add-thing"]);
   assert.equal(refused.status, 2);
   assert.match(refused.stderr, /unknown key "delivery"/);
-  writeFile(repo.top, "openspec/loop.yaml", "defaultBranch: main\n");
+  writeFile(repo.top, "openspec/loop.yaml", configYaml());
   assert.equal(runLoop(repo, ["resume", "add-thing"]).status, 0);
 });
 
@@ -75,7 +75,7 @@ test("resume of a completed run reports it complete", (t) => {
   assert.equal(runLoop(repo, ["run", "add-thing"]).status, 0);
   const result = runLoop(repo, ["resume", "add-thing"]);
   assert.equal(result.status, 0);
-  assert.match(result.stdout, /^Run add-thing is complete\. Every stage was a fixture; no stage did real work\.\n/);
+  assert.match(result.stdout, /^Run add-thing is complete\. Stages implementation, integration, archive and delivery were fixtures and did no real work\.\n/);
 });
 
 test("a second advancement is refused while one is live, and stop ends the step at once", async (t) => {

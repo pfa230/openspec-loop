@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
-import { makeRepo, runLoop, writeFile } from "./helpers.js";
+import { configYaml, makeRepo, runLoop, writeFile } from "./helpers.js";
 
 test("a proposal missing from the invoking branch is refused", (t) => {
   const repo = makeRepo(t, { branch: "add-thing" });
@@ -23,7 +23,7 @@ test("an uncommitted proposal is refused", (t) => {
 const dirtyStates: Record<string, (repo: ReturnType<typeof makeRepo>) => void> = {
   "an untracked file": (repo) => writeFile(repo.top, "notes.txt", "draft\n"),
   "a staged change": (repo) => {
-    writeFile(repo.top, "openspec/loop.yaml", "defaultBranch: main\n# staged\n");
+    writeFile(repo.top, "openspec/loop.yaml", `${configYaml()}# staged\n`);
     repo.git("add", "openspec/loop.yaml");
   },
   "an unstaged change to an unrelated tracked file": (repo) => {

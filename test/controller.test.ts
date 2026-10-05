@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
-import { makeRepo, runLoop, STAGES } from "./helpers.js";
+import { FIXTURE_STAGES, makeRepo, runLoop } from "./helpers.js";
 
 const LINE = /^\[\d{2}:\d{2}:\d{2}\] (.*)$/;
 
@@ -20,13 +20,18 @@ for (const branch of [undefined, "add-thing"]) {
     assert.equal(result.status, 0, result.stderr);
     assert.deepEqual(
       progressLines(result.stdout),
-      STAGES.flatMap((stage) => [`${stage}: started (fixture)`, `${stage}: complete (fixture)`]),
+      [
+        "proposal-review: review 1 of 3 started (reviewer)",
+        "proposal-review: review 1 of 3 APPROVE, 0 blocking, 0 minor (reviewer)",
+        "proposal-review: complete",
+        ...FIXTURE_STAGES.flatMap((stage) => [`${stage}: started (fixture)`, `${stage}: complete (fixture)`]),
+      ],
     );
     const worktree = branch ? repo.top : join(repo.runDir(), "worktree");
     const report = result.stdout.slice(result.stdout.indexOf("Run add-thing completed"));
     assert.equal(
       report,
-      "Run add-thing completed. Every stage was a fixture; no stage did real work.\n" +
+      "Run add-thing completed. Stages implementation, integration, archive and delivery were fixtures and did no real work.\n" +
         `Worktree: ${worktree}\nRun directory: ${repo.runDir()}\nTranscripts: ${join(repo.runDir(), "transcripts")}\n`,
     );
   });
@@ -37,8 +42,9 @@ test("a failing stage stops the run with a report naming the stage, cause, recov
   const result = runLoop(repo, ["run", "add-thing"]);
   assert.equal(result.status, 1);
   assert.deepEqual(progressLines(result.stdout), [
-    "proposal-review: started (fixture)",
-    "proposal-review: complete (fixture)",
+    "proposal-review: review 1 of 3 started (reviewer)",
+    "proposal-review: review 1 of 3 APPROVE, 0 blocking, 0 minor (reviewer)",
+    "proposal-review: complete",
     "implementation: started (fixture)",
     "implementation: execution failure, exit status 3 (fixture)",
   ]);
@@ -78,7 +84,7 @@ test("run refuses when LOOP_FIXTURE is unset", (t) => {
   delete repo.env.LOOP_FIXTURE;
   const result = runLoop(repo, ["run", "add-thing"]);
   assert.equal(result.status, 2);
-  assert.match(result.stderr, /no stage is implemented yet; set LOOP_FIXTURE/);
+  assert.match(result.stderr, /stages implementation, integration, archive and delivery are not implemented yet; set LOOP_FIXTURE/);
 });
 
 test("run refuses a fixture that does not name every stage", (t) => {
