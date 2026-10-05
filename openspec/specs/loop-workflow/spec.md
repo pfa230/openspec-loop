@@ -204,7 +204,7 @@ The run SHALL work on the change's branch. When `loop run` is given on a branch 
 
 #### Scenario: Run on the default branch
 - **WHEN** the user runs `loop run` on the default branch
-- **THEN** the loop creates a new branch for the change from that commit in a worktree of its own, and enrollment leaves the default branch and the invoking checkout untouched
+- **THEN** the loop creates a new branch for the change from that commit in a worktree of its own, and enrollment leaves the default branch and the invoking checkout's files and index untouched
 
 #### Scenario: Run on a change branch
 - **WHEN** the user runs `loop run` in a worktree on a branch of its own
@@ -303,7 +303,7 @@ The loop SHALL run OpenSpec through the `openspec` command on PATH, the same CLI
 - **THEN** `loop run` needs no loop-specific schema or OpenSpec configuration
 ### Requirement: Loop configuration
 
-The loop SHALL read its configuration from `openspec/loop.yaml` in the checkout where `loop run` or `loop resume` is given, each time either is given, and from `openspec/loop.local.yaml` beside it when that file exists. A value the local file sets SHALL replace the committed value: a top-level setting as a whole, and `agents`, `roles` and `attempts` entry by entry. The configuration SHALL name the default branch, and the loop SHALL take it from the configuration and SHALL NOT detect it. A missing `openspec/loop.yaml`, unparseable YAML, an unknown key or a value of the wrong type in either file SHALL refuse the command and name the problem and the file. A required field missing after the files are combined SHALL refuse the command and name the field.
+The loop SHALL read its configuration from `openspec/loop.yaml` in the checkout where `loop run` or `loop resume` is given, each time either is given, and from `openspec/loop.local.yaml` beside it when that file exists. A value the local file sets SHALL replace the committed value: a top-level setting as a whole, and `agents`, `roles` and `attempts` entry by entry. The configuration SHALL name the default branch, and the loop SHALL take it from the configuration and SHALL NOT detect it. The configuration SHALL name the worktrees directory, under which `loop run` on the default branch creates the change's worktree at `<directory>/<change>`. A relative worktrees directory SHALL resolve against the checkout where `loop run` is given, and an absolute one SHALL be used as given. A run SHALL keep the worktree it was created with. The loop SHALL NOT change Git's ignore files or configuration. A missing `openspec/loop.yaml`, unparseable YAML, an unknown key or a value of the wrong type in either file SHALL refuse the command and name the problem and the file. A required field missing after the files are combined SHALL refuse the command and name the field.
 
 #### Scenario: Configuration missing
 - **WHEN** the user runs `loop run` in a checkout without `openspec/loop.yaml`
@@ -324,6 +324,22 @@ The loop SHALL read its configuration from `openspec/loop.yaml` in the checkout 
 #### Scenario: Local override
 - **WHEN** `openspec/loop.local.yaml` defines an agent and assigns it to the proposal reviewer, and the committed file assigns another agent to that role and defines the plan reviser
 - **THEN** the proposal reviewer uses the local agent and the plan reviser keeps the committed assignment
+
+#### Scenario: Relative worktrees directory
+- **WHEN** the configuration names `.worktrees` as the worktrees directory and the user runs `loop run` on the default branch
+- **THEN** the loop creates the change's worktree at `.worktrees/<change>` under the checkout where `loop run` was given
+
+#### Scenario: Absolute worktrees directory
+- **WHEN** the configuration names an absolute worktrees directory outside the repository and the user runs `loop run` on the default branch
+- **THEN** the loop creates the change's worktree at `<directory>/<change>`
+
+#### Scenario: Worktrees directory changed while stopped
+- **WHEN** the user changes the worktrees directory while a run is stopped and then resumes it
+- **THEN** the resumed run continues in the worktree it was created with
+
+#### Scenario: Worktrees directory not ignored
+- **WHEN** the worktrees directory lies inside the invoking checkout and Git does not ignore it, and the user runs `loop run` on the default branch
+- **THEN** the loop creates the change's worktree without changing any Git ignore file or configuration, and the checkout shows it as untracked
 
 ### Requirement: Worker interface
 
