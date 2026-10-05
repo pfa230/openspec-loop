@@ -80,6 +80,18 @@ test("a configured trunk is used while the remote's HEAD points to another branc
   assert.equal(repo.git("rev-parse", "loop/add-thing"), repo.git("rev-parse", "trunk"));
 });
 
+test("a relative worktrees directory resolves against the invoking checkout", (t) => {
+  const repo = makeRepo(t);
+  repo.git("switch", "--quiet", "-c", "other");
+  const linked = join(repo.root, "linked");
+  repo.git("worktree", "add", "--quiet", linked, "main");
+  const result = runLoop(repo, ["run", "add-thing"], linked);
+  assert.equal(result.status, 0, result.stderr);
+  const state = JSON.parse(readFileSync(join(repo.runDir(), "state.json"), "utf8"));
+  assert.equal(state.worktree, join(linked, ".worktrees", "add-thing"));
+  assert.equal(repo.gitIn(state.worktree, "symbolic-ref", "--short", "HEAD"), "loop/add-thing");
+});
+
 test("an absolute worktrees directory is used as given", (t) => {
   const repo = makeRepo(t);
   const worktrees = join(repo.root, "elsewhere");
