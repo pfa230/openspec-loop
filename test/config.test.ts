@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -20,7 +20,7 @@ attempts:
 `;
 
 function checkout(t: After, yaml?: string, local?: string): string {
-  const top = mkdtempSync(join(tmpdir(), "loop-config-"));
+  const top = realpathSync(mkdtempSync(join(tmpdir(), "loop-config-")));
   t.after(() => rmSync(top, { recursive: true, force: true }));
   mkdirSync(join(top, "openspec"));
   if (yaml !== undefined) writeFileSync(join(top, "openspec/loop.yaml"), yaml);
