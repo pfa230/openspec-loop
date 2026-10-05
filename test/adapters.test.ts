@@ -116,3 +116,30 @@ for (const [name, text] of Object.entries({ prose: "The plan looks fine.", "a fe
     assert.equal(outcome.reply, undefined);
   });
 }
+
+const finalAnswers: Record<string, (first: unknown, second: unknown) => unknown[]> = {
+  claude: (first, second) => [
+    { type: "result", subtype: "success", structured_output: first },
+    { type: "result", subtype: "success", structured_output: second },
+  ],
+  agy: (first, second) => [
+    { event: "result", result: { status: "SUCCESS", structured_output: first } },
+    { event: "result", result: { status: "SUCCESS", structured_output: second } },
+  ],
+  opencode: (first, second) => [
+    { type: "text", part: { text: JSON.stringify(first) } },
+    { type: "text", part: { text: JSON.stringify(second) } },
+  ],
+};
+
+for (const [harness, events] of Object.entries(finalAnswers)) {
+  test(`loop-${harness} takes the last answer in the stream`, (t) => {
+    const dir = mkdtempSync(join(tmpdir(), "loop-stream-"));
+    t.after(() => rmSync(dir, { recursive: true, force: true }));
+    const stream = join(dir, "stream.jsonl");
+    writeFileSync(stream, events({ findings: [] }, REPLY).map((event) => JSON.stringify(event)).join("\n"));
+    const outcome = adapter(t, harness, { STUB_STREAM: stream });
+    assert.equal(outcome.status, 0, outcome.stderr);
+    assert.deepEqual(outcome.reply, REPLY);
+  });
+}

@@ -92,6 +92,14 @@ for (const section of ["agents", "roles", "attempts"]) {
   });
 }
 
+test("an empty local file is refused naming the local file", (t) => {
+  refuses(() => readConfig(checkout(t, VALID, "")), /loop\.local\.yaml must be a mapping of settings/);
+});
+
+test("an empty committed file is refused even when the local file has every field", (t) => {
+  refuses(() => readConfig(checkout(t, "", VALID)), /openspec\/loop\.yaml must be a mapping of settings/);
+});
+
 test("a required field may come from the local file alone", (t) => {
   const committed = VALID.replace("attempts:\n  proposalReview: 3\n", "");
   assert.equal(readConfig(checkout(t, committed, "attempts:\n  proposalReview: 1\n")).attempts.proposalReview, 1);

@@ -273,6 +273,14 @@ test("a plan that cannot be read stops the run as an execution failure of the lo
   assert.match(runLoop(repo, ["status", "add-thing"]).stdout, /^Run add-thing: stopped at proposal-review\n/);
 });
 
+test("a completed run whose plan cannot be read shows the stop in status", (t) => {
+  const repo = makeRepo(t);
+  assert.equal(runLoop(repo, ["run", "add-thing"]).status, 0);
+  repo.gitIn(repo.worktree, "rm", "-r", "--quiet", "openspec/changes/add-thing");
+  assert.equal(runLoop(repo, ["resume", "add-thing"]).status, 1);
+  assert.match(runLoop(repo, ["status", "add-thing"]).stdout, /^Run add-thing: stopped at proposal-review\nCause: execution failure of the loop: ENOENT/);
+});
+
 test("a completed run whose plan changed is reviewed again on resume", (t) => {
   const repo = makeRepo(t);
   assert.equal(runLoop(repo, ["run", "add-thing"]).status, 0);
