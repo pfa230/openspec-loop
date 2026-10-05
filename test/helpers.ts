@@ -10,6 +10,77 @@ const pkg = JSON.parse(readFileSync(new URL("package.json", root), "utf8"));
 export const BIN = fileURLToPath(new URL(pkg.bin.loop, root));
 
 export const STAGES = ["proposal-review", "implementation", "integration", "archive", "delivery"];
+export const FIXTURE_STAGES = STAGES.slice(1);
+
+export function configYaml(defaultBranch = "main"): string {
+  return `defaultBranch: ${defaultBranch}
+agents:
+  reviewer: [stub-agent, reviewer]
+  reviser: [stub-agent, reviser]
+roles:
+  proposalReviewer: reviewer
+  planReviser: reviser
+attempts:
+  proposalReview: 3
+`;
+}
+
+// One scripted turn of the stub agent. Without an entry, a reviewer approves with no findings
+// and a reviser changes nothing.
+export interface Turn {
+  reply?: unknown;
+  // Written to the reply file as is, instead of reply.
+  raw?: string;
+  noReply?: boolean;
+  exit?: number;
+  // Kills the stub with SIGKILL instead of replying.
+  kill?: boolean;
+  // Files to write (or delete, with null), relative to the worktree.
+  edits?: Record<string, string | null>;
+  sleep?: number;
+}
+
+export interface Call {
+  args: string[];
+  cwd: string;
+}
+
+export function finding(severity: "blocking" | "minor", problem: string, question: string | null = null) {
+  return { severity, location: "design.md", problem, question };
+}
+
+// The stub agent: a worker command whose first argument names its queue of scripted turns.
+function stubAgent(queue: string, log: string): string {
+  return `#!/usr/bin/env node
+const fs = require("node:fs");
+const path = require("node:path");
+const args = process.argv.slice(2);
+const [, schema, reply] = args.slice(-3);
+fs.appendFileSync(${JSON.stringify(log)}, JSON.stringify({ args, cwd: process.cwd() }) + "\\n");
+const queues = fs.existsSync(${JSON.stringify(queue)}) ? JSON.parse(fs.readFileSync(${JSON.stringify(queue)}, "utf8")) : {};
+const turn = (queues[args[0]] || []).shift() || {};
+fs.writeFileSync(${JSON.stringify(queue)}, JSON.stringify(queues));
+for (const [file, content] of Object.entries(turn.edits || {})) {
+  const target = path.join(process.cwd(), file);
+  if (content === null) fs.rmSync(target);
+  else {
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    fs.writeFileSync(target, content);
+  }
+}
+console.log("stub " + args[0] + " turn " + JSON.stringify(turn));
+function finish() {
+  if (turn.kill) process.kill(process.pid, "SIGKILL");
+  if (turn.exit !== undefined) process.exit(turn.exit);
+  if (turn.noReply) return;
+  if (turn.raw !== undefined) return fs.writeFileSync(reply, turn.raw);
+  const fallback = fs.readFileSync(schema, "utf8").includes('"findings"') ? { findings: [] } : {};
+  fs.writeFileSync(reply, JSON.stringify(turn.reply === undefined ? fallback : turn.reply));
+}
+if (turn.sleep) setTimeout(finish, turn.sleep * 1000);
+else finish();
+`;
+}
 
 // PATH without any real openspec, so each test controls which openspec the loop finds.
 const BASE_PATH = (process.env.PATH ?? "")
@@ -25,6 +96,8 @@ export interface Result {
 
 export interface Repo {
   root: string;
+  // The worktree of a run started on the default branch.
+  worktree: string;
   top: string;
   env: NodeJS.ProcessEnv;
   git(...args: string[]): string;
@@ -32,6 +105,9 @@ export interface Repo {
   runDir(change?: string): string;
   setFixture(commands: Record<string, string>): void;
   setOpenSpec(version: string | null): void;
+  // Appends scripted turns for the stub agent named reviewer or reviser.
+  queue(agent: string, ...turns: Turn[]): void;
+  calls(agent?: string): Call[];
 }
 
 export interface RepoOptions {
@@ -53,6 +129,8 @@ export function makeRepo(t: After, options: RepoOptions = {}): Repo {
   const top = join(base, "repo");
   const bin = join(base, "bin");
   const fixturePath = join(base, "fixture.yaml");
+  const queuePath = join(base, "queue.json");
+  const logPath = join(base, "calls.jsonl");
   mkdirSync(top);
   mkdirSync(bin);
   const gitConfig = join(base, "gitconfig");
@@ -72,13 +150,14 @@ export function makeRepo(t: After, options: RepoOptions = {}): Repo {
     execFileSync("git", args, { cwd, env, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
   const repo: Repo = {
     root: base,
+    worktree: join(top, ".git", "openspec-loop", change, "worktree"),
     top,
     env,
     git: (...args) => gitIn(top, ...args),
     gitIn,
     runDir: (name = change) => join(top, ".git", "openspec-loop", name),
     setFixture(commands) {
-      const all = { ...Object.fromEntries(STAGES.map((stage) => [stage, "true"])), ...commands };
+      const all = { ...Object.fromEntries(FIXTURE_STAGES.map((stage) => [stage, "true"])), ...commands };
       writeFileSync(fixturePath, Object.entries(all).map(([stage, command]) => `${stage}: ${JSON.stringify(command)}\n`).join(""));
     },
     setOpenSpec(version) {
@@ -88,16 +167,29 @@ export function makeRepo(t: After, options: RepoOptions = {}): Repo {
       writeFileSync(stub, `#!/bin/sh\necho ${version}\n`);
       chmodSync(stub, 0o755);
     },
+    queue(agent, ...turns) {
+      const queues = existsSync(queuePath) ? JSON.parse(readFileSync(queuePath, "utf8")) : {};
+      queues[agent] = [...(queues[agent] ?? []), ...turns];
+      writeFileSync(queuePath, JSON.stringify(queues));
+    },
+    calls(agent) {
+      if (!existsSync(logPath)) return [];
+      const calls: Call[] = readFileSync(logPath, "utf8").trim().split("\n").map((line) => JSON.parse(line));
+      return agent === undefined ? calls : calls.filter((call) => call.args[0] === agent);
+    },
   };
+  writeFileSync(join(bin, "stub-agent"), stubAgent(queuePath, logPath));
+  chmodSync(join(bin, "stub-agent"), 0o755);
   repo.setOpenSpec(options.openspec === undefined ? "1.14.0" : options.openspec);
   repo.setFixture(options.fixture ?? {});
 
   repo.git("init", "--quiet", "-b", defaultBranch);
-  writeFile(top, "openspec/loop.yaml", `defaultBranch: ${defaultBranch}\n`);
+  writeFile(top, "openspec/loop.yaml", configYaml(defaultBranch));
   repo.git("add", ".");
   repo.git("commit", "--quiet", "-m", "init");
   if (options.branch !== undefined && options.branch !== defaultBranch) repo.git("switch", "--quiet", "-c", options.branch);
   writeFile(top, `openspec/changes/${change}/proposal.md`, "## Why\n\nTest.\n");
+  writeFile(top, `openspec/changes/${change}/tasks.md`, "## 1. Work\n\n- [ ] 1.1 Do the thing\n");
   repo.git("add", ".");
   repo.git("commit", "--quiet", "-m", "propose");
   return repo;
