@@ -27,7 +27,7 @@ for (const branch of [undefined, "add-thing"]) {
         ...FIXTURE_STAGES.flatMap((stage) => [`${stage}: started (fixture)`, `${stage}: complete (fixture)`]),
       ],
     );
-    const worktree = branch ? repo.top : join(repo.runDir(), "worktree");
+    const worktree = branch ? repo.top : repo.worktree;
     const report = result.stdout.slice(result.stdout.indexOf("Run add-thing completed"));
     assert.equal(
       report,
@@ -54,7 +54,7 @@ test("a failing stage stops the run with a report naming the stage, cause, recov
     report,
     "Run add-thing stopped at implementation.\nCause: execution failure, exit status 3 (fixture)\n" +
       "Recovery: loop resume add-thing\n" +
-      `Worktree: ${join(dir, "worktree")}\nRun directory: ${dir}\nTranscripts: ${join(dir, "transcripts")}\n`,
+      `Worktree: ${repo.worktree}\nRun directory: ${dir}\nTranscripts: ${join(dir, "transcripts")}\n`,
   );
   assert.equal(readFileSync(join(dir, "transcripts", "002-implementation.log"), "utf8"), "boom\n");
 });
@@ -63,7 +63,7 @@ test("a step runs in the run's worktree", (t) => {
   const repo = makeRepo(t, { fixture: { implementation: "pwd" } });
   assert.equal(runLoop(repo, ["run", "add-thing"]).status, 0);
   const dir = repo.runDir();
-  assert.equal(readFileSync(join(dir, "transcripts", "002-implementation.log"), "utf8"), `${join(dir, "worktree")}\n`);
+  assert.equal(readFileSync(join(dir, "transcripts", "002-implementation.log"), "utf8"), `${repo.worktree}\n`);
 });
 
 test("a repeated stage gets a new transcript", (t) => {
