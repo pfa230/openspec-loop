@@ -2,7 +2,7 @@
 
 - [x] 1.1 Extend `src/config.ts` with `roles.implementer`, `roles.implementationReviewer`, `attempts.implementation` (a positive integer) and `checks` (a list of non-empty strings, possibly empty), all required after merging, with `checks` replaced whole by the local file. Verify with tests that a missing `checks` is refused naming it, that `checks: []` is accepted, that a non-list or an empty-string entry is refused naming the file, that a local `checks` replaces the committed list, and that an undefined implementer alias is refused naming the role
 - [x] 1.2 Update `configYaml` in the test helper with stub agents for the two new roles, `attempts.implementation` and `checks: []`. Extend the stub agent's default reply with `{ "planProblem": null }` for the implementer schema, and make the stub `openspec` answer `instructions apply --change <change> --json` with canned JSON that includes an `operationGuidance` entry. Verify every existing test still passes
-- [ ] 1.3 Document in `README.md` the two new roles, `attempts.implementation` and `checks` in the configuration example and list, and widen the adapter table's editing column from revisers to implementers. Verify that the example names every field `src/config.ts` requires
+- [x] 1.3 Document in `README.md` the two new roles, `attempts.implementation` and `checks` in the configuration example and list, and widen the adapter table's editing column from revisers to implementers. Verify that the example names every field `src/config.ts` requires
 
 ## 2. Implementation round
 
@@ -24,7 +24,7 @@
 
 - [x] 4.1 Add `owedFindings` to `state.json`. Replace it when a round ends with findings, clear it in the state write that completes the stage, and start every round with an implementer turn on it. Clear it in every state write that resets proposal review. Verify with tests that a minor-fix turn reporting a plan problem leads, after reapproval, to a full round with review; that `loop stop` during an implementer turn followed by resume redoes the turn with the same findings, that `loop stop` during minor fixes followed by resume redoes them and completes without review, and that an execution failure of the implementer or the reviewer stops the run without relaunching it
 - [x] 4.2 Reduce `LOOP_FIXTURE` to `integration`, `archive` and `delivery`, and make the completion report and `loop status` name those three as fixtures. Verify by updating the controller, control and enrollment tests and confirming `npm test` passes
-- [ ] 4.3 Document the implementation stage in `README.md`: rounds and attempts, checks as findings, review criteria and verdicts, minor fixes, the loop's commits, the return to proposal review, the decision stop, resuming, that edits left in the run's worktree while stopped are committed with the next turn, and that runs started before this change must be discarded. Verify each documented recovery against a stub-agent run in a temporary repository
+- [x] 4.3 Document the implementation stage in `README.md`: rounds and attempts, checks as findings, review criteria and verdicts, minor fixes, the loop's commits, the return to proposal review, the decision stop, resuming, that edits left in the run's worktree while stopped are committed with the next turn, and that runs started before this change must be discarded. Verify each documented recovery against a stub-agent run in a temporary repository
 
 ## 5. Real harness acceptance
 
