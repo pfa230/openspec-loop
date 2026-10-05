@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { REVIEW_SCHEMA } from "../src/prompts.js";
+import { nextStep } from "../src/step.js";
 import { makeRepo, runLoop, type Turn } from "./helpers.js";
 
 test("a worker gets the prompt, schema and reply paths last and runs in the run's worktree", (t) => {
@@ -43,3 +45,12 @@ for (const [name, [turn, problem]] of Object.entries(failures)) {
     assert.equal(repo.calls("reviewer").length, 1);
   });
 }
+
+test("step numbers keep increasing past 999", (t) => {
+  const dir = mkdtempSync(join(tmpdir(), "loop-steps-"));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  mkdirSync(join(dir, "transcripts"));
+  writeFileSync(join(dir, "transcripts", "999-plan-revision.log"), "");
+  writeFileSync(join(dir, "transcripts", "1000-proposal-review.log"), "");
+  assert.equal(nextStep(dir, "proposal-review"), join(dir, "transcripts", "1001-proposal-review"));
+});

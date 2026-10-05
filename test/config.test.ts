@@ -86,6 +86,12 @@ test("an unknown key in the local file is refused naming the local file", (t) =>
   refuses(() => readConfig(checkout(t, VALID, "rolse: {}\n")), /loop\.local\.yaml has unknown key "rolse"/);
 });
 
+for (const section of ["agents", "roles", "attempts"]) {
+  test(`a null ${section} section in the local file is refused naming the local file`, (t) => {
+    refuses(() => readConfig(checkout(t, VALID, `${section}: null\n`)), new RegExp(`loop\\.local\\.yaml: "${section}" must be a mapping`));
+  });
+}
+
 test("a required field may come from the local file alone", (t) => {
   const committed = VALID.replace("attempts:\n  proposalReview: 3\n", "");
   assert.equal(readConfig(checkout(t, committed, "attempts:\n  proposalReview: 1\n")).attempts.proposalReview, 1);
@@ -125,9 +131,29 @@ test("one agent may fill both roles, and an unused agent is not resolved", (t) =
   assert.deepEqual(roles.proposalReviewer, roles.planReviser);
 });
 
-test("a role naming an undefined alias is refused naming the role and the alias", (t) => {
+for (const alias of ["gpt", "constructor"]) {
+  test(`a role naming the undefined alias ${alias} is refused naming the role and the alias`, (t) => {
+    const top = checkout(t);
+    refuses(
+      resolve(t, top, {}, { proposalReviewer: alias, planReviser: alias }),
+      new RegExp(`role proposalReviewer names agent "${alias}", which the configuration does not define`),
+    );
+  });
+}
+
+test("a relative PATH entry is resolved against the current directory", (t) => {
   const top = checkout(t);
-  refuses(resolve(t, top, {}, { proposalReviewer: "gpt", planReviser: "gpt" }), /role proposalReviewer names agent "gpt", which the configuration does not define/);
+  executableAt(top, "tools/loop-codex");
+  const path = process.env.PATH;
+  const cwd = process.cwd();
+  process.env.PATH = "tools";
+  process.chdir(top);
+  t.after(() => {
+    process.env.PATH = path;
+    process.chdir(cwd);
+  });
+  const config: Config = { defaultBranch: "main", agents: { gpt: ["loop-codex"] }, roles: { proposalReviewer: "gpt", planReviser: "gpt" }, attempts: { proposalReview: 1 } };
+  assert.equal(resolveRoles(top, config).proposalReviewer.command[0], join(top, "tools/loop-codex"));
 });
 
 test("a missing command is refused naming the role and the alias", (t) => {

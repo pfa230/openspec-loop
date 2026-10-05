@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { setTimeout as sleep } from "node:timers/promises";
 import { test } from "node:test";
 import { planDigest } from "../src/plan.js";
 import { finding, makeRepo, type Repo, runLoop, startLoop, writeFile } from "./helpers.js";
@@ -126,7 +127,7 @@ test("a finding with a question stops the run before revising, and resume after 
     result.stdout.includes(
       "Run add-thing stopped at proposal-review.\nCause: review 1 needs decisions the plan does not record:\n" +
         `  - design.md: Files or SQLite?\nReview: ${review}\n` +
-        `Recovery: record the decisions in the design in worktree ${repo.worktree} on branch loop/add-thing, commit them, then run \`loop resume add-thing\`\n`,
+        `Recovery: record the decisions in openspec/changes/add-thing/design.md in worktree ${repo.worktree}, commit them on branch loop/add-thing, then run \`loop resume add-thing\`\n`,
     ),
     result.stdout,
   );
@@ -185,6 +186,7 @@ for (const [verdict, findings, step] of [
     repo.queue("reviser", { sleep: 30 }, { edits: { [DESIGN]: "x\n" } });
     const running = startLoop(repo, ["run", "add-thing"]);
     await running.waitFor(new RegExp(`${step} started`));
+    while (repo.calls("reviser").length === 0) await sleep(25);
     assert.equal(runLoop(repo, ["stop", "add-thing"]).status, 0);
     const stopped = await running.exited;
     assert.equal(stopped.status, 1);
@@ -237,6 +239,20 @@ test("editing a task's text voids the approval and resumes at proposal review", 
     "plan changed since its approval; reviewing it again",
     "proposal-review: review 1 of 3 started (reviewer)",
   ]);
+});
+
+test("a plan changed during advancement is reviewed again at the next stage boundary", (t) => {
+  const repo = makeRepo(t, { fixture: { implementation: `printf '## 1. Work\\n\\n- [ ] 1.1 Do another thing\\n' > ${TASKS}` } });
+  const result = runLoop(repo, ["run", "add-thing"]);
+  assert.equal(result.status, 0, result.stdout);
+  const progress = lines(result.stdout);
+  const changed = progress.indexOf("plan changed since its approval; reviewing it again");
+  assert.deepEqual(progress.slice(changed - 1, changed + 2), [
+    "implementation: complete (fixture)",
+    "plan changed since its approval; reviewing it again",
+    "proposal-review: review 1 of 3 started (reviewer)",
+  ]);
+  assert.equal(repo.calls("reviewer").length, 2);
 });
 
 test("a completed run whose plan changed is reviewed again on resume", (t) => {

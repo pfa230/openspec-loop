@@ -154,7 +154,7 @@ async function proposalReview(run: Run): Promise<Halt | undefined> {
     if (questions.length > 0) {
       return {
         cause: `review ${review} needs decisions the plan does not record:\n${questions.map((finding) => `  - ${finding.location}: ${finding.question}`).join("\n")}\nReview: ${recordPath}`,
-        recovery: `record the decisions in the design in worktree ${state.worktree} on branch ${state.branch}, commit them, then run \`loop resume ${state.change}\``,
+        recovery: `record the decisions in ${changeDir(state.change)}/design.md in worktree ${state.worktree}, commit them on branch ${state.branch}, then run \`loop resume ${state.change}\``,
       };
     }
     if (findings.length === 0) return approve(state, plan);

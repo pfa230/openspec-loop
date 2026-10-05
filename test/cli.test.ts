@@ -27,6 +27,7 @@ test("--attempts is accepted only on resume, as a positive integer", (t) => {
     ["resume", "add-thing", "--attempts", "0"],
     ["resume", "add-thing", "--attempts", "1.5"],
     ["resume", "add-thing", "--attempts", "two"],
+    ["resume", "add-thing", "--attempts", "9".repeat(400)],
   ];
   for (const args of malformed) {
     const result = loop(args, { cwd: repo.top, env: repo.env });

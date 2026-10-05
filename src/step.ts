@@ -17,7 +17,7 @@ export interface Step {
 export function nextStep(dir: string, name: string): string {
   const transcripts = join(dir, "transcripts");
   mkdirSync(transcripts, { recursive: true });
-  const used = readdirSync(transcripts).map((file) => Number.parseInt(file.slice(0, 3), 10));
+  const used = readdirSync(transcripts).map((file) => Number.parseInt(file, 10));
   const number = String(Math.max(0, ...used.filter(Number.isInteger)) + 1).padStart(3, "0");
   return join(transcripts, `${number}-${name}`);
 }
