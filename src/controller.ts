@@ -68,6 +68,7 @@ export async function advance(dir: string, state: RunState, setup: Setup): Promi
   for (const signal of SIGNALS) process.on(signal, onSignal);
   try {
     state.stop = null;
+    writeState(dir, state);
     for (;;) {
       let changed: boolean;
       try {
