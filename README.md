@@ -58,14 +58,14 @@ An agent's command is an adapter followed by arguments for its harness. The pack
 |---|---|---|---|
 | `loop-claude` | Claude Code 2.1.289 | `--permission-mode plan` | `--permission-mode acceptEdits` |
 | `loop-codex` | Codex 0.160.0 | `-s read-only` | `-s workspace-write` |
-| `loop-agy` | Antigravity 1.2.12 | none | `--dangerously-skip-permissions` |
+| `loop-agy` | Antigravity 1.2.17 | none | `--dangerously-skip-permissions` |
 | `loop-opencode` | OpenCode 1.18.34 | `--agent plan` | none |
 
 Add the model flag of the harness (`--model`, `-m`) to choose a model. Without restriction arguments, a harness runs with its own defaults; headless Claude Code and Codex cannot edit files by default.
 
 Claude Code refuses to edit any path inside a `.git` directory without `bypassPermissions`, even with `--permission-mode acceptEdits`. A `worktrees` directory inside the repository's Git directory therefore needs `bypassPermissions` for an editing Claude agent. Run such an agent inside a sandbox if you want to limit what it can do: put the sandbox command first, for example `[ai-jail, --exec, ..., loop-claude, ...]`.
 
-OpenCode has no way to enforce a reply schema, so `loop-opencode` asks for bare JSON and fails the step when the final message is anything else.
+OpenCode has no way to enforce a reply schema, so `loop-opencode` asks for bare JSON and fails the step when the final message is anything else. With `--agent plan`, OpenCode rejects reads outside the repository without asking and can end with no final message; the step then fails, and `loop resume` runs it again.
 
 To use another tool, write your own adapter. The loop runs the agent's command with three paths appended: a prompt file, a JSON schema file and a reply file. The command runs in the run's worktree with no input, and its output becomes the step's transcript. It must exit 0 after writing a JSON object that matches the schema to the reply file; anything else stops the run as an execution failure.
 
