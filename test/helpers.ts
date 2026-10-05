@@ -10,7 +10,7 @@ const pkg = JSON.parse(readFileSync(new URL("package.json", root), "utf8"));
 export const BIN = fileURLToPath(new URL(pkg.bin.loop, root));
 
 export const STAGES = ["proposal-review", "implementation", "integration", "archive", "delivery"];
-export const FIXTURE_STAGES = STAGES.slice(1);
+export const FIXTURE_STAGES = STAGES.slice(2);
 
 export function configYaml(defaultBranch = "main"): string {
   return `defaultBranch: ${defaultBranch}
@@ -18,16 +18,22 @@ worktrees: .worktrees
 agents:
   reviewer: [stub-agent, reviewer]
   reviser: [stub-agent, reviser]
+  implementer: [stub-agent, implementer]
+  verifier: [stub-agent, verifier]
 roles:
   proposalReviewer: reviewer
   planReviser: reviser
+  implementer: implementer
+  implementationReviewer: verifier
 attempts:
   proposalReview: 3
+  implementation: 3
+checks: []
 `;
 }
 
-// One scripted turn of the stub agent. Without an entry, a reviewer approves with no findings
-// and a reviser changes nothing.
+// One scripted turn of the stub agent. Without an entry, a reviewer approves with no findings,
+// and a reviser or an implementer changes nothing.
 export interface Turn {
   reply?: unknown;
   // Written to the reply file as is, instead of reply.
@@ -75,13 +81,23 @@ function finish() {
   if (turn.exit !== undefined) process.exit(turn.exit);
   if (turn.noReply) return;
   if (turn.raw !== undefined) return fs.writeFileSync(reply, turn.raw);
-  const fallback = fs.readFileSync(schema, "utf8").includes('"findings"') ? { findings: [] } : {};
+  const shape = fs.readFileSync(schema, "utf8");
+  const fallback = shape.includes('"findings"') ? { findings: [] } : shape.includes('"planProblem"') ? { planProblem: null } : {};
   fs.writeFileSync(reply, JSON.stringify(turn.reply === undefined ? fallback : turn.reply));
 }
 if (turn.sleep) setTimeout(finish, turn.sleep * 1000);
 else finish();
 `;
 }
+
+// The stub openspec's answer to `openspec instructions apply --change <change> --json`.
+export const APPLY_INSTRUCTION = "Read context files, work through pending tasks, mark complete as you go.";
+export const APPLY_GUIDANCE = "Keep summaries short.";
+const APPLY = `if [ "$1" = instructions ]; then
+  printf '{"changeName":"%s","instruction":"${APPLY_INSTRUCTION}","operationGuidance":["${APPLY_GUIDANCE}"],"contextFiles":{"proposal":["%s/openspec/changes/%s/proposal.md"],"tasks":["%s/openspec/changes/%s/tasks.md"]}}\\n' "$4" "$PWD" "$4" "$PWD" "$4"
+  exit 0
+fi
+`;
 
 // PATH without any real openspec, so each test controls which openspec the loop finds.
 const BASE_PATH = (process.env.PATH ?? "")
@@ -105,6 +121,7 @@ export interface Repo {
   gitIn(cwd: string, ...args: string[]): string;
   runDir(change?: string): string;
   setFixture(commands: Record<string, string>): void;
+  // Installs a stub openspec reporting the version and answering `instructions apply` as OpenSpec 1.14.0 does.
   setOpenSpec(version: string | null): void;
   // Appends scripted turns for the stub agent named reviewer or reviser.
   queue(agent: string, ...turns: Turn[]): void;
@@ -165,7 +182,7 @@ export function makeRepo(t: After, options: RepoOptions = {}): Repo {
       const stub = join(bin, "openspec");
       rmSync(stub, { force: true });
       if (version === null) return;
-      writeFileSync(stub, `#!/bin/sh\necho ${version}\n`);
+      writeFileSync(stub, `#!/bin/sh\n${APPLY}echo ${version}\n`);
       chmodSync(stub, 0o755);
     },
     queue(agent, ...turns) {

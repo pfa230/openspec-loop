@@ -44,7 +44,7 @@ test("REVISE, a revision and an approving review advance to implementation witho
     "proposal-review: review 2 of 3 started (reviewer)",
     "proposal-review: review 2 of 3 APPROVE, 0 blocking, 0 minor (reviewer)",
     "proposal-review: complete",
-    "implementation: started (fixture)",
+    "implementation: attempt 1 of 3, implementer started (implementer)",
   ]);
   assert.deepEqual(subjects(repo), ["add-thing: revise plan"]);
   const first = record(repo, "001-proposal-review");
@@ -112,7 +112,9 @@ test("a revision commit leaves unrelated staged and unstaged work in the worktre
   repo.gitIn(repo.worktree, "add", "openspec/loop.yaml");
   repo.queue("reviewer", { reply: { findings: [finding("blocking", "no design")] } });
   repo.queue("reviser", { edits: { [DESIGN]: "## Decisions\n" } });
-  assert.equal(runLoop(repo, ["resume", "add-thing"]).status, 0);
+  // The implementer fails, so the run stops before an implementer turn commits the worktree.
+  repo.queue("implementer", { exit: 1 });
+  assert.equal(runLoop(repo, ["resume", "add-thing"]).status, 1);
   assert.equal(repo.git("diff-tree", "--no-commit-id", "--name-only", "-r", "loop/add-thing"), DESIGN);
   assert.equal(repo.gitIn(repo.worktree, "status", "--porcelain", "--untracked-files=all"), "M  openspec/loop.yaml\n?? notes.txt");
 });
@@ -215,23 +217,23 @@ test("a plan reviser failure stops the run without relaunching it", (t) => {
   assert.equal(repo.calls("reviser").length, 1);
 });
 
-function stoppedAtImplementation(t: Parameters<typeof makeRepo>[0]): Repo {
-  const repo = makeRepo(t, { fixture: { implementation: "exit 1" } });
+function stoppedAtIntegration(t: Parameters<typeof makeRepo>[0]): Repo {
+  const repo = makeRepo(t, { fixture: { integration: "exit 1" } });
   assert.equal(runLoop(repo, ["run", "add-thing"]).status, 1);
   repo.setFixture({});
   return repo;
 }
 
 test("ticking a task box keeps the approval", (t) => {
-  const repo = stoppedAtImplementation(t);
+  const repo = stoppedAtIntegration(t);
   writeFile(repo.worktree, TASKS, "## 1. Work\n\n- [x] 1.1 Do the thing\n");
   const resumed = runLoop(repo, ["resume", "add-thing"]);
   assert.equal(resumed.status, 0, resumed.stdout);
-  assert.equal(lines(resumed.stdout)[0], "implementation: started (fixture)");
+  assert.equal(lines(resumed.stdout)[0], "integration: started (fixture)");
 });
 
 test("editing a task's text voids the approval and resumes at proposal review", (t) => {
-  const repo = stoppedAtImplementation(t);
+  const repo = stoppedAtIntegration(t);
   writeFile(repo.worktree, TASKS, "## 1. Work\n\n- [ ] 1.1 Do another thing\n");
   const resumed = runLoop(repo, ["resume", "add-thing"]);
   assert.equal(resumed.status, 0, resumed.stdout);
@@ -242,13 +244,13 @@ test("editing a task's text voids the approval and resumes at proposal review", 
 });
 
 test("a plan changed during advancement is reviewed again at the next stage boundary", (t) => {
-  const repo = makeRepo(t, { fixture: { implementation: `printf '## 1. Work\\n\\n- [ ] 1.1 Do another thing\\n' > ${TASKS}` } });
+  const repo = makeRepo(t, { fixture: { integration: `printf '## 1. Work\\n\\n- [ ] 1.1 Do another thing\\n' > ${TASKS}` } });
   const result = runLoop(repo, ["run", "add-thing"]);
   assert.equal(result.status, 0, result.stdout);
   const progress = lines(result.stdout);
   const changed = progress.indexOf("plan changed since its approval; reviewing it again");
   assert.deepEqual(progress.slice(changed - 1, changed + 2), [
-    "implementation: complete (fixture)",
+    "integration: complete (fixture)",
     "plan changed since its approval; reviewing it again",
     "proposal-review: review 2 of 3 started (reviewer)",
   ]);
@@ -256,7 +258,7 @@ test("a plan changed during advancement is reviewed again at the next stage boun
 });
 
 test("returning to proposal review within one advancement spends the same budget", (t) => {
-  const repo = makeRepo(t, { fixture: { implementation: `printf '## 1. Work\\n\\n- [ ] 1.1 Do another thing\\n' > ${TASKS}` } });
+  const repo = makeRepo(t, { fixture: { integration: `printf '## 1. Work\\n\\n- [ ] 1.1 Do another thing\\n' > ${TASKS}` } });
   writeFile(repo.top, "openspec/loop.local.yaml", "attempts:\n  proposalReview: 1\n");
   const result = runLoop(repo, ["run", "add-thing"]);
   assert.equal(result.status, 1, result.stdout);
@@ -265,7 +267,7 @@ test("returning to proposal review within one advancement spends the same budget
 });
 
 test("a plan that cannot be read stops the run as an execution failure of the loop", (t) => {
-  const repo = makeRepo(t, { fixture: { implementation: "rm -r openspec/changes/add-thing" } });
+  const repo = makeRepo(t, { fixture: { integration: "rm -r openspec/changes/add-thing" } });
   const result = runLoop(repo, ["run", "add-thing"]);
   assert.equal(result.status, 1, result.stdout);
   assert.match(result.stdout, /Run add-thing stopped at proposal-review\.\nCause: execution failure of the loop: ENOENT/);

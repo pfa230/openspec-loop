@@ -16,8 +16,13 @@ agents:
 roles:
   proposalReviewer: gpt
   planReviser: opus
+  implementer: opus
+  implementationReviewer: gpt
 attempts:
   proposalReview: 3
+  implementation: 2
+checks:
+  - npm test
 `;
 
 function checkout(t: After, yaml?: string, local?: string): string {
@@ -38,8 +43,9 @@ test("a valid configuration returns every field", (t) => {
     defaultBranch: "trunk",
     worktrees: ".worktrees",
     agents: { gpt: ["loop-codex", "-m", "gpt-5.5"], opus: ["loop-claude", "--model", "opus"] },
-    roles: { proposalReviewer: "gpt", planReviser: "opus" },
-    attempts: { proposalReview: 3 },
+    roles: { proposalReviewer: "gpt", planReviser: "opus", implementer: "opus", implementationReviewer: "gpt" },
+    attempts: { proposalReview: 3, implementation: 2 },
+    checks: ["npm test"],
   });
 });
 
@@ -54,10 +60,14 @@ const refusals: Record<string, [string, RegExp]> = {
   "missing worktrees": [VALID.replace("worktrees: .worktrees\n", ""), /loop\.yaml is missing "worktrees"/],
   "a worktrees directory that is not a string": [VALID.replace("worktrees: .worktrees", "worktrees: [.worktrees]"), /loop\.yaml: "worktrees" must be a non-empty path/],
   "a missing role": [VALID.replace("  planReviser: opus\n", ""), /loop\.yaml is missing "roles\.planReviser"/],
-  "missing attempts": [VALID.replace("attempts:\n  proposalReview: 3\n", ""), /loop\.yaml is missing "attempts\.proposalReview"/],
+  "missing attempts": [VALID.replace("attempts:\n  proposalReview: 3\n  implementation: 2\n", ""), /loop\.yaml is missing "attempts\.proposalReview", "attempts\.implementation"/],
+  "a missing implementer": [VALID.replace("  implementer: opus\n", ""), /loop\.yaml is missing "roles\.implementer"/],
+  "missing checks": [VALID.replace("checks:\n  - npm test\n", ""), /loop\.yaml is missing "checks"/],
+  "checks that are not a list": [VALID.replace("checks:\n  - npm test\n", "checks: npm test\n"), /loop\.yaml: "checks" must be a list of non-empty commands/],
+  "an empty check": [VALID.replace("  - npm test\n", "  - npm test\n  - \"\"\n"), /loop\.yaml: "checks" must be a list of non-empty commands/],
   "an unknown top-level key": [`${VALID}delivery: merge\n`, /loop\.yaml has unknown key "delivery"/],
-  "an unknown role": [VALID.replace("roles:\n", "roles:\n  implementer: opus\n"), /loop\.yaml has unknown key "roles\.implementer"/],
-  "an unknown attempt budget": [`${VALID}  implementation: 2\n`, /loop\.yaml has unknown key "attempts\.implementation"/],
+  "an unknown role": [VALID.replace("roles:\n", "roles:\n  tester: opus\n"), /loop\.yaml has unknown key "roles\.tester"/],
+  "an unknown attempt budget": [VALID.replace("attempts:\n", "attempts:\n  review: 2\n"), /loop\.yaml has unknown key "attempts\.review"/],
   "an empty default branch": [VALID.replace("trunk", '""'), /"defaultBranch" must be a non-empty branch name/],
   "agents that are not a mapping": [VALID.replace(/agents:\n.*\n.*\n/, "agents: [gpt]\n"), /"agents" must be a mapping/],
   "an agent that is not a list": [VALID.replace("[loop-codex, -m, gpt-5.5]", "loop-codex"), /"agents\.gpt" must be a non-empty list/],
@@ -82,12 +92,20 @@ test("the local file replaces only the entries it sets", (t) => {
     opus: ["loop-claude", "--model", "opus"],
     deepseek: ["loop-opencode", "-m", "deepseek/v4"],
   });
-  assert.deepEqual(config.roles, { proposalReviewer: "deepseek", planReviser: "opus" });
+  assert.deepEqual(config.roles, { proposalReviewer: "deepseek", planReviser: "opus", implementer: "opus", implementationReviewer: "gpt" });
   assert.equal(config.defaultBranch, "trunk");
 });
 
 test("a local worktrees directory replaces the committed one", (t) => {
   assert.equal(readConfig(checkout(t, VALID, "worktrees: /srv/worktrees\n")).worktrees, "/srv/worktrees");
+});
+
+test("an empty check list means no required checks", (t) => {
+  assert.deepEqual(readConfig(checkout(t, VALID.replace("checks:\n  - npm test\n", "checks: []\n"))).checks, []);
+});
+
+test("a local check list replaces the committed list whole", (t) => {
+  assert.deepEqual(readConfig(checkout(t, VALID, "checks:\n  - make lint\n")).checks, ["make lint"]);
 });
 
 test("an unknown key in the local file is refused naming the local file", (t) => {
@@ -109,16 +127,18 @@ test("an empty committed file is refused even when the local file has every fiel
 });
 
 test("a required field may come from the local file alone", (t) => {
-  const committed = VALID.replace("attempts:\n  proposalReview: 3\n", "");
+  const committed = VALID.replace("  proposalReview: 3\n", "");
   assert.equal(readConfig(checkout(t, committed, "attempts:\n  proposalReview: 1\n")).attempts.proposalReview, 1);
 });
 
 // Roles resolve against a PATH holding only the directory the test controls.
-function resolve(t: After, top: string, agents: Record<string, string[]>, roles: Config["roles"]) {
+// Roles left out are filled by the proposal reviewer's alias.
+function resolve(t: After, top: string, agents: Record<string, string[]>, roles: Partial<Config["roles"]> & { proposalReviewer: string }) {
   const path = process.env.PATH;
   process.env.PATH = join(top, "bin");
   t.after(() => (process.env.PATH = path));
-  const config: Config = { defaultBranch: "main", worktrees: ".worktrees", agents, roles, attempts: { proposalReview: 1 } };
+  const all = { planReviser: roles.proposalReviewer, implementer: roles.proposalReviewer, implementationReviewer: roles.proposalReviewer, ...roles };
+  const config: Config = { defaultBranch: "main", worktrees: ".worktrees", agents, roles: all, attempts: { proposalReview: 1, implementation: 1 }, checks: [] };
   return () => resolveRoles(top, config);
 }
 
@@ -133,9 +153,13 @@ test("a command on PATH and a repository-relative script resolve to absolute pat
   executableAt(top, "bin/loop-codex");
   executableAt(top, "scripts/my-adapter");
   const agents = { gpt: ["loop-codex", "-m", "gpt-5.5"], mine: ["scripts/my-adapter", "--fast"] };
-  assert.deepEqual(resolve(t, top, agents, { proposalReviewer: "gpt", planReviser: "mine" })(), {
-    proposalReviewer: { alias: "gpt", command: [join(top, "bin/loop-codex"), "-m", "gpt-5.5"] },
-    planReviser: { alias: "mine", command: [join(top, "scripts/my-adapter"), "--fast"] },
+  const gpt = { alias: "gpt", command: [join(top, "bin/loop-codex"), "-m", "gpt-5.5"] };
+  const mine = { alias: "mine", command: [join(top, "scripts/my-adapter"), "--fast"] };
+  assert.deepEqual(resolve(t, top, agents, { proposalReviewer: "gpt", planReviser: "mine", implementer: "mine" })(), {
+    proposalReviewer: gpt,
+    planReviser: mine,
+    implementer: mine,
+    implementationReviewer: gpt,
   });
 });
 
@@ -168,8 +192,18 @@ test("a relative PATH entry is resolved against the current directory", (t) => {
     process.env.PATH = path;
     process.chdir(cwd);
   });
-  const config: Config = { defaultBranch: "main", worktrees: ".worktrees", agents: { gpt: ["loop-codex"] }, roles: { proposalReviewer: "gpt", planReviser: "gpt" }, attempts: { proposalReview: 1 } };
+  const roles = { proposalReviewer: "gpt", planReviser: "gpt", implementer: "gpt", implementationReviewer: "gpt" };
+  const config: Config = { defaultBranch: "main", worktrees: ".worktrees", agents: { gpt: ["loop-codex"] }, roles, attempts: { proposalReview: 1, implementation: 1 }, checks: [] };
   assert.equal(resolveRoles(top, config).proposalReviewer.command[0], join(top, "tools/loop-codex"));
+});
+
+test("an implementer naming an undefined alias is refused naming the role", (t) => {
+  const top = checkout(t);
+  executableAt(top, "bin/loop-codex");
+  refuses(
+    resolve(t, top, { gpt: ["loop-codex"] }, { proposalReviewer: "gpt", implementer: "opus" }),
+    /role implementer names agent "opus", which the configuration does not define/,
+  );
 });
 
 test("a missing command is refused naming the role and the alias", (t) => {

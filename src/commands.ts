@@ -73,7 +73,7 @@ function enroll(top: string, dir: string, change: string, config: Config): RunSt
     }
     progress(`created branch ${branch} at ${head.slice(0, 7)} in worktree ${worktree}`);
   }
-  const state: RunState = { change, branch, worktree, stages: pendingStages(), current: null, stop: null, approvedPlan: null, owedReview: null };
+  const state: RunState = { change, branch, worktree, stages: pendingStages(), current: null, stop: null, approvedPlan: null, owedReview: null, owedFindings: null };
   writeState(dir, state);
   return state;
 }
