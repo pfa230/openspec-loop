@@ -2,7 +2,7 @@ import { existsSync, mkdirSync } from "node:fs";
 import { setTimeout as sleep } from "node:timers/promises";
 import { join } from "node:path";
 import { readConfig, resolveRoles } from "./config.js";
-import { advance, FIXTURE_NOTE, locations, planChanged, progress, type Setup } from "./controller.js";
+import { advance, FIXTURE_NOTE, locations, progress, type Setup } from "./controller.js";
 import { loadFixture } from "./fixture.js";
 import { git, gitMessage, gitSucceeds, topLevel } from "./git.js";
 import { checkOpenSpec } from "./openspec.js";
@@ -92,11 +92,6 @@ export async function resume(change: string, attempts?: number): Promise<number>
     throw error;
   }
   if (deadPid !== undefined) progress(`took over run ${change} from process ${deadPid}, which died`);
-  if (STAGES.every((stage) => state.stages[stage] === "complete") && !planChanged(state)) {
-    releaseLock(dir);
-    process.stdout.write(`Run ${change} is complete. ${FIXTURE_NOTE}\n${locations(dir, state)}`);
-    return 0;
-  }
   return advance(dir, state, setup);
 }
 

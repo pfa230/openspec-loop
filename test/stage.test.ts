@@ -250,9 +250,27 @@ test("a plan changed during advancement is reviewed again at the next stage boun
   assert.deepEqual(progress.slice(changed - 1, changed + 2), [
     "implementation: complete (fixture)",
     "plan changed since its approval; reviewing it again",
-    "proposal-review: review 1 of 3 started (reviewer)",
+    "proposal-review: review 2 of 3 started (reviewer)",
   ]);
   assert.equal(repo.calls("reviewer").length, 2);
+});
+
+test("returning to proposal review within one advancement spends the same budget", (t) => {
+  const repo = makeRepo(t, { fixture: { implementation: `printf '## 1. Work\\n\\n- [ ] 1.1 Do another thing\\n' > ${TASKS}` } });
+  writeFile(repo.top, "openspec/loop.local.yaml", "attempts:\n  proposalReview: 1\n");
+  const result = runLoop(repo, ["run", "add-thing"]);
+  assert.equal(result.status, 1, result.stdout);
+  assert.match(result.stdout, /Cause: proposal review attempts exhausted \(1 of 1\)\nRecovery: loop resume add-thing\n/);
+  assert.equal(repo.calls("reviewer").length, 1);
+});
+
+test("a plan that cannot be read stops the run as an execution failure of the loop", (t) => {
+  const repo = makeRepo(t, { fixture: { implementation: "rm -r openspec/changes/add-thing" } });
+  const result = runLoop(repo, ["run", "add-thing"]);
+  assert.equal(result.status, 1, result.stdout);
+  assert.match(result.stdout, /Run add-thing stopped at proposal-review\.\nCause: execution failure of the loop: ENOENT/);
+  assert.match(state(repo).stop.cause, /^execution failure of the loop/);
+  assert.match(runLoop(repo, ["status", "add-thing"]).stdout, /^Run add-thing: stopped at proposal-review\n/);
 });
 
 test("a completed run whose plan changed is reviewed again on resume", (t) => {

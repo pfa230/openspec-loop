@@ -56,7 +56,7 @@ export async function advance(dir: string, state: RunState, setup: Setup): Promi
     stopping = true;
     current?.kill();
   };
-  const run = { dir, state, setup, stopping: () => stopping, exec };
+  const run: Run = { dir, state, setup, reviews: 0, stopping: () => stopping, exec };
   async function exec(step: Step): Promise<StepResult> {
     current = step;
     try {
@@ -69,7 +69,13 @@ export async function advance(dir: string, state: RunState, setup: Setup): Promi
   try {
     state.stop = null;
     for (;;) {
-      if (planChanged(state)) {
+      let changed: boolean;
+      try {
+        changed = planChanged(state);
+      } catch (error) {
+        return stop(dir, state, "proposal-review", { cause: `execution failure of the loop: ${(error as Error).message}` });
+      }
+      if (changed) {
         progress("plan changed since its approval; reviewing it again");
         for (const stage of STAGES) state.stages[stage] = "pending";
         writeState(dir, state);
@@ -104,6 +110,8 @@ interface Run {
   dir: string;
   state: RunState;
   setup: Setup;
+  // Proposal reviews this advancement has run; the budget spans every return to proposal review.
+  reviews: number;
   stopping(): boolean;
   exec(step: Step): Promise<StepResult>;
 }
@@ -137,7 +145,10 @@ async function proposalReview(run: Run): Promise<Halt | undefined> {
     state.owedReview = null;
     writeState(run.dir, state);
   }
-  for (let review = 1; ; review++) {
+  let last = "";
+  for (;;) {
+    if (run.reviews >= budget) return { cause: `proposal review attempts exhausted (${run.reviews} of ${budget})${last}` };
+    const review = ++run.reviews;
     const label = `review ${review} of ${budget}`;
     const plan = planDigest(state.worktree, state.change);
     const base = nextStep(run.dir, "proposal-review");
@@ -166,9 +177,7 @@ async function proposalReview(run: Run): Promise<Halt | undefined> {
     if (record.verdict === "APPROVE") return approve(state, planDigest(state.worktree, state.change));
     state.owedReview = null;
     writeState(run.dir, state);
-    if (review >= budget) {
-      return { cause: `proposal review attempts exhausted (${review} of ${budget}); the last review was REVISE, ${blocking} blocking\nReview: ${recordPath}` };
-    }
+    last = `; the last review was REVISE, ${blocking} blocking\nReview: ${recordPath}`;
   }
 }
 
