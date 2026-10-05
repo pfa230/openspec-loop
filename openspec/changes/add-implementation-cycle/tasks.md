@@ -28,9 +28,9 @@
 
 ## 5. Real harness acceptance
 
-- [ ] 5.1 In a disposable repository, run a small change with a real implementer and implementation reviewer, and a required check, kept outside the repository, that fails on any line longer than 50 characters under `src/` and lists the offending lines. The base passes it, and the plan does not mention it. Verify that the base passes, that the first attempt's check fails, the implementer revises from the check output, the checks pass, and implementation review approves without the user
-- [ ] 5.2 Run `loop-claude`, `loop-codex`, `loop-agy` and `loop-opencode` once each as implementer and once each as implementation reviewer, pairing different adapters, with each reviewer restricted to read-only arguments. Verify that each implementer's work is committed, that each review reply is accepted, and that no reviewer left changes in the worktree
-- [ ] 5.3 Run a change whose required check also fails on the base for a reason unrelated to the change, with `attempts.implementation: 2`. Verify that the run stops after two attempts with the check's output, and that the patch touches nothing outside the plan
+- [x] 5.1 In a disposable repository, run a small change with a real implementer and implementation reviewer, and a required check, kept outside the repository, that fails on any line longer than 50 characters under `src/` and lists the offending lines. The base passes it, and the plan does not mention it. Verify that the base passes, that the first attempt's check fails, the implementer revises from the check output, the checks pass, and implementation review approves without the user
+- [x] 5.2 Run `loop-claude`, `loop-codex`, `loop-agy` and `loop-opencode` once each as implementer and once each as implementation reviewer, pairing different adapters, with each reviewer restricted to read-only arguments. Verify that each implementer's work is committed, that each review reply is accepted, and that no reviewer left changes in the worktree
+- [x] 5.3 Run a change whose required check also fails on the base for a reason unrelated to the change, with `attempts.implementation: 2`. Verify that the run stops after two attempts with the check's output, and that the patch touches nothing outside the plan
 
 ## 6. Final checks
 
