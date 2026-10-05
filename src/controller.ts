@@ -368,7 +368,7 @@ async function requiredChecks(run: Run, at: string): Promise<{ findings: Finding
     progress(`${label} failed, ${outcome}`);
     failures.push({ check, outcome, transcript });
   }
-  const share = Math.floor(CHECK_OUTPUT / Math.max(1, failures.length));
+  const share = Math.floor(CHECK_OUTPUT / failures.length);
   const findings = failures.map(({ check, outcome, transcript }): Finding => ({
     severity: "blocking",
     location: `check \`${check}\``,
