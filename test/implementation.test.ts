@@ -112,14 +112,14 @@ test("every check runs after one fails, and its failure is recorded as a finding
 
 test("the failed checks of one round share 20,000 characters of output tail", (t) => {
   const repo = makeRepo(t);
-  const check = "head -c 5000 /dev/zero | tr '\\0' x; exit 1";
+  const check = "printf BEGIN; head -c 5000 /dev/zero | tr '\\0' x; printf END; exit 1";
   configure(repo, `checks:\n${Array.from({ length: 20 }, (_, i) => `  - ${JSON.stringify(`${check} # ${i}`)}\n`).join("")}attempts:\n  implementation: 1\n`);
   assert.equal(runLoop(repo, ["run", "add-thing"]).status, 1);
   const [record] = transcripts(repo, "-checks.findings.json");
   const { findings } = JSON.parse(readFileSync(record, "utf8"));
   assert.equal(findings.length, 20);
   const tails = findings.map((entry: { problem: string }) => entry.problem.split("The output ends with:\n")[1]);
-  for (const tail of tails) assert.equal(tail, "x".repeat(1000));
+  for (const tail of tails) assert.equal(tail, `${"x".repeat(997)}END`);
 });
 
 test("REVISE runs another implementer turn on the review's findings, then the checks and a second review", (t) => {
