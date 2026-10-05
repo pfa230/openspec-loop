@@ -285,6 +285,23 @@ test("an implementer turn that edits a task's text returns to proposal review, a
   assert.equal(progress[changed + 1], "proposal-review: review 2 of 3 started (reviewer)");
 });
 
+test("a minor-fix turn that edits a task's text returns to proposal review, and a full round with review follows", (t) => {
+  const repo = makeRepo(t);
+  repo.queue("verifier", { reply: { findings: [finding("minor", "typo")] } });
+  repo.queue("implementer", { edits: { "a.txt": "a\n" } }, { edits: { [TASKS]: "## 1. Work\n\n- [ ] 1.1 Do another thing\n" } });
+  const result = runLoop(repo, ["run", "add-thing"]);
+  assert.equal(result.status, 0, result.stdout);
+  const progress = lines(result.stdout);
+  const changed = progress.indexOf("plan changed since its approval; reviewing it again");
+  assert.match(progress[changed - 1], /^implementation: attempt 1 of 3, minor fixes committed /);
+  assert.equal(progress[changed + 1], "proposal-review: review 2 of 3 started (reviewer)");
+  assert.deepEqual(implementation(result.stdout.slice(result.stdout.indexOf("review 2 of 3"))).slice(-3), [
+    "implementation: attempt 2 of 3, review started (verifier)",
+    "implementation: attempt 2 of 3, review APPROVE, 0 blocking, 0 minor (verifier)",
+    "implementation: complete",
+  ]);
+});
+
 test("a minor-fix turn that reports a plan problem leads, after reapproval, to a full round with review", (t) => {
   const repo = makeRepo(t);
   repo.queue("verifier", { reply: { findings: [finding("minor", "typo")] } });
