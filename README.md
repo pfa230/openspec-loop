@@ -28,7 +28,7 @@ attempts:
   proposalReview: 3
 ```
 
-- `worktrees` is the directory where a run started on the default branch gets its worktree, at `<worktrees>/<change>`. A relative path is relative to the repository's main worktree, whichever checkout you run from; an absolute path is used as written. A run keeps the worktree it was created with, so changing `worktrees` affects only new runs. The loop never edits ignore rules: when the directory lies inside a checkout, add it to `.gitignore`, or to `.git/info/exclude` for one clone only, because an unignored worktree makes that checkout dirty.
+- `worktrees` is the directory where a run started on the default branch gets its worktree, at `<worktrees>/<change>`. A relative path is relative to the checkout where you give `loop run`; an absolute path is used as written. A run keeps the worktree it was created with, so changing `worktrees` affects only new runs. The loop never edits ignore rules: when the directory lies inside a checkout, add it to `.gitignore`, or to `.git/info/exclude` for one clone only, because an unignored worktree makes that checkout dirty.
 - `agents` maps an alias of your choice to the command that runs that agent. Define one agent per harness and model you use, such as `opus` and `fable`, or `deepseek` and `mimo` on OpenCode. Progress lines name agents by alias.
 - `roles` assigns an agent to each role. The proposal reviewer judges the plan; the plan reviser revises it and applies minor plan fixes. One agent may fill both roles: every turn runs in a fresh context.
 - `attempts.proposalReview` bounds how many proposal reviews one advancement runs.
@@ -84,9 +84,9 @@ A run accepts one advancement at a time. If the process advancing it dies, `loop
 Each run keeps its state in the repository's Git directory, at `.git/openspec-loop/<change>/` in a regular clone: `state.json` and the transcripts of every step under `transcripts/`. A run started on the default branch works in its worktree under `worktrees`. The report and `loop status` print the exact paths. To discard a run and start over, note the `Worktree` and `Run directory` lines of `loop status <change>`, then:
 
 ```sh
-git worktree remove --force <worktree>   # only for a run started on the default branch
-git branch -D loop/<change>              # likewise
-rm -rf <run directory>
+git worktree remove --force "<worktree>"   # only for a run started on the default branch
+git branch -D loop/<change>                # likewise
+rm -rf "<run directory>"
 ```
 
 ### Proposal review

@@ -7,7 +7,7 @@ The build-controller change put the worktree in the Git directory only so it nev
 ## What Changes
 
 - `openspec/loop.yaml` gains a required `worktrees` field with no default. It names the directory under which `loop run` on the default branch creates each change's worktree, at `<worktrees>/<change>`.
-- A relative `worktrees` path resolves against the repository's main worktree, so `loop run` puts runs in the same place whichever checkout it is given from. An absolute path is used as given.
+- A relative `worktrees` path resolves against the checkout where `loop run` is given, which holds the default branch. An absolute path is used as given.
 - The loop does not edit `.gitignore`, `.git/info/exclude` or any other Git configuration. The README tells the user to ignore the directory when it lies inside a checkout.
 - A run's worktree is fixed when `loop run` creates it, because `state.json` records it. Changing `worktrees` affects only runs created afterwards.
 - Run state, the lock and transcripts stay in `<git-common-dir>/openspec-loop/<change>/`.
@@ -29,8 +29,8 @@ None.
 ## Impact
 
 - `src/config.ts`: parse, merge and require `worktrees` as a non-empty string.
-- `src/commands.ts`: create the default-branch run's worktree at `<worktrees>/<change>`, resolving a relative path against the main worktree.
-- Tests: the test configuration gains `worktrees`, and the test repositories ignore it in `.git/info/exclude` as the README tells users to. New tests cover a relative path given from a linked worktree, an absolute path, a missing or malformed field, and a resume after `worktrees` changed.
+- `src/commands.ts`: create the default-branch run's worktree at `<worktrees>/<change>`, resolving a relative path against the invoking checkout.
+- Tests: the test configuration gains `worktrees`, and the test repositories ignore it in `.git/info/exclude` as the README tells users to. New tests cover an absolute path, a missing or malformed field, and a resume after `worktrees` changed.
 - `README.md`: configuration, adapters and discarding a run.
 - Existing runs keep working: resume uses the worktree path in `state.json`.
 - Delivery in `merge` mode (#7) needs every checkout holding the default branch to be clean. An unignored worktree directory inside that checkout makes it dirty, and #7's existing rule stops the run and names the checkout. This change adds no check for it.

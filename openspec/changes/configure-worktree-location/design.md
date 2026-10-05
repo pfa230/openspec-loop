@@ -5,15 +5,13 @@
 These facts were checked on this host with Git 2.53.0 and Claude Code 2.1.289:
 
 - `claude -p --permission-mode acceptEdits` asked to write a file creates it in a worktree at `<repo>/.worktrees/a`, and does not create it in a worktree at `<repo>/.git/openspec-loop/g/worktree`.
-- A worktree at `<repo>/.worktrees/a` shows in the main worktree's `git status --porcelain --untracked-files=all` as `?? .worktrees/a/`, and disappears from it once `.worktrees/` is in `.git/info/exclude`.
+- A worktree at `<repo>/.worktrees/a` shows in that checkout's `git status --porcelain --untracked-files=all` as `?? .worktrees/a/`, and disappears from it once `.worktrees/` is in `.git/info/exclude`.
 - `git worktree add` creates missing leading directories of the worktree path.
-- `git worktree list --porcelain` given from a linked worktree lists the main worktree first.
 
 ## Goals / Non-Goals
 
 **Goals:**
 - An editing Claude agent works in a default-branch run's worktree under `acceptEdits`, when the user puts `worktrees` outside the Git directory.
-- Every checkout of a repository puts new runs in the same place.
 
 **Non-Goals:**
 - Moving the worktree of an existing run. It stays where `state.json` says.
@@ -24,7 +22,7 @@ These facts were checked on this host with Git 2.53.0 and Claude Code 2.1.289:
 
 **`worktrees` is required and has no default.** pfa decided this in #19. The user names the location once, beside `defaultBranch`, and chooses whether it lies inside a checkout. A default would pick for the user a location that either needs ignoring or lies outside the repository. Like `defaultBranch`, it is a top-level string the local file replaces as a whole, so a person can keep their worktrees elsewhere without changing the committed file. The loop checks only that it is a non-empty string. It does not refuse a path inside the Git directory or one that Git does not ignore: those are the user's choices, and the README states their consequences.
 
-**A relative path resolves against the main worktree, taken from the first entry of `git worktree list --porcelain`.** pfa decided the main worktree in #19, so `loop run` from any checkout puts runs in the same place. Git documents the first entry as the main worktree. The parent of `--git-common-dir` was rejected: it is not the main worktree when the Git directory is separate, as with `git init --separate-git-dir` or a submodule.
+**A relative path resolves against the checkout where `loop run` is given.** That checkout holds the default branch, and agent command paths containing `/` already resolve against it, so the loop has one rule for relative paths. pfa replaced #19's main-worktree rule with this one: finding the main worktree needs `git worktree list`, it matters only when the default branch is checked out in a linked worktree, and with `git init --separate-git-dir` Git reports the Git directory as the main worktree, so the lookup would put runs there.
 
 **The change's worktree is `<worktrees>/<change>`.** The loop passes the path to `git worktree add` and adds no checks of its own: Git creates missing leading directories, and refuses a non-empty existing path with a message naming it, which the loop reports as the refusal, as it does for an existing `loop/<change>` branch.
 
