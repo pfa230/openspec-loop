@@ -44,4 +44,4 @@
 
 ## 7. Final checks
 
-- [ ] 7.1 Run `openspec validate add-proposal-review --strict` and `npm test`, and verify on the pull request with `gh run watch` that CI passes on Linux and macOS
+- [x] 7.1 Run `openspec validate add-proposal-review --strict` and `npm test`, and verify on the pull request with `gh run watch` that CI passes on Linux and macOS
