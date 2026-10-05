@@ -5,7 +5,7 @@
 
 ## 2. Enrollment
 
-- [x] 2.1 In `enroll` (`src/commands.ts`), on the default-branch path, resolve `worktrees` against the invoking checkout when it is relative, use it as given when absolute, and create the worktree at `<worktrees>/<change>`. Verify with tests that a default-branch run creates `<top>/.worktrees/add-thing` and records it in `state.json`, and that an absolute `worktrees` outside the repository creates `<directory>/add-thing`
+- [x] 2.1 In `enroll` (`src/commands.ts`), on the default-branch path, resolve `worktrees` against the invoking checkout when it is relative, use it as given when absolute, and create the worktree at `<worktrees>/<change>`. Verify with tests that a default-branch run creates `<top>/.worktrees/add-thing` and records it in `state.json`, that a run given on the default branch in a linked worktree creates it under that worktree, and that an absolute `worktrees` outside the repository creates `<directory>/add-thing`
 - [x] 2.2 Verify with tests that a run stopped by a failing fixture and resumed after `worktrees` changed continues in its recorded worktree, and that with `.worktrees/` not ignored, a default-branch run leaves `.gitignore` and `.git/info/exclude` byte-identical and the checkout's `git status --porcelain --untracked-files=all` gains `?? .worktrees/add-thing/`
 
 ## 3. Documentation
