@@ -91,7 +91,7 @@ function parseFile(path: string, text: string): Settings {
   } catch (error) {
     throw new Refusal(`${path} is not valid YAML: ${(error as Error).message}`);
   }
-  const top = mapping(path, "", doc ?? {});
+  const top = mapping(path, "", doc);
   unknownKeys(path, "", top, ["defaultBranch", "agents", "roles", "attempts"]);
   const { defaultBranch } = top;
   if (defaultBranch !== undefined && (typeof defaultBranch !== "string" || defaultBranch === "")) {

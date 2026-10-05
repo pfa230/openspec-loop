@@ -116,10 +116,10 @@ export async function status(change: string): Promise<number> {
   let summary: string;
   if (holder?.alive) {
     summary = `advancing in process ${holder.pid}${state.current ? `, at ${state.current}` : ""}`;
-  } else if (STAGES.every((stage) => state.stages[stage] === "complete")) {
-    summary = `complete. ${FIXTURE_NOTE}`;
   } else if (state.stop && !holder) {
     summary = `stopped at ${state.stop.stage}\nCause: ${state.stop.cause}\nRecovery: ${state.stop.recovery}`;
+  } else if (STAGES.every((stage) => state.stages[stage] === "complete")) {
+    summary = `complete. ${FIXTURE_NOTE}`;
   } else {
     const at = state.current ? ` at ${state.current}` : "";
     const died = holder ? `; process ${holder.pid} died` : "";
