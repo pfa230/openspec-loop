@@ -8,6 +8,7 @@ export type Role = (typeof ROLES)[number];
 
 export interface Config {
   defaultBranch: string;
+  worktrees: string;
   agents: Record<string, string[]>;
   roles: Record<Role, string>;
   attempts: { proposalReview: number };
@@ -24,14 +25,14 @@ export const LOCAL_CONFIG_PATH = "openspec/loop.local.yaml";
 
 const ATTEMPTS = ["proposalReview"] as const;
 
-type Settings = { defaultBranch?: string; agents: Record<string, string[]>; roles: Record<string, string>; attempts: Record<string, number> };
+type Settings = { defaultBranch?: string; worktrees?: string; agents: Record<string, string[]>; roles: Record<string, string>; attempts: Record<string, number> };
 
 // Reads the committed configuration and, when it exists, the local one, whose entries replace the committed ones.
 export function readConfig(top: string): Config {
   const committedPath = join(top, CONFIG_PATH);
   const committedText = readText(committedPath);
   if (committedText === undefined) {
-    throw new Refusal(`${committedPath} not found; it must name the default branch, agents, roles and attempts`);
+    throw new Refusal(`${committedPath} not found; it must name the default branch, the worktrees directory, agents, roles and attempts`);
   }
   const committed = parseFile(committedPath, committedText);
   const localPath = join(top, LOCAL_CONFIG_PATH);
@@ -39,12 +40,14 @@ export function readConfig(top: string): Config {
   const local = localText === undefined ? undefined : parseFile(localPath, localText);
   const merged: Settings = {
     defaultBranch: local?.defaultBranch ?? committed.defaultBranch,
+    worktrees: local?.worktrees ?? committed.worktrees,
     agents: { ...committed.agents, ...local?.agents },
     roles: { ...committed.roles, ...local?.roles },
     attempts: { ...committed.attempts, ...local?.attempts },
   };
   const missing = [
     merged.defaultBranch === undefined ? "defaultBranch" : undefined,
+    merged.worktrees === undefined ? "worktrees" : undefined,
     ...ROLES.filter((role) => merged.roles[role] === undefined).map((role) => `roles.${role}`),
     ...ATTEMPTS.filter((key) => merged.attempts[key] === undefined).map((key) => `attempts.${key}`),
   ].filter((field) => field !== undefined);
@@ -92,10 +95,14 @@ function parseFile(path: string, text: string): Settings {
     throw new Refusal(`${path} is not valid YAML: ${(error as Error).message}`);
   }
   const top = mapping(path, "", doc);
-  unknownKeys(path, "", top, ["defaultBranch", "agents", "roles", "attempts"]);
+  unknownKeys(path, "", top, ["defaultBranch", "worktrees", "agents", "roles", "attempts"]);
   const { defaultBranch } = top;
   if (defaultBranch !== undefined && (typeof defaultBranch !== "string" || defaultBranch === "")) {
     throw new Refusal(`${path}: "defaultBranch" must be a non-empty branch name`);
+  }
+  const { worktrees } = top;
+  if (worktrees !== undefined && (typeof worktrees !== "string" || worktrees === "")) {
+    throw new Refusal(`${path}: "worktrees" must be a non-empty path`);
   }
   const agents = mapping(path, "agents", top.agents === undefined ? {} : top.agents);
   for (const [alias, command] of Object.entries(agents)) {
@@ -117,6 +124,7 @@ function parseFile(path: string, text: string): Settings {
   }
   return {
     defaultBranch,
+    worktrees,
     agents: agents as Record<string, string[]>,
     roles: roles as Record<string, string>,
     attempts: attempts as Record<string, number>,

@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync } from "node:fs";
 import { setTimeout as sleep } from "node:timers/promises";
-import { join } from "node:path";
-import { readConfig, resolveRoles } from "./config.js";
+import { join, resolve } from "node:path";
+import { type Config, readConfig, resolveRoles } from "./config.js";
 import { advance, FIXTURE_NOTE, locations, progress, type Setup } from "./controller.js";
 import { loadFixture } from "./fixture.js";
 import { git, gitMessage, gitSucceeds, topLevel } from "./git.js";
@@ -26,7 +26,7 @@ export async function run(change: string): Promise<number> {
   mkdirSync(dir, { recursive: true });
   acquireLock(dir, change);
   try {
-    return await advance(dir, enroll(top, dir, change, setup.config.defaultBranch), setup);
+    return await advance(dir, enroll(top, dir, change, setup.config), setup);
   } catch (error) {
     releaseLock(dir);
     throw error;
@@ -42,7 +42,7 @@ function prepare(top: string, attempts: number | undefined): Setup {
 }
 
 // Checks the change can run and creates its run. Called under the run's lock.
-function enroll(top: string, dir: string, change: string, defaultBranch: string): RunState {
+function enroll(top: string, dir: string, change: string, config: Config): RunState {
   if (readState(dir)) {
     throw new Refusal(`${change} already has a run; see \`loop status ${change}\` or continue it with \`loop resume ${change}\``);
   }
@@ -57,7 +57,7 @@ function enroll(top: string, dir: string, change: string, defaultBranch: string)
   if (!gitSucceeds(top, "cat-file", "-e", `${head}:${proposal}`)) {
     throw new Refusal(`${proposal} is not committed on ${branch}; commit the proposal on the branch you run \`loop run\` from`);
   }
-  const onDefaultBranch = branch === defaultBranch;
+  const onDefaultBranch = branch === config.defaultBranch;
   if (!onDefaultBranch && git(top, "status", "--porcelain", "--untracked-files=all") !== "") {
     throw new Refusal(`worktree ${top} has uncommitted changes; commit or remove them before running ${change} on ${branch}`);
   }
@@ -65,7 +65,9 @@ function enroll(top: string, dir: string, change: string, defaultBranch: string)
   let worktree = top;
   if (onDefaultBranch) {
     branch = `loop/${change}`;
-    worktree = join(dir, "worktree");
+    // A relative worktrees directory is relative to the main worktree, which Git lists first.
+    const main = git(top, "worktree", "list", "--porcelain").split("\n")[0].slice("worktree ".length);
+    worktree = join(resolve(main, config.worktrees), change);
     try {
       git(top, "worktree", "add", "--quiet", "-b", branch, worktree, head);
     } catch (error) {

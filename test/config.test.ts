@@ -9,6 +9,7 @@ import { Refusal } from "../src/refusal.js";
 type After = { after: (fn: () => void) => void };
 
 const VALID = `defaultBranch: trunk
+worktrees: .worktrees
 agents:
   gpt: [loop-codex, -m, gpt-5.5]
   opus: [loop-claude, --model, opus]
@@ -35,6 +36,7 @@ function refuses(fn: () => unknown, message: RegExp): void {
 test("a valid configuration returns every field", (t) => {
   assert.deepEqual(readConfig(checkout(t, VALID)), {
     defaultBranch: "trunk",
+    worktrees: ".worktrees",
     agents: { gpt: ["loop-codex", "-m", "gpt-5.5"], opus: ["loop-claude", "--model", "opus"] },
     roles: { proposalReviewer: "gpt", planReviser: "opus" },
     attempts: { proposalReview: 3 },
@@ -49,6 +51,8 @@ const refusals: Record<string, [string, RegExp]> = {
   "unparseable YAML": ["defaultBranch: [main\n", /loop\.yaml is not valid YAML/],
   "a non-mapping document": ["- main\n", /loop\.yaml must be a mapping/],
   "a missing default branch": [VALID.replace("defaultBranch: trunk\n", ""), /loop\.yaml is missing "defaultBranch"/],
+  "missing worktrees": [VALID.replace("worktrees: .worktrees\n", ""), /loop\.yaml is missing "worktrees"/],
+  "a worktrees directory that is not a string": [VALID.replace("worktrees: .worktrees", "worktrees: [.worktrees]"), /loop\.yaml: "worktrees" must be a non-empty path/],
   "a missing role": [VALID.replace("  planReviser: opus\n", ""), /loop\.yaml is missing "roles\.planReviser"/],
   "missing attempts": [VALID.replace("attempts:\n  proposalReview: 3\n", ""), /loop\.yaml is missing "attempts\.proposalReview"/],
   "an unknown top-level key": [`${VALID}delivery: merge\n`, /loop\.yaml has unknown key "delivery"/],
@@ -82,6 +86,10 @@ test("the local file replaces only the entries it sets", (t) => {
   assert.equal(config.defaultBranch, "trunk");
 });
 
+test("a local worktrees directory replaces the committed one", (t) => {
+  assert.equal(readConfig(checkout(t, VALID, "worktrees: /srv/worktrees\n")).worktrees, "/srv/worktrees");
+});
+
 test("an unknown key in the local file is refused naming the local file", (t) => {
   refuses(() => readConfig(checkout(t, VALID, "rolse: {}\n")), /loop\.local\.yaml has unknown key "rolse"/);
 });
@@ -110,7 +118,7 @@ function resolve(t: After, top: string, agents: Record<string, string[]>, roles:
   const path = process.env.PATH;
   process.env.PATH = join(top, "bin");
   t.after(() => (process.env.PATH = path));
-  const config: Config = { defaultBranch: "main", agents, roles, attempts: { proposalReview: 1 } };
+  const config: Config = { defaultBranch: "main", worktrees: ".worktrees", agents, roles, attempts: { proposalReview: 1 } };
   return () => resolveRoles(top, config);
 }
 
@@ -160,7 +168,7 @@ test("a relative PATH entry is resolved against the current directory", (t) => {
     process.env.PATH = path;
     process.chdir(cwd);
   });
-  const config: Config = { defaultBranch: "main", agents: { gpt: ["loop-codex"] }, roles: { proposalReviewer: "gpt", planReviser: "gpt" }, attempts: { proposalReview: 1 } };
+  const config: Config = { defaultBranch: "main", worktrees: ".worktrees", agents: { gpt: ["loop-codex"] }, roles: { proposalReviewer: "gpt", planReviser: "gpt" }, attempts: { proposalReview: 1 } };
   assert.equal(resolveRoles(top, config).proposalReviewer.command[0], join(top, "tools/loop-codex"));
 });
 

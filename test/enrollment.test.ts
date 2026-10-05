@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 import { configYaml, makeRepo, runLoop, writeFile } from "./helpers.js";
@@ -59,7 +59,7 @@ test("the default-branch path creates loop/<change> at the invoking HEAD and acc
   const statusBefore = repo.git("status", "--porcelain", "--untracked-files=all");
   const result = runLoop(repo, ["run", "add-thing"]);
   assert.equal(result.status, 0, result.stderr);
-  const worktree = join(repo.runDir(), "worktree");
+  const worktree = repo.worktree;
   assert.match(result.stdout, new RegExp(`created branch loop/add-thing at ${head.slice(0, 7)} in worktree ${worktree}`));
   assert.equal(repo.git("rev-parse", "loop/add-thing"), head);
   assert.equal(repo.gitIn(worktree, "symbolic-ref", "--short", "HEAD"), "loop/add-thing");
@@ -80,13 +80,47 @@ test("a configured trunk is used while the remote's HEAD points to another branc
   assert.equal(repo.git("rev-parse", "loop/add-thing"), repo.git("rev-parse", "trunk"));
 });
 
+test("a relative worktrees directory resolves against the main worktree when run from a linked one", (t) => {
+  const repo = makeRepo(t);
+  repo.git("switch", "--quiet", "-c", "other");
+  const linked = join(repo.root, "linked");
+  repo.git("worktree", "add", "--quiet", linked, "main");
+  const result = runLoop(repo, ["run", "add-thing"], linked);
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(repo.gitIn(repo.worktree, "symbolic-ref", "--short", "HEAD"), "loop/add-thing");
+  assert.equal(existsSync(join(linked, ".worktrees")), false);
+});
+
+test("an absolute worktrees directory is used as given", (t) => {
+  const repo = makeRepo(t);
+  const worktrees = join(repo.root, "elsewhere");
+  writeFile(repo.top, "openspec/loop.yaml", configYaml().replace("worktrees: .worktrees", `worktrees: ${worktrees}`));
+  const result = runLoop(repo, ["run", "add-thing"]);
+  assert.equal(result.status, 0, result.stderr);
+  const state = JSON.parse(readFileSync(join(repo.runDir(), "state.json"), "utf8"));
+  assert.equal(state.worktree, join(worktrees, "add-thing"));
+  assert.equal(repo.gitIn(state.worktree, "symbolic-ref", "--short", "HEAD"), "loop/add-thing");
+});
+
+test("an unignored worktrees directory shows as untracked, and the loop leaves the ignore files alone", (t) => {
+  const repo = makeRepo(t);
+  const exclude = join(repo.top, ".git", "info", "exclude");
+  writeFileSync(exclude, readFileSync(exclude, "utf8").replace(".worktrees/\n", ""));
+  const before = readFileSync(exclude);
+  const result = runLoop(repo, ["run", "add-thing"]);
+  assert.equal(result.status, 0, result.stderr);
+  assert.deepEqual(readFileSync(exclude), before);
+  assert.equal(existsSync(join(repo.top, ".gitignore")), false);
+  assert.equal(repo.git("status", "--porcelain", "--untracked-files=all"), "?? .worktrees/add-thing/");
+});
+
 test("the change-branch path creates no branch or worktree", (t) => {
   const repo = makeRepo(t, { branch: "add-thing" });
   const result = runLoop(repo, ["run", "add-thing"]);
   assert.equal(result.status, 0, result.stderr);
   assert.equal(repo.git("branch", "--list", "loop/*"), "");
   assert.equal(repo.git("worktree", "list").split("\n").length, 1);
-  assert.equal(existsSync(join(repo.runDir(), "worktree")), false);
+  assert.equal(existsSync(repo.worktree), false);
   const state = JSON.parse(readFileSync(join(repo.runDir(), "state.json"), "utf8"));
   assert.equal(state.branch, "add-thing");
   assert.equal(state.worktree, repo.top);

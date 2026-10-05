@@ -14,6 +14,7 @@ export const FIXTURE_STAGES = STAGES.slice(1);
 
 export function configYaml(defaultBranch = "main"): string {
   return `defaultBranch: ${defaultBranch}
+worktrees: .worktrees
 agents:
   reviewer: [stub-agent, reviewer]
   reviser: [stub-agent, reviser]
@@ -150,7 +151,7 @@ export function makeRepo(t: After, options: RepoOptions = {}): Repo {
     execFileSync("git", args, { cwd, env, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
   const repo: Repo = {
     root: base,
-    worktree: join(top, ".git", "openspec-loop", change, "worktree"),
+    worktree: join(top, ".worktrees", change),
     top,
     env,
     git: (...args) => gitIn(top, ...args),
@@ -184,6 +185,8 @@ export function makeRepo(t: After, options: RepoOptions = {}): Repo {
   repo.setFixture(options.fixture ?? {});
 
   repo.git("init", "--quiet", "-b", defaultBranch);
+  // Ignored as the README tells users to, so a run leaves the checkout's status unchanged.
+  writeFileSync(join(top, ".git", "info", "exclude"), ".worktrees/\n", { flag: "a" });
   writeFile(top, "openspec/loop.yaml", configYaml(defaultBranch));
   repo.git("add", ".");
   repo.git("commit", "--quiet", "-m", "init");

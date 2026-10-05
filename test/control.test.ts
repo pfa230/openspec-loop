@@ -62,11 +62,21 @@ test("resume reads the configuration again", (t) => {
   assert.equal(runLoop(repo, ["resume", "add-thing"]).status, 0);
 });
 
+test("a resumed run keeps its worktree after the worktrees directory changes", (t) => {
+  const repo = makeRepo(t, { fixture: { implementation: "exit 1" } });
+  assert.equal(runLoop(repo, ["run", "add-thing"]).status, 1);
+  repo.setFixture({ implementation: "pwd" });
+  writeFile(repo.top, "openspec/loop.yaml", configYaml().replace("worktrees: .worktrees", "worktrees: elsewhere"));
+  const result = runLoop(repo, ["resume", "add-thing"]);
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(readFileSync(join(repo.runDir(), "transcripts", "003-implementation.log"), "utf8"), `${repo.worktree}\n`);
+});
+
 test("resume works from another checkout of the repository", (t) => {
   const repo = makeRepo(t, { fixture: { implementation: "exit 1" } });
   assert.equal(runLoop(repo, ["run", "add-thing"]).status, 1);
   repo.setFixture({});
-  const result = runLoop(repo, ["resume", "add-thing"], join(repo.runDir(), "worktree"));
+  const result = runLoop(repo, ["resume", "add-thing"], repo.worktree);
   assert.equal(result.status, 0, result.stderr);
 });
 
@@ -94,7 +104,7 @@ test("a second advancement is refused while one is live, and stop ends the step 
   assert.match(refused.stderr, new RegExp(`already advancing in process ${running.child.pid}`));
 
   const started = Date.now();
-  const stopped = runLoop(repo, ["stop", "add-thing"], join(repo.runDir(), "worktree"));
+  const stopped = runLoop(repo, ["stop", "add-thing"], repo.worktree);
   assert.equal(stopped.status, 0);
   assert.equal(stopped.stdout, "Stopped run add-thing.\n");
   const result = await running.exited;
