@@ -48,7 +48,6 @@ function implementerPrompts(repo: Repo): string[] {
 test("a clean rebase leaves a linear branch, other branches alone, and the approval standing", (t) => {
   const repo = withFile(makeRepo(t));
   repo.git("config", "rebase.updateRefs", "true");
-  repo.git("config", "rebase.rebaseMerges", "true");
   repo.git("config", "diff.interHunkContext", "100");
   repo.queue("implementer", { edits: { "f.txt": f({ 5: "five", 9: "nine" }) } });
   // Line 7 lies between the change's two hunks: context the comparison must ignore.
