@@ -26,4 +26,4 @@
 
 ## 5. Final checks
 
-- [ ] 5.1 Run `openspec validate add-native-archival --strict` and `npm test`, and verify on the pull request with `gh run watch` that CI passes on Linux and macOS
+- [x] 5.1 Run `openspec validate add-native-archival --strict` and `npm test`, and verify on the pull request with `gh run watch` that CI passes on Linux and macOS
