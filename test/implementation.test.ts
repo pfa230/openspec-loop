@@ -62,15 +62,15 @@ test("a failing check returns to the implementer, and the passing revision is re
   const check = `check \`${MISSING}\``;
   assert.deepEqual(implementation(result.stdout), [
     "implementation: attempt 1 of 3, implementer started (implementer)",
-    `implementation: attempt 1 of 3, implementer committed ${first} (implementer)`,
+    `implementation: attempt 1 of 3, implementer committed ${first} (implementer; usage unavailable)`,
     `implementation: attempt 1 of 3, ${check} started`,
     `implementation: attempt 1 of 3, ${check} failed, exit status 1`,
     "implementation: attempt 2 of 3, implementer started (implementer)",
-    `implementation: attempt 2 of 3, implementer committed ${second} (implementer)`,
+    `implementation: attempt 2 of 3, implementer committed ${second} (implementer; usage unavailable)`,
     `implementation: attempt 2 of 3, ${check} started`,
     `implementation: attempt 2 of 3, ${check} passed`,
     "implementation: attempt 2 of 3, review started (verifier)",
-    "implementation: attempt 2 of 3, review APPROVE, 0 blocking, 0 minor (verifier)",
+    "implementation: attempt 2 of 3, review APPROVE, 0 blocking, 0 minor (verifier; usage unavailable)",
     "implementation: complete",
   ]);
   assert.equal(lines(result.stdout).at(lines(result.stdout).indexOf("implementation: complete") + 1), "integration: started");
@@ -132,15 +132,15 @@ test("REVISE runs another implementer turn on the review's findings, then the ch
   assert.equal(result.status, 0, result.stdout);
   const progress = implementation(result.stdout);
   assert.deepEqual(progress.slice(5, 8), [
-    "implementation: attempt 1 of 3, review REVISE, 1 blocking, 0 minor (verifier)",
+    "implementation: attempt 1 of 3, review REVISE, 1 blocking, 0 minor (verifier; usage unavailable)",
     "implementation: attempt 2 of 3, implementer started (implementer)",
-    `implementation: attempt 2 of 3, implementer committed ${commitWith(repo, "add-thing: revise implementation")} (implementer)`,
+    `implementation: attempt 2 of 3, implementer committed ${commitWith(repo, "add-thing: revise implementation")} (implementer; usage unavailable)`,
   ]);
   assert.deepEqual(progress.slice(8), [
     "implementation: attempt 2 of 3, check `true` started",
     "implementation: attempt 2 of 3, check `true` passed",
     "implementation: attempt 2 of 3, review started (verifier)",
-    "implementation: attempt 2 of 3, review APPROVE, 0 blocking, 0 minor (verifier)",
+    "implementation: attempt 2 of 3, review APPROVE, 0 blocking, 0 minor (verifier; usage unavailable)",
     "implementation: complete",
   ]);
   assert.match(implementerPrompts(repo)[1], /resolve them:[\s\S]*the thing is not done/);
@@ -155,9 +155,9 @@ test("APPROVE with minor findings runs one fix turn and the checks, and reviews 
   const result = runLoop(repo, ["run", "add-thing"]);
   assert.equal(result.status, 0, result.stdout);
   assert.deepEqual(implementation(result.stdout).slice(5), [
-    "implementation: attempt 1 of 3, review APPROVE, 0 blocking, 1 minor (verifier)",
+    "implementation: attempt 1 of 3, review APPROVE, 0 blocking, 1 minor (verifier; usage unavailable)",
     "implementation: attempt 1 of 3, minor fixes started (implementer)",
-    `implementation: attempt 1 of 3, minor fixes committed ${commitWith(repo, "add-thing: apply minor implementation fixes")} (implementer)`,
+    `implementation: attempt 1 of 3, minor fixes committed ${commitWith(repo, "add-thing: apply minor implementation fixes")} (implementer; usage unavailable)`,
     "implementation: attempt 1 of 3, check `true` started",
     "implementation: attempt 1 of 3, check `true` passed",
     "implementation: complete",
@@ -179,7 +179,7 @@ test("minor fixes that break a check end the attempt, and the next attempt is re
   assert.ok(progress.includes("implementation: attempt 1 of 3, check `test ! -f broken` failed, exit status 1"), progress.join("\n"));
   assert.deepEqual(progress.slice(-3), [
     "implementation: attempt 2 of 3, review started (verifier)",
-    "implementation: attempt 2 of 3, review APPROVE, 0 blocking, 0 minor (verifier)",
+    "implementation: attempt 2 of 3, review APPROVE, 0 blocking, 0 minor (verifier; usage unavailable)",
     "implementation: complete",
   ]);
   assert.equal(repo.calls("verifier").length, 2);
@@ -252,9 +252,9 @@ test("a plan problem goes through the plan reviser and proposal review, and impl
   const reported = progress.indexOf("implementation: attempt 1 of 3, implementer reports the plan needs a change (implementer)");
   assert.deepEqual(progress.slice(reported + 1, reported + 7), [
     "proposal-review: plan revision started (reviser)",
-    `proposal-review: plan revision committed ${commitWith(repo, "add-thing: revise plan")} (reviser)`,
+    `proposal-review: plan revision committed ${commitWith(repo, "add-thing: revise plan")} (reviser; usage unavailable)`,
     "proposal-review: review 2 of 3 started (reviewer)",
-    "proposal-review: review 2 of 3 APPROVE, 0 blocking, 0 minor (reviewer)",
+    "proposal-review: review 2 of 3 APPROVE, 0 blocking, 0 minor (reviewer; usage unavailable)",
     "proposal-review: complete",
     "implementation: attempt 2 of 3, implementer started (implementer)",
   ]);
@@ -278,7 +278,7 @@ test("an implementer turn that edits a task's text stops the run, and one tickin
   const result = runLoop(edited, ["run", "add-thing"]);
   assert.equal(result.status, 1, result.stdout);
   const commit = edited.git("rev-parse", "--short=7", "loop/add-thing");
-  assert.equal(lines(result.stdout).at(-1), "implementation: attempt 1 of 3, implementer changed the plan (implementer)");
+  assert.equal(lines(result.stdout).at(-1), "implementation: attempt 1 of 3, implementer changed the plan (implementer; usage unavailable)");
   assert.ok(
     result.stdout.includes(
       "Run add-thing stopped at implementation.\n" +
@@ -297,7 +297,7 @@ test("a minor-fix turn that edits a task's text stops the run", (t) => {
   repo.queue("implementer", { edits: { "a.txt": "a\n" } }, { edits: { [TASKS]: "## 1. Work\n\n- [ ] 1.1 Do another thing\n" } });
   const result = runLoop(repo, ["run", "add-thing"]);
   assert.equal(result.status, 1, result.stdout);
-  assert.equal(lines(result.stdout).at(-1), "implementation: attempt 1 of 3, minor fixes changed the plan (implementer)");
+  assert.equal(lines(result.stdout).at(-1), "implementation: attempt 1 of 3, minor fixes changed the plan (implementer; usage unavailable)");
   assert.match(result.stdout, /Cause: failure of implementer agent "implementer": it changed the plan beyond ticking task boxes in commit /);
   assert.equal(repo.calls("reviewer").length, 1);
   assert.equal(repo.calls("verifier").length, 1);
@@ -311,9 +311,9 @@ test("a minor-fix turn that reports a plan problem leads, after reapproval, to a
   assert.equal(result.status, 0, result.stdout);
   assert.deepEqual(implementation(result.stdout.slice(result.stdout.indexOf("review 2 of 3"))), [
     "implementation: attempt 2 of 3, implementer started (implementer)",
-    "implementation: attempt 2 of 3, implementer made no changes (implementer)",
+    "implementation: attempt 2 of 3, implementer made no changes (implementer; usage unavailable)",
     "implementation: attempt 2 of 3, review started (verifier)",
-    "implementation: attempt 2 of 3, review APPROVE, 0 blocking, 0 minor (verifier)",
+    "implementation: attempt 2 of 3, review APPROVE, 0 blocking, 0 minor (verifier; usage unavailable)",
     "implementation: complete",
   ]);
   assert.equal(repo.calls("verifier").length, 2);
@@ -329,7 +329,7 @@ test("a stop during an implementer turn is redone on resume with the same findin
   assert.equal(runLoop(repo, ["stop", "add-thing"]).status, 0);
   const stopped = await running.exited;
   assert.equal(stopped.status, 1);
-  assert.match(stopped.stdout, /\] implementation: attempt 2 of 3, implementer stopped by the user \(implementer\)\n/);
+  assert.match(stopped.stdout, /\] implementation: attempt 2 of 3, implementer stopped by the user \(implementer; usage unavailable\)\n/);
 
   const resumed = runLoop(repo, ["resume", "add-thing"]);
   assert.equal(resumed.status, 0, resumed.stdout);
@@ -353,7 +353,7 @@ test("a stop during minor fixes is redone on resume, and the stage completes wit
   assert.equal(resumed.status, 0, resumed.stdout);
   assert.deepEqual(implementation(resumed.stdout), [
     "implementation: attempt 1 of 3, minor fixes started (implementer)",
-    `implementation: attempt 1 of 3, minor fixes committed ${commitWith(repo, "add-thing: apply minor implementation fixes")} (implementer)`,
+    `implementation: attempt 1 of 3, minor fixes committed ${commitWith(repo, "add-thing: apply minor implementation fixes")} (implementer; usage unavailable)`,
     "implementation: complete",
   ]);
   assert.equal(repo.calls("verifier").length, 1);
@@ -368,7 +368,7 @@ for (const agent of ["implementer", "verifier"]) {
     const result = runLoop(repo, ["run", "add-thing"]);
     assert.equal(result.status, 1, result.stdout);
     const role = agent === "implementer" ? "implementer" : "implementationReviewer";
-    assert.match(result.stdout, new RegExp(`Cause: execution failure of ${role} agent "${agent}": exit status 4\\n`));
+    assert.match(result.stdout, new RegExp(`Cause: execution failure of ${role} agent "${agent}" in attempt 1 of 3, (implementer|review): exit status 4\\n`));
     assert.equal(repo.calls(agent).length, 1);
   });
 }

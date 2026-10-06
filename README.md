@@ -69,7 +69,9 @@ Claude Code refuses to edit any path inside a `.git` directory without `bypassPe
 
 OpenCode has no way to enforce a reply schema, so `loop-opencode` asks for bare JSON and fails the step when the final message is anything else. With `--agent plan`, OpenCode rejects reads outside the repository without asking and can end with no final message; the step then fails, and `loop resume` runs it again.
 
-To use another tool, write your own adapter. The loop runs the agent's command with three paths appended: a prompt file, a JSON schema file and a reply file. The command runs in the run's worktree with no input, and its output becomes the step's transcript. It must exit 0 after writing a JSON object that matches the schema to the reply file; anything else stops the run as an execution failure.
+To use another tool, write your own adapter. The loop runs the agent's command with four paths appended: a prompt file, a JSON schema file, a reply file and a usage file. Take the paths from the last four arguments, since the agent's own arguments come first. The command runs in the run's worktree with no input, and its output becomes the step's transcript. It must exit 0 after writing a JSON object that matches the schema to the reply file; anything else stops the run as an execution failure.
+
+The command may also write what its harness reported spending to the usage file, as a JSON object with two optional keys: `tokens`, which maps each token counter, under the harness's own name, to a non-negative number, and `costUsd`, a non-negative cost in US dollars. Without a usage file, the step's usage shows as unavailable. A usage file that is not such an object stops the run as an execution failure.
 
 ## Running a change
 
@@ -86,6 +88,8 @@ The commands work from any checkout of the repository:
 | `loop resume <change> [--attempts <n>]` | Continues a stopped or interrupted run from its first incomplete stage, with a fresh attempt budget: the configured one, or `<n>` when given. | 0 completed, 1 stopped, 2 refused |
 | `loop stop <change>` | Ends the current step at once; the run reports how to resume. Ctrl-C and closing the terminal do the same. | 0, 2 if there is no run |
 | `loop status <change>` | Shows the run's state, branch, stages and locations. | 0, 2 if there is no run |
+
+When a worker step ends, its progress line names the agent and what the harness reported it spent, such as `(gpt; input_tokens=16641, cached_input_tokens=0, output_tokens=59, reasoning_output_tokens=21, cost unavailable)`. The counters and cost are exactly what the harness reported. A value it did not report reads `unavailable`, never zero, and `usage unavailable` means it reported nothing.
 
 A run accepts one advancement at a time. If the process advancing it dies, `loop resume` takes the run over and redoes the step that was in progress.
 

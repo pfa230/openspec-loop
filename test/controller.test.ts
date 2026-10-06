@@ -23,12 +23,12 @@ for (const branch of [undefined, "add-thing"]) {
       progressLines(result.stdout),
       [
         "proposal-review: review 1 of 3 started (reviewer)",
-        "proposal-review: review 1 of 3 APPROVE, 0 blocking, 0 minor (reviewer)",
+        "proposal-review: review 1 of 3 APPROVE, 0 blocking, 0 minor (reviewer; usage unavailable)",
         "proposal-review: complete",
         "implementation: attempt 1 of 3, implementer started (implementer)",
-        "implementation: attempt 1 of 3, implementer made no changes (implementer)",
+        "implementation: attempt 1 of 3, implementer made no changes (implementer; usage unavailable)",
         "implementation: attempt 1 of 3, review started (verifier)",
-        "implementation: attempt 1 of 3, review APPROVE, 0 blocking, 0 minor (verifier)",
+        "implementation: attempt 1 of 3, review APPROVE, 0 blocking, 0 minor (verifier; usage unavailable)",
         "implementation: complete",
         "integration: started",
         "integration: complete",
@@ -62,10 +62,10 @@ test("a failing stage stops the run with a report naming the stage, cause, recov
   assert.equal(result.status, 1);
   assert.deepEqual(progressLines(result.stdout), [
     "proposal-review: review 1 of 3 started (reviewer)",
-    "proposal-review: review 1 of 3 APPROVE, 0 blocking, 0 minor (reviewer)",
+    "proposal-review: review 1 of 3 APPROVE, 0 blocking, 0 minor (reviewer; usage unavailable)",
     "proposal-review: complete",
     "implementation: attempt 1 of 3, implementer started (implementer)",
-    "implementation: attempt 1 of 3, implementer execution failure, exit status 3 (implementer)",
+    "implementation: attempt 1 of 3, implementer execution failure, exit status 3 (implementer; usage unavailable)",
   ]);
   const dir = repo.runDir();
   const step = join(dir, "transcripts", "002-implementation");
@@ -73,7 +73,7 @@ test("a failing stage stops the run with a report naming the stage, cause, recov
   assert.equal(
     report,
     "Run add-thing stopped at implementation.\n" +
-      `Cause: execution failure of implementer agent "implementer": exit status 3\nTranscript: ${step}.log\nReply: ${step}.reply.json\n` +
+      `Cause: execution failure of implementer agent "implementer" in attempt 1 of 3, implementer: exit status 3\nTranscript: ${step}.log\nReply: ${step}.reply.json\nUsage: ${step}.usage.json\n` +
       "Recovery: loop resume add-thing\n" +
       `Worktree: ${repo.worktree}\nRun directory: ${dir}\nTranscripts: ${join(dir, "transcripts")}\n`,
   );
@@ -139,7 +139,7 @@ test("a step killed by a signal is an execution failure naming the signal", (t) 
   repo.queue("implementer", { kill: true });
   const result = runLoop(repo, ["run", "add-thing"]);
   assert.equal(result.status, 1);
-  assert.match(result.stdout, /Cause: execution failure of implementer agent "implementer": signal SIGKILL\n/);
+  assert.match(result.stdout, /Cause: execution failure of implementer agent "implementer" in attempt 1 of 3, implementer: signal SIGKILL\n/);
 });
 
 // A run stopped at archive whose change was moved by hand, as OpenSpec does, with OpenSpec still refusing:
