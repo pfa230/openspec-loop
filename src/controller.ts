@@ -1,7 +1,6 @@
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Agent, Config, Role } from "./config.js";
-import { FIXTURE_NAMES, FIXTURE_STAGES, type Fixture, type FixtureStage } from "./fixture.js";
 import { type Base, checkoutsHolding, conflicted, git, gitMessage, gitSucceeds, merging, patchId } from "./git.js";
 import { applyInstructions } from "./openspec.js";
 import { changeDir, planDigest, planFiles } from "./plan.js";
@@ -26,8 +25,6 @@ export function progress(message: string): void {
   process.stdout.write(`[${time}] ${message}\n`);
 }
 
-export const FIXTURE_NOTE = `Stage ${FIXTURE_NAMES} was a fixture and did no real work.`;
-
 export function locations(dir: string, state: RunState): string {
   return `Worktree: ${state.worktree}\nRun directory: ${dir}\nTranscripts: ${join(dir, "transcripts")}\n`;
 }
@@ -42,7 +39,6 @@ function reopenPlan(state: RunState): void {
 export interface Setup {
   config: Config;
   agents: Record<Role, Agent>;
-  fixture: Fixture;
   base: Base;
   // Replaces the configured attempt budgets for this advancement.
   attempts: number | undefined;
@@ -109,7 +105,7 @@ export async function advance(dir: string, state: RunState, setup: Setup): Promi
         else if (stage === "implementation") outcome = await implementation(run);
         else if (stage === "integration") outcome = await integration(run);
         else if (stage === "archive") outcome = await archive(run);
-        else outcome = await fixtureStage(run, stage);
+        else outcome = await delivery(run);
       } catch (error) {
         outcome = { cause: `execution failure of the loop: ${(error as Error).message}` };
       }
@@ -118,9 +114,9 @@ export async function advance(dir: string, state: RunState, setup: Setup): Promi
       state.stages[stage] = "complete";
       state.current = null;
       writeState(dir, state);
-      progress(`${stage}: complete${FIXTURE_STAGES.includes(stage as FixtureStage) ? " (fixture)" : ""}`);
+      progress(`${stage}: complete`);
     }
-    process.stdout.write(`Run ${state.change} completed. ${FIXTURE_NOTE}\n${locations(dir, state)}`);
+    process.stdout.write(`Run ${state.change} completed.\n${locations(dir, state)}`);
     return 0;
   } finally {
     for (const signal of SIGNALS) process.off(signal, onSignal);
@@ -138,22 +134,6 @@ interface Run {
   rounds: number;
   stopping(): boolean;
   exec(step: Step): Promise<StepResult>;
-}
-
-async function fixtureStage(run: Run, stage: FixtureStage): Promise<Halt | undefined> {
-  progress(`${stage}: started (fixture)`);
-  let cause: string | undefined;
-  try {
-    const transcript = `${nextStep(run.dir, stage)}.log`;
-    const { code, signal } = await run.exec(runStep("sh", ["-c", run.setup.fixture[stage]], run.state.worktree, transcript));
-    if (run.stopping()) cause = USER_STOP;
-    else if (code !== 0) cause = code === null ? `execution failure, signal ${signal}` : `execution failure, exit status ${code}`;
-  } catch (error) {
-    cause = `execution failure of the loop: ${(error as Error).message}`;
-  }
-  if (!cause) return undefined;
-  progress(`${stage}: ${cause} (fixture)`);
-  return { cause: run.stopping() ? cause : `${cause} (fixture)` };
 }
 
 // Integrates the change with the current base: brings the base in, then hands the implementer any conflict, patch
@@ -318,7 +298,73 @@ async function external(run: Run, stage: Stage, name: string, command: string, a
   const line = [command, ...args].join(" ");
   const outcome = code === null ? `signal ${signal}` : `exit status ${code}`;
   progress(`${stage}: \`${line}\` failed, ${outcome}`);
-  return { cause: `\`${line}\` failed with ${outcome}\nTranscript: ${transcript}` };
+  const output = readFileSync(transcript, "utf8").trim();
+  return { cause: `\`${line}\` failed with ${outcome}${output ? `:\n${output}` : ""}\nTranscript: ${transcript}` };
+}
+
+// Delivers the archived change as the configured mode says.
+async function delivery(run: Run): Promise<Halt | undefined> {
+  const { state, setup } = run;
+  const { worktree, branch, change } = state;
+  progress("delivery: started");
+  if (setup.config.delivery === "local") {
+    progress("delivery: local, nothing pushed");
+    return undefined;
+  }
+  const { remote, branch: remoteBranch } = setup.base.upstream!;
+  const head = git(worktree, "rev-parse", "--short=7", "HEAD");
+  const resume = `loop resume ${change}`;
+  if (setup.config.delivery === "pr") {
+    // No -u: the loop does not change Git configuration.
+    const pushed = await external(run, "delivery", "push", "git", ["push", "--quiet", remote, `${branch}:refs/heads/${branch}`]);
+    if ("cause" in pushed) return pushed;
+    progress(`delivery: pushed ${branch} to ${remote} at ${head}`);
+    const repository = git(worktree, "remote", "get-url", remote);
+    const listed = await external(run, "delivery", "pr-list", "gh", [
+      "pr", "list", "--repo", repository, "--head", branch, "--base", remoteBranch, "--state", "open", "--json", "url", "--jq", ".[].url",
+    ]);
+    if ("cause" in listed) return listed;
+    const [open] = urls(listed.transcript);
+    if (open !== undefined) {
+      progress(`delivery: pull request already open: ${open}`);
+      return undefined;
+    }
+    const created = await external(run, "delivery", "pr-create", "gh", [
+      "pr", "create", "--repo", repository, "--base", remoteBranch, "--head", branch, "--title", change, "--body-file", archivedProposal(worktree, change),
+    ]);
+    if ("cause" in created) return created;
+    progress(`delivery: opened pull request ${urls(created.transcript).at(-1)}`);
+    return undefined;
+  }
+  const defaultBranch = setup.config.defaultBranch;
+  const dirty = dirtyHolder(run);
+  if (dirty) return dirty;
+  if (!gitSucceeds(worktree, "merge-base", "--is-ancestor", defaultBranch, "HEAD")) {
+    return {
+      cause: `${defaultBranch} has commits that branch ${branch} lacks`,
+      recovery: `bring ${defaultBranch} into branch ${branch} in worktree ${worktree}, then run \`${resume}\``,
+    };
+  }
+  // The push comes first, so a rejected push leaves the local default branch where it was.
+  const pushed = await external(run, "delivery", "push", "git", ["push", "--quiet", remote, `HEAD:refs/heads/${remoteBranch}`]);
+  if ("cause" in pushed) {
+    if (pushed.cause === USER_STOP) return pushed;
+    return { ...pushed, recovery: `bring ${remoteBranch} from ${remote} into branch ${branch} in worktree ${worktree}, then run \`${resume}\`` };
+  }
+  progress(`delivery: pushed ${head} to ${remoteBranch} on ${remote}`);
+  return fastForward(run, "delivery", git(worktree, "rev-parse", "HEAD"));
+}
+
+// The URLs a gh command printed, in order.
+function urls(transcript: string): string[] {
+  return readFileSync(transcript, "utf8").split("\n").filter((line) => /^https?:\/\/\S+$/.test(line));
+}
+
+// The change's proposal under the archive, taking the newest when the change was archived more than once.
+function archivedProposal(worktree: string, change: string): string {
+  const archive = join(worktree, "openspec/changes/archive");
+  const [newest] = readdirSync(archive).filter((name) => name.endsWith(`-${change}`)).sort().reverse();
+  return join(archive, newest, "proposal.md");
 }
 
 function shortRef(ref: string): string {

@@ -199,7 +199,7 @@ test("merge mode fast-forwards a default branch that is behind its remote in the
   pushFrom(repo, other, "remote.txt");
   const result = runLoop(repo, ["run", "add-thing"]);
   assert.equal(result.status, 0, result.stdout);
-  const tip = repo.git("rev-parse", "--short=7", "origin/main");
+  const tip = repo.gitIn(other, "rev-parse", "--short=7", "HEAD");
   assert.ok(lines(result.stdout).includes(`integration: fast-forwarded main to ${tip} in checkout ${repo.top}`), result.stdout);
   assert.equal(readFileSync(join(repo.top, "remote.txt"), "utf8"), "remote.txt\n");
 });
@@ -246,7 +246,7 @@ test("a default branch no checkout holds is fast-forwarded by moving its ref", (
   pushFrom(repo, other, "remote.txt");
   const result = runLoop(repo, ["run", "add-thing"]);
   assert.equal(result.status, 0, result.stdout);
-  const tip = repo.git("rev-parse", "--short=7", "origin/main");
+  const tip = repo.gitIn(other, "rev-parse", "--short=7", "HEAD");
   assert.ok(lines(result.stdout).includes(`integration: fast-forwarded main to ${tip}`), result.stdout);
-  assert.equal(repo.git("rev-parse", "main"), repo.git("rev-parse", "origin/main"));
+  assert.equal(repo.git("merge-base", "--is-ancestor", repo.gitIn(other, "rev-parse", "HEAD"), "main"), "");
 });

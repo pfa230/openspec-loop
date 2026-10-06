@@ -91,7 +91,7 @@ test("resume of a completed run reports it complete", (t) => {
   assert.equal(runLoop(repo, ["run", "add-thing"]).status, 0);
   const result = runLoop(repo, ["resume", "add-thing"]);
   assert.equal(result.status, 0);
-  assert.match(result.stdout, /^Run add-thing completed\. Stage delivery was a fixture and did no real work\.\n/);
+  assert.match(result.stdout, /^Run add-thing completed\.\n/);
 });
 
 test("a second advancement is refused while one is live, and stop ends the step at once", async (t) => {
