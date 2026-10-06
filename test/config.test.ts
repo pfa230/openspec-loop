@@ -23,6 +23,7 @@ attempts:
   implementation: 2
 checks:
   - npm test
+delivery: merge
 `;
 
 function checkout(t: After, yaml?: string, local?: string): string {
@@ -46,6 +47,7 @@ test("a valid configuration returns every field", (t) => {
     roles: { proposalReviewer: "gpt", planReviser: "opus", implementer: "opus", implementationReviewer: "gpt" },
     attempts: { proposalReview: 3, implementation: 2 },
     checks: ["npm test"],
+    delivery: "merge",
   });
 });
 
@@ -65,7 +67,9 @@ const refusals: Record<string, [string, RegExp]> = {
   "missing checks": [VALID.replace("checks:\n  - npm test\n", ""), /loop\.yaml is missing "checks"/],
   "checks that are not a list": [VALID.replace("checks:\n  - npm test\n", "checks: npm test\n"), /loop\.yaml: "checks" must be a list of non-empty commands/],
   "an empty check": [VALID.replace("  - npm test\n", "  - npm test\n  - \"\"\n"), /loop\.yaml: "checks" must be a list of non-empty commands/],
-  "an unknown top-level key": [`${VALID}delivery: merge\n`, /loop\.yaml has unknown key "delivery"/],
+  "an unknown top-level key": [`${VALID}remote: origin\n`, /loop\.yaml has unknown key "remote"/],
+  "missing delivery": [VALID.replace("delivery: merge\n", ""), /loop\.yaml is missing "delivery"/],
+  "an unknown delivery mode": [VALID.replace("delivery: merge", "delivery: push"), /loop\.yaml: "delivery" must be one of local, pr, merge/],
   "an unknown role": [VALID.replace("roles:\n", "roles:\n  tester: opus\n"), /loop\.yaml has unknown key "roles\.tester"/],
   "an unknown attempt budget": [VALID.replace("attempts:\n", "attempts:\n  review: 2\n"), /loop\.yaml has unknown key "attempts\.review"/],
   "an empty default branch": [VALID.replace("trunk", '""'), /"defaultBranch" must be a non-empty branch name/],
@@ -98,6 +102,10 @@ test("the local file replaces only the entries it sets", (t) => {
 
 test("a local worktrees directory replaces the committed one", (t) => {
   assert.equal(readConfig(checkout(t, VALID, "worktrees: /srv/worktrees\n")).worktrees, "/srv/worktrees");
+});
+
+test("a local delivery mode replaces the committed one", (t) => {
+  assert.equal(readConfig(checkout(t, VALID, "delivery: local\n")).delivery, "local");
 });
 
 test("an empty check list means no required checks", (t) => {
@@ -138,7 +146,7 @@ function resolve(t: After, top: string, agents: Record<string, string[]>, roles:
   process.env.PATH = join(top, "bin");
   t.after(() => (process.env.PATH = path));
   const all = { planReviser: roles.proposalReviewer, implementer: roles.proposalReviewer, implementationReviewer: roles.proposalReviewer, ...roles };
-  const config: Config = { defaultBranch: "main", worktrees: ".worktrees", agents, roles: all, attempts: { proposalReview: 1, implementation: 1 }, checks: [] };
+  const config: Config = { defaultBranch: "main", worktrees: ".worktrees", agents, roles: all, attempts: { proposalReview: 1, implementation: 1 }, checks: [], delivery: "local" };
   return () => resolveRoles(top, config);
 }
 
@@ -193,7 +201,7 @@ test("a relative PATH entry is resolved against the current directory", (t) => {
     process.chdir(cwd);
   });
   const roles = { proposalReviewer: "gpt", planReviser: "gpt", implementer: "gpt", implementationReviewer: "gpt" };
-  const config: Config = { defaultBranch: "main", worktrees: ".worktrees", agents: { gpt: ["loop-codex"] }, roles, attempts: { proposalReview: 1, implementation: 1 }, checks: [] };
+  const config: Config = { defaultBranch: "main", worktrees: ".worktrees", agents: { gpt: ["loop-codex"] }, roles, attempts: { proposalReview: 1, implementation: 1 }, checks: [], delivery: "local" };
   assert.equal(resolveRoles(top, config).proposalReviewer.command[0], join(top, "tools/loop-codex"));
 });
 

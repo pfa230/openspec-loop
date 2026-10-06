@@ -54,10 +54,10 @@ test("resume reads the configuration again", (t) => {
   const repo = makeRepo(t, { fixture: { integration: "exit 1" } });
   assert.equal(runLoop(repo, ["run", "add-thing"]).status, 1);
   repo.setFixture({});
-  writeFile(repo.top, "openspec/loop.yaml", `${configYaml()}delivery: merge\n`);
+  writeFile(repo.top, "openspec/loop.yaml", `${configYaml()}remote: origin\n`);
   const refused = runLoop(repo, ["resume", "add-thing"]);
   assert.equal(refused.status, 2);
-  assert.match(refused.stderr, /unknown key "delivery"/);
+  assert.match(refused.stderr, /unknown key "remote"/);
   writeFile(repo.top, "openspec/loop.yaml", configYaml());
   assert.equal(runLoop(repo, ["resume", "add-thing"]).status, 0);
 });

@@ -13,7 +13,7 @@ The loop is under construction. Its contract is [`openspec/specs/loop-workflow/s
 
 ## Configuration
 
-Commit `openspec/loop.yaml` in the repository. It names the default branch, which the loop does not detect, the directory for the worktrees the loop creates, the agents that do the work, the role each agent fills, the attempt budgets and the required checks:
+Commit `openspec/loop.yaml` in the repository. It names the default branch, which the loop does not detect, the directory for the worktrees the loop creates, the agents that do the work, the role each agent fills, the attempt budgets, the required checks and how the change is delivered:
 
 ```yaml
 defaultBranch: main
@@ -31,6 +31,7 @@ attempts:
   implementation: 3
 checks:
   - npm test
+delivery: pr
 ```
 
 - `worktrees` is the directory where a run started on the default branch gets its worktree, at `<worktrees>/<change>`. A relative path is relative to the checkout where you give `loop run`; an absolute path is used as written. A run keeps the worktree it was created with, so changing `worktrees` affects only new runs. The loop never edits ignore rules: when the directory lies inside a checkout, add it to `.gitignore`, or to `.git/info/exclude` for one clone only, because an unignored worktree makes that checkout dirty.
@@ -38,8 +39,9 @@ checks:
 - `roles` assigns an agent to each role. The proposal reviewer judges the plan; the plan reviser revises it and applies minor plan fixes; the implementer implements the plan and applies minor implementation fixes; the implementation reviewer judges the patch. One agent may fill several roles: every turn runs in a fresh context.
 - `attempts.proposalReview` bounds how many proposal reviews one advancement runs, and `attempts.implementation` how many implementation attempts.
 - `checks` lists the required checks, each a shell command run with `sh -c` in the run's worktree. `checks: []` means the change has no required checks; leaving `checks` out refuses the run.
+- `delivery` is `local`, `pr` or `merge`, and has no default. `local` contacts no remote. `pr` and `merge` use the remote of the default branch's upstream, as Git records it, and its branch there; `loop run` and `loop resume` refuse them when the default branch has no upstream. Set one with `git branch --set-upstream-to=origin/main main`.
 
-Put settings you do not want to commit, such as your own agents, in `openspec/loop.local.yaml` beside it, and add that file to `.gitignore`. A value set there replaces the committed one: `defaultBranch`, `worktrees` and `checks` as a whole, and `agents`, `roles` and `attempts` entry by entry, so a local file can add one agent and point one role at it:
+Put settings you do not want to commit, such as your own agents, in `openspec/loop.local.yaml` beside it, and add that file to `.gitignore`. A value set there replaces the committed one: `defaultBranch`, `worktrees`, `checks` and `delivery` as a whole, and `agents`, `roles` and `attempts` entry by entry, so a local file can add one agent and point one role at it:
 
 ```yaml
 agents:

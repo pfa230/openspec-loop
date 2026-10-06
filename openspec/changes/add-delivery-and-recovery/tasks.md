@@ -1,8 +1,8 @@
 ## 1. Delivery mode and base
 
-- [ ] 1.1 Add the required `delivery` key (`local`, `pr`, `merge`) to `src/config.ts`. The local file replaces it as a whole. Give the helpers' `configYaml()` `delivery: local`. Verify with config tests: a missing key refuses and names `delivery`, `delivery: push` refuses as a wrong type, and a local file's `delivery` replaces the committed one
-- [ ] 1.2 Resolve the delivery base in `prepare()` as the design.md table describes, carry it in `Setup`, and make `changeBase()` use the base ref. Refuse `pr` and `merge` without an upstream, with the design's message. Add a `Repo` helper that creates a bare `origin`, pushes the default branch and sets it as the upstream. Verify with tests: `loop run` in `merge` mode with no upstream exits 2, names `main` and creates no run directory, and the same repository with the helper applied starts the run
-- [ ] 1.3 Document `delivery` and the upstream rule in `README.md`'s configuration section, including the refusal. Verify that the documented example configuration passes `loop run` in a temporary repository
+- [x] 1.1 Add the required `delivery` key (`local`, `pr`, `merge`) to `src/config.ts`. The local file replaces it as a whole. Give the helpers' `configYaml()` `delivery: local`. Verify with config tests: a missing key refuses and names `delivery`, `delivery: push` refuses as a wrong type, and a local file's `delivery` replaces the committed one
+- [x] 1.2 Resolve the delivery base in `prepare()` as the design.md table describes, carry it in `Setup`, and make `changeBase()` use the base ref. Refuse `pr` and `merge` without an upstream, with the design's message. Add a `Repo` helper that creates a bare `origin`, pushes the default branch and sets it as the upstream. Verify with tests: `loop run` in `merge` mode with no upstream exits 2, names `main` and creates no run directory, and the same repository with the helper applied starts the run
+- [x] 1.3 Document `delivery` and the upstream rule in `README.md`'s configuration section, including the refusal. Verify that the documented example configuration passes `loop run` in a temporary repository
 
 ## 2. Integration
 

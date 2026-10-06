@@ -11,7 +11,7 @@ export const BIN = fileURLToPath(new URL(pkg.bin.loop, root));
 
 export const FIXTURE_STAGES = ["integration", "delivery"];
 
-export function configYaml(defaultBranch = "main"): string {
+export function configYaml(defaultBranch = "main", delivery = "local"): string {
   return `defaultBranch: ${defaultBranch}
 worktrees: .worktrees
 agents:
@@ -28,6 +28,7 @@ attempts:
   proposalReview: 3
   implementation: 3
 checks: []
+delivery: ${delivery}
 `;
 }
 
@@ -142,6 +143,8 @@ export interface Repo {
   setOpenSpec(version: string | null): void;
   // Makes the stub openspec refuse to archive, or, with false, archive again.
   refuseArchive(refuse?: boolean): void;
+  // Creates a bare repository as origin, pushes the default branch to it and makes it the upstream. Returns its path.
+  addOrigin(): string;
   // Appends scripted turns for the stub agent named reviewer or reviser.
   queue(agent: string, ...turns: Turn[]): void;
   calls(agent?: string): Call[];
@@ -154,6 +157,7 @@ export interface RepoOptions {
   branch?: string;
   openspec?: string | null;
   fixture?: Record<string, string>;
+  delivery?: string;
 }
 
 type After = { after: (fn: () => void) => void };
@@ -209,6 +213,13 @@ export function makeRepo(t: After, options: RepoOptions = {}): Repo {
       if (refuse) writeFileSync(archiveMarker, "");
       else rmSync(archiveMarker, { force: true });
     },
+    addOrigin() {
+      const origin = join(base, "origin.git");
+      gitIn(base, "init", "--quiet", "--bare", "-b", defaultBranch, origin);
+      repo.git("remote", "add", "origin", origin);
+      repo.git("push", "--quiet", "-u", "origin", defaultBranch);
+      return origin;
+    },
     queue(agent, ...turns) {
       const queues = existsSync(queuePath) ? JSON.parse(readFileSync(queuePath, "utf8")) : {};
       queues[agent] = [...(queues[agent] ?? []), ...turns];
@@ -228,7 +239,7 @@ export function makeRepo(t: After, options: RepoOptions = {}): Repo {
   repo.git("init", "--quiet", "-b", defaultBranch);
   // Ignored as the README tells users to, so a run leaves the checkout's status unchanged.
   writeFileSync(join(top, ".git", "info", "exclude"), ".worktrees/\n", { flag: "a" });
-  writeFile(top, "openspec/loop.yaml", configYaml(defaultBranch));
+  writeFile(top, "openspec/loop.yaml", configYaml(defaultBranch, options.delivery));
   repo.git("add", ".");
   repo.git("commit", "--quiet", "-m", "init");
   if (options.branch !== undefined && options.branch !== defaultBranch) repo.git("switch", "--quiet", "-c", options.branch);

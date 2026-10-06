@@ -6,6 +6,9 @@ import { Refusal } from "./refusal.js";
 export const ROLES = ["proposalReviewer", "planReviser", "implementer", "implementationReviewer"] as const;
 export type Role = (typeof ROLES)[number];
 
+export const DELIVERIES = ["local", "pr", "merge"] as const;
+export type Delivery = (typeof DELIVERIES)[number];
+
 export interface Config {
   defaultBranch: string;
   worktrees: string;
@@ -14,6 +17,7 @@ export interface Config {
   attempts: { proposalReview: number; implementation: number };
   // The required checks: shell commands run in the run's worktree. Empty means none.
   checks: string[];
+  delivery: Delivery;
 }
 
 // An agent a role runs: its alias and its command, the first element resolved to an absolute path.
@@ -34,6 +38,7 @@ type Settings = {
   roles: Record<string, string>;
   attempts: Record<string, number>;
   checks?: string[];
+  delivery?: Delivery;
 };
 
 // Reads the committed configuration and, when it exists, the local one, whose entries replace the committed ones.
@@ -41,7 +46,7 @@ export function readConfig(top: string): Config {
   const committedPath = join(top, CONFIG_PATH);
   const committedText = readText(committedPath);
   if (committedText === undefined) {
-    throw new Refusal(`${committedPath} not found; it must name the default branch, the worktrees directory, agents, roles, attempts and checks`);
+    throw new Refusal(`${committedPath} not found; it must name the default branch, the worktrees directory, agents, roles, attempts, checks and delivery`);
   }
   const committed = parseFile(committedPath, committedText);
   const localPath = join(top, LOCAL_CONFIG_PATH);
@@ -54,6 +59,7 @@ export function readConfig(top: string): Config {
     roles: { ...committed.roles, ...local?.roles },
     attempts: { ...committed.attempts, ...local?.attempts },
     checks: local?.checks ?? committed.checks,
+    delivery: local?.delivery ?? committed.delivery,
   };
   const missing = [
     merged.defaultBranch === undefined ? "defaultBranch" : undefined,
@@ -61,6 +67,7 @@ export function readConfig(top: string): Config {
     ...ROLES.filter((role) => merged.roles[role] === undefined).map((role) => `roles.${role}`),
     ...ATTEMPTS.filter((key) => merged.attempts[key] === undefined).map((key) => `attempts.${key}`),
     merged.checks === undefined ? "checks" : undefined,
+    merged.delivery === undefined ? "delivery" : undefined,
   ].filter((field) => field !== undefined);
   if (missing.length > 0) {
     throw new Refusal(`${committedPath} is missing ${missing.map((field) => `"${field}"`).join(", ")}`);
@@ -106,7 +113,7 @@ function parseFile(path: string, text: string): Settings {
     throw new Refusal(`${path} is not valid YAML: ${(error as Error).message}`);
   }
   const top = mapping(path, "", doc);
-  unknownKeys(path, "", top, ["defaultBranch", "worktrees", "agents", "roles", "attempts", "checks"]);
+  unknownKeys(path, "", top, ["defaultBranch", "worktrees", "agents", "roles", "attempts", "checks", "delivery"]);
   const { defaultBranch } = top;
   if (defaultBranch !== undefined && (typeof defaultBranch !== "string" || defaultBranch === "")) {
     throw new Refusal(`${path}: "defaultBranch" must be a non-empty branch name`);
@@ -137,6 +144,10 @@ function parseFile(path: string, text: string): Settings {
   if (checks !== undefined && (!Array.isArray(checks) || !checks.every((check) => typeof check === "string" && check !== ""))) {
     throw new Refusal(`${path}: "checks" must be a list of non-empty commands`);
   }
+  const { delivery } = top;
+  if (delivery !== undefined && !DELIVERIES.includes(delivery as Delivery)) {
+    throw new Refusal(`${path}: "delivery" must be one of ${DELIVERIES.join(", ")}`);
+  }
   return {
     defaultBranch,
     worktrees,
@@ -144,6 +155,7 @@ function parseFile(path: string, text: string): Settings {
     roles: roles as Record<string, string>,
     attempts: attempts as Record<string, number>,
     checks: checks as string[] | undefined,
+    delivery: delivery as Delivery | undefined,
   };
 }
 

@@ -2,7 +2,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Agent, Config, Role } from "./config.js";
 import { FIXTURE_NAMES, FIXTURE_STAGES, type Fixture, type FixtureStage } from "./fixture.js";
-import { git } from "./git.js";
+import { type Base, git } from "./git.js";
 import { applyInstructions } from "./openspec.js";
 import { changeDir, planDigest, planFiles } from "./plan.js";
 import {
@@ -43,6 +43,7 @@ export interface Setup {
   config: Config;
   agents: Record<Role, Agent>;
   fixture: Fixture;
+  base: Base;
   // Replaces the configured attempt budgets for this advancement.
   attempts: number | undefined;
 }
@@ -308,9 +309,9 @@ function complete(state: RunState): undefined {
   return undefined;
 }
 
-// The commit the change branches from on the default branch.
+// The commit the change branches from on the base.
 function changeBase(run: Run): string {
-  return git(run.state.worktree, "merge-base", "HEAD", run.setup.config.defaultBranch);
+  return git(run.state.worktree, "merge-base", "HEAD", run.setup.base.ref);
 }
 
 // Runs one implementer turn and commits its work. Returns REPLAN when the plan must be reviewed again.

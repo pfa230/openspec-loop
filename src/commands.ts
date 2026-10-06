@@ -4,7 +4,7 @@ import { join, resolve } from "node:path";
 import { type Config, readConfig, resolveRoles } from "./config.js";
 import { advance, FIXTURE_NOTE, locations, progress, type Setup } from "./controller.js";
 import { loadFixture } from "./fixture.js";
-import { git, gitMessage, gitSucceeds, topLevel } from "./git.js";
+import { deliveryBase, git, gitMessage, gitSucceeds, topLevel } from "./git.js";
 import { checkOpenSpec } from "./openspec.js";
 import { Refusal } from "./refusal.js";
 import {
@@ -37,8 +37,9 @@ export async function run(change: string): Promise<number> {
 function prepare(top: string, attempts: number | undefined): Setup {
   const config = readConfig(top);
   const agents = resolveRoles(top, config);
+  const base = deliveryBase(top, config);
   checkOpenSpec();
-  return { config, agents, fixture: loadFixture(), attempts };
+  return { config, agents, fixture: loadFixture(), base, attempts };
 }
 
 // Checks the change can run and creates its run. Called under the run's lock.
