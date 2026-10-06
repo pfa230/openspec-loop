@@ -110,7 +110,7 @@ Usage by role:
   implementer: 3 steps, 1 without usage; input_tokens=27, cache_creation_input_tokens=90210, cache_read_input_tokens=401177, output_tokens=5120, cost $1.2034117, 1 step without cost
 ```
 
-Each counter is summed by name. `without usage` counts the steps that reported nothing, such as a turn stopped before its harness reported. When only some of a role's steps reported a cost, the line says how many did not; when none did, the cost is unavailable. If a role's agent changes between resumes, its totals add up the counters of both harnesses under any name they share.
+Each counter is summed by name. `without usage` counts the steps with no valid usage: a missing or empty usage file, such as after a turn stopped before its harness reported, or a malformed one, which also stopped the run. When only some of a role's steps reported a cost, the line says how many did not; when none did, the cost is unavailable. If a role's agent changes between resumes, its totals add up the counters of both harnesses under any name they share.
 
 A run accepts one advancement at a time. If the process advancing it dies, `loop resume` takes the run over and redoes the step that was in progress.
 
