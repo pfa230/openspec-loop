@@ -6,14 +6,14 @@
 
 ## 2. Adapters
 
-- [ ] 2.1 In `src/adapters/common.ts`, make `invocation()` take the last four arguments, and make `runHarness()` take the usage path and an extractor and write the usage file before it judges the exit, as design.md decision 3 describes. Implement each adapter's extractor from the decision's table. Verify with `test/adapters.test.ts`: each recording yields exactly these usage files:
+- [x] 2.1 In `src/adapters/common.ts`, make `invocation()` take the last four arguments, and make `runHarness()` take the usage path and an extractor and write the usage file before it judges the exit, as design.md decision 3 describes. Implement each adapter's extractor from the decision's table. Verify with `test/adapters.test.ts`: each recording yields exactly these usage files:
   - Claude: `{"tokens":{"input_tokens":9,"cache_creation_input_tokens":34432,"cache_read_input_tokens":0,"output_tokens":183},"costUsd":0.06978799999999999}`
   - Codex: `{"tokens":{"input_tokens":16641,"cached_input_tokens":0,"cache_write_input_tokens":0,"output_tokens":59,"reasoning_output_tokens":21}}`
   - Antigravity: `{"tokens":{"input_tokens":12926,"cache_read_tokens":0,"output_tokens":700,"thinking_tokens":645}}`
   - OpenCode: `{"tokens":{"input":13808,"cache.read":0,"cache.write":0,"output":29,"reasoning":0},"costUsd":0.000111024}`
 
   Also verify that `STUB_EXIT=5` with each recording still writes that usage file and exits 5, that the existing no-answer test also writes no usage file, and that two OpenCode `step_finish` events sum their tokens and cost
-- [ ] 2.2 Document in `README.md`'s adapter section, for each adapter, the counters it writes and whether its harness reports a cost. State that counters keep the harness's own names and that a cost is the harness's own figure, as design.md's risks describe. Verify by reading the section against design.md decision 3's table
+- [x] 2.2 Document in `README.md`'s adapter section, for each adapter, the counters it writes and whether its harness reports a cost. State that counters keep the harness's own names and that a cost is the harness's own figure, as design.md's risks describe. Verify by reading the section against design.md decision 3's table
 
 ## 3. Totals by role
 
