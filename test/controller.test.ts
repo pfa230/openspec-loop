@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
-import { FIXTURE_STAGES, makeRepo, runLoop } from "./helpers.js";
+import { makeRepo, runLoop } from "./helpers.js";
 
 const LINE = /^\[\d{2}:\d{2}:\d{2}\] (.*)$/;
 
@@ -14,10 +14,11 @@ function progressLines(stdout: string): string[] {
 }
 
 for (const branch of [undefined, "add-thing"]) {
-  test(`a fixture run completes through every stage in order (${branch ?? "default-branch path"})`, (t) => {
+  test(`a run completes through every stage in order and commits the archive (${branch ?? "default-branch path"})`, (t) => {
     const repo = makeRepo(t, { branch });
     const result = runLoop(repo, ["run", "add-thing"]);
     assert.equal(result.status, 0, result.stderr);
+    const runBranch = branch ?? "loop/add-thing";
     assert.deepEqual(
       progressLines(result.stdout),
       [
@@ -29,14 +30,25 @@ for (const branch of [undefined, "add-thing"]) {
         "implementation: attempt 1 of 3, review started (verifier)",
         "implementation: attempt 1 of 3, review APPROVE, 0 blocking, 0 minor (verifier)",
         "implementation: complete",
-        ...FIXTURE_STAGES.flatMap((stage) => [`${stage}: started (fixture)`, `${stage}: complete (fixture)`]),
+        "integration: started (fixture)",
+        "integration: complete (fixture)",
+        "archive: started",
+        `archive: committed ${repo.git("rev-parse", "--short=7", runBranch)}`,
+        "archive: complete",
+        "delivery: started (fixture)",
+        "delivery: complete (fixture)",
       ],
     );
+    assert.equal(repo.git("log", "-1", "--format=%s", runBranch), "add-thing: archive");
+    assert.deepEqual(repo.git("diff", "--name-status", `${runBranch}~1`, runBranch).split("\n").sort(), [
+      "R100\topenspec/changes/add-thing/proposal.md\topenspec/changes/archive/2026-01-01-add-thing/proposal.md",
+      "R100\topenspec/changes/add-thing/tasks.md\topenspec/changes/archive/2026-01-01-add-thing/tasks.md",
+    ]);
     const worktree = branch ? repo.top : repo.worktree;
     const report = result.stdout.slice(result.stdout.indexOf("Run add-thing completed"));
     assert.equal(
       report,
-      "Run add-thing completed. Stages integration, archive and delivery were fixtures and did no real work.\n" +
+      "Run add-thing completed. Stages integration and delivery were fixtures and did no real work.\n" +
         `Worktree: ${worktree}\nRun directory: ${repo.runDir()}\nTranscripts: ${join(repo.runDir(), "transcripts")}\n`,
     );
   });
@@ -94,18 +106,43 @@ test("run refuses when LOOP_FIXTURE is unset", (t) => {
   delete repo.env.LOOP_FIXTURE;
   const result = runLoop(repo, ["run", "add-thing"]);
   assert.equal(result.status, 2);
-  assert.match(result.stderr, /stages integration, archive and delivery are not implemented yet; set LOOP_FIXTURE/);
+  assert.match(result.stderr, /stages integration and delivery are not implemented yet; set LOOP_FIXTURE/);
 });
 
 test("run refuses a fixture that does not name every stage", (t) => {
   const repo = makeRepo(t);
   repo.setFixture({});
   const path = repo.env.LOOP_FIXTURE!;
-  const lines = readFileSync(path, "utf8").split("\n").filter((line) => !line.startsWith("archive:"));
+  const lines = readFileSync(path, "utf8").split("\n").filter((line) => !line.startsWith("delivery:"));
   writeFileSync(path, lines.join("\n"));
   const result = runLoop(repo, ["run", "add-thing"]);
   assert.equal(result.status, 2);
-  assert.match(result.stderr, /names no command for archive/);
+  assert.match(result.stderr, /names no command for delivery/);
+});
+
+test("a refused archive stops the run without a commit, and resume archives once OpenSpec accepts", (t) => {
+  const repo = makeRepo(t);
+  repo.refuseArchive();
+  const result = runLoop(repo, ["run", "add-thing"]);
+  assert.equal(result.status, 1, result.stdout);
+  const transcript = join(repo.runDir(), "transcripts", readdirSync(join(repo.runDir(), "transcripts")).find((name) => name.endsWith("-archive.log"))!);
+  assert.deepEqual(progressLines(result.stdout).slice(-2), ["archive: started", "archive: openspec archive failed, exit status 1"]);
+  assert.ok(
+    result.stdout.includes(
+      "Run add-thing stopped at archive.\n" +
+        `Cause: \`openspec archive add-thing\` failed with exit status 1\nTranscript: ${transcript}\n` +
+        `Recovery: fix the change in worktree ${repo.worktree}, commit it on branch loop/add-thing, then run \`loop resume add-thing\`\n`,
+    ),
+    result.stdout,
+  );
+  assert.match(readFileSync(transcript, "utf8"), /Validation failed/);
+  assert.notEqual(repo.git("log", "-1", "--format=%s", "loop/add-thing"), "add-thing: archive");
+
+  repo.refuseArchive(false);
+  const resumed = runLoop(repo, ["resume", "add-thing"]);
+  assert.equal(resumed.status, 0, resumed.stdout);
+  assert.equal(progressLines(resumed.stdout)[0], "archive: started");
+  assert.equal(repo.git("log", "-1", "--format=%s", "loop/add-thing"), "add-thing: archive");
 });
 
 test("a second loop run of the same change is refused", (t) => {
@@ -121,4 +158,13 @@ test("a step killed by a signal is an execution failure naming the signal", (t) 
   const result = runLoop(repo, ["run", "add-thing"]);
   assert.equal(result.status, 1);
   assert.match(result.stdout, /Cause: execution failure, signal SIGKILL \(fixture\)/);
+});
+
+test("a run stopped after archival resumes to completion although the change directory has moved", (t) => {
+  const repo = makeRepo(t, { fixture: { delivery: "exit 1" } });
+  assert.equal(runLoop(repo, ["run", "add-thing"]).status, 1);
+  repo.setFixture({});
+  const resumed = runLoop(repo, ["resume", "add-thing"]);
+  assert.equal(resumed.status, 0, resumed.stdout);
+  assert.deepEqual(progressLines(resumed.stdout), ["delivery: started (fixture)", "delivery: complete (fixture)"]);
 });

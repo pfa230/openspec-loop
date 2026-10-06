@@ -10,7 +10,7 @@ const pkg = JSON.parse(readFileSync(new URL("package.json", root), "utf8"));
 export const BIN = fileURLToPath(new URL(pkg.bin.loop, root));
 
 export const STAGES = ["proposal-review", "implementation", "integration", "archive", "delivery"];
-export const FIXTURE_STAGES = STAGES.slice(2);
+export const FIXTURE_STAGES = ["integration", "delivery"];
 
 export function configYaml(defaultBranch = "main"): string {
   return `defaultBranch: ${defaultBranch}
@@ -99,6 +99,20 @@ const APPLY = `if [ "$1" = instructions ]; then
 fi
 `;
 
+// The stub openspec's answer to `openspec archive <change> --yes`: it moves the change under the archive
+// as OpenSpec 1.14.0 does, or, while the marker file exists, refuses as OpenSpec does on a failed validation.
+function archiveStub(marker: string): string {
+  return `if [ "$1" = archive ]; then
+  if [ -e ${JSON.stringify(marker)} ]; then
+    echo "Validation failed. Please fix the errors before archiving."
+    exit 1
+  fi
+  mkdir -p openspec/changes/archive && mv "openspec/changes/$2" "openspec/changes/archive/2026-01-01-$2" && echo "Change '$2' archived as '2026-01-01-$2'."
+  exit $?
+fi
+`;
+}
+
 // PATH without any real openspec, so each test controls which openspec the loop finds.
 const BASE_PATH = (process.env.PATH ?? "")
   .split(delimiter)
@@ -121,8 +135,10 @@ export interface Repo {
   gitIn(cwd: string, ...args: string[]): string;
   runDir(change?: string): string;
   setFixture(commands: Record<string, string>): void;
-  // Installs a stub openspec reporting the version and answering `instructions apply` as OpenSpec 1.14.0 does.
+  // Installs a stub openspec reporting the version and answering `instructions apply` and `archive` as OpenSpec 1.14.0 does.
   setOpenSpec(version: string | null): void;
+  // Makes the stub openspec refuse to archive, or, with false, archive again.
+  refuseArchive(refuse?: boolean): void;
   // Appends scripted turns for the stub agent named reviewer or reviser.
   queue(agent: string, ...turns: Turn[]): void;
   calls(agent?: string): Call[];
@@ -149,6 +165,7 @@ export function makeRepo(t: After, options: RepoOptions = {}): Repo {
   const fixturePath = join(base, "fixture.yaml");
   const queuePath = join(base, "queue.json");
   const logPath = join(base, "calls.jsonl");
+  const archiveMarker = join(base, "refuse-archive");
   mkdirSync(top);
   mkdirSync(bin);
   const gitConfig = join(base, "gitconfig");
@@ -182,8 +199,12 @@ export function makeRepo(t: After, options: RepoOptions = {}): Repo {
       const stub = join(bin, "openspec");
       rmSync(stub, { force: true });
       if (version === null) return;
-      writeFileSync(stub, `#!/bin/sh\n${APPLY}echo ${version}\n`);
+      writeFileSync(stub, `#!/bin/sh\n${APPLY}${archiveStub(archiveMarker)}echo ${version}\n`);
       chmodSync(stub, 0o755);
+    },
+    refuseArchive(refuse = true) {
+      if (refuse) writeFileSync(archiveMarker, "");
+      else rmSync(archiveMarker, { force: true });
     },
     queue(agent, ...turns) {
       const queues = existsSync(queuePath) ? JSON.parse(readFileSync(queuePath, "utf8")) : {};
@@ -213,6 +234,13 @@ export function makeRepo(t: After, options: RepoOptions = {}): Repo {
   repo.git("add", ".");
   repo.git("commit", "--quiet", "-m", "propose");
   return repo;
+}
+
+// The short hash of the latest commit with this subject on the run's branch.
+export function commitWith(repo: Repo, subject: string, branch = "loop/add-thing"): string {
+  const line = repo.git("log", "--format=%H %s", branch).split("\n").find((entry) => entry.slice(41) === subject);
+  if (!line) throw new Error(`no commit "${subject}" on ${branch}`);
+  return repo.git("rev-parse", "--short=7", line.slice(0, 40));
 }
 
 export function writeFile(top: string, path: string, content: string): void {
