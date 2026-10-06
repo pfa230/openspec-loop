@@ -98,7 +98,7 @@ Each adapter writes these counters when the harness reports them, and omits any 
 `work()` reads the usage after the worker exits, whatever its status:
 
 - **Exit 0, a valid reply and malformed usage** is an execution failure whose problem is the usage problem.
-- **A failed exit or a bad reply with malformed usage** is an execution failure whose problem is the failure's own problem, then `; ` and the usage problem.
+- **A failed exit or a bad reply** is reported by its own problem alone. A malformed usage file on such a step shows as `usage unavailable`, and the adapter's bug surfaces on its next successful turn.
 - **Well-formed usage** appears on the end line in every case, including a user stop.
 
 ### 5. End line and execution-failure format
