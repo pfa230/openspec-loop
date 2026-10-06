@@ -185,8 +185,8 @@ async function proposalReview(run: Run): Promise<Halt | undefined> {
     const record = JSON.parse(readFileSync(state.owedReview, "utf8")) as Verdict;
     const halt = await reviserTurn(run, record);
     if (halt) return halt;
-    if (record.verdict === "APPROVE") return approve(state);
     state.owedReview = null;
+    if (record.verdict === "APPROVE") return undefined;
     writeState(run.dir, state);
   }
   let last = "";
@@ -206,14 +206,14 @@ async function proposalReview(run: Run): Promise<Halt | undefined> {
 
     const questions = decisionStop(state, `review ${review}`, findings, recordPath);
     if (questions) return questions;
-    if (findings.length === 0) return approve(state);
+    if (findings.length === 0) return undefined;
 
     state.owedReview = recordPath;
     writeState(run.dir, state);
     const halt = await reviserTurn(run, record);
     if (halt) return halt;
-    if (record.verdict === "APPROVE") return approve(state);
     state.owedReview = null;
+    if (record.verdict === "APPROVE") return undefined;
     writeState(run.dir, state);
     last = `; the last review was REVISE, ${blocking} blocking\nReview: ${recordPath}`;
   }
@@ -227,11 +227,6 @@ function decisionStop(state: RunState, review: string, findings: Finding[], reco
     cause: `${review} needs decisions the plan does not record:\n${questions.map((finding) => `  - ${finding.location}: ${finding.question}`).join("\n")}\nReview: ${recordPath}`,
     recovery: `record the decisions in ${changeDir(state.change)}/design.md in worktree ${state.worktree}, commit them on branch ${state.branch}, then run \`loop resume ${state.change}\``,
   };
-}
-
-function approve(state: RunState): undefined {
-  state.owedReview = null;
-  return undefined;
 }
 
 // Has the plan reviser revise the plan after REVISE, or apply the minor fixes after APPROVE, and commits the result.
