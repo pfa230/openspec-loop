@@ -9,7 +9,7 @@ const root = new URL("../../", import.meta.url);
 const pkg = JSON.parse(readFileSync(new URL("package.json", root), "utf8"));
 export const BIN = fileURLToPath(new URL(pkg.bin.loop, root));
 
-export const FIXTURE_STAGES = ["integration", "delivery"];
+export const FIXTURE_STAGES = ["delivery"];
 
 export function configYaml(defaultBranch = "main", delivery = "local"): string {
   return `defaultBranch: ${defaultBranch}
@@ -44,6 +44,8 @@ export interface Turn {
   kill?: boolean;
   // Files to write (or delete, with null), relative to the worktree.
   edits?: Record<string, string | null>;
+  // A shell command run in the worktree after the edits, such as one that moves the default branch mid-run.
+  sh?: string;
   sleep?: number;
 }
 
@@ -76,6 +78,7 @@ for (const [file, content] of Object.entries(turn.edits || {})) {
   }
 }
 console.log("stub " + args[0] + " turn " + JSON.stringify(turn));
+if (turn.sh) require("node:child_process").execSync(turn.sh, { stdio: "inherit" });
 function finish() {
   if (turn.kill) process.kill(process.pid, "SIGKILL");
   if (turn.exit !== undefined) process.exit(turn.exit);
@@ -248,6 +251,11 @@ export function makeRepo(t: After, options: RepoOptions = {}): Repo {
   repo.git("add", ".");
   repo.git("commit", "--quiet", "-m", "propose");
   return repo;
+}
+
+// The patch ID the loop records for the change from base to tip.
+export function patchIdOf(repo: Repo, base: string, tip: string): string {
+  return execFileSync("sh", ["-c", `git diff --unified=0 ${base} ${tip} | git patch-id --verbatim`], { cwd: repo.top, env: repo.env, encoding: "utf8" }).split(" ")[0];
 }
 
 // The short hash of the latest commit with this subject on the run's branch.

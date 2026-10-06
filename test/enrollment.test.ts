@@ -131,12 +131,13 @@ test("the change-branch path creates no branch or worktree", (t) => {
 });
 
 for (const branch of [undefined, "add-thing"]) {
-  test(`a committing fixture lands on the run's branch (${branch ?? "default-branch path"})`, (t) => {
-    const repo = makeRepo(t, { branch, fixture: { integration: "git commit --quiet --allow-empty -m fixture-commit" } });
+  test(`the implementer's commit lands on the run's branch (${branch ?? "default-branch path"})`, (t) => {
+    const repo = makeRepo(t, { branch });
+    repo.queue("implementer", { edits: { "a.txt": "a\n" } });
     const result = runLoop(repo, ["run", "add-thing"]);
     assert.equal(result.status, 0, result.stderr);
     const runBranch = branch ?? "loop/add-thing";
-    assert.equal(repo.git("log", "-1", "--format=%s", `${runBranch}~1`), "fixture-commit");
+    assert.equal(repo.git("log", "-1", "--format=%s", `${runBranch}~1`), "add-thing: implement");
     assert.equal(repo.git("log", "-1", "--format=%s", "main"), branch ? "init" : "propose");
   });
 }

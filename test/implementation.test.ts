@@ -3,7 +3,7 @@ import { chmodSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { test } from "node:test";
-import { APPLY_GUIDANCE, APPLY_INSTRUCTION, commitWith, finding, makeRepo, type Repo, runLoop, startLoop, writeFile } from "./helpers.js";
+import { APPLY_GUIDANCE, APPLY_INSTRUCTION, commitWith, finding, makeRepo, patchIdOf, type Repo, runLoop, startLoop, writeFile } from "./helpers.js";
 
 const DESIGN = "openspec/changes/add-thing/design.md";
 const TASKS = "openspec/changes/add-thing/tasks.md";
@@ -73,7 +73,7 @@ test("a failing check returns to the implementer, and the passing revision is re
     "implementation: attempt 2 of 3, review APPROVE, 0 blocking, 0 minor (verifier)",
     "implementation: complete",
   ]);
-  assert.equal(lines(result.stdout).at(lines(result.stdout).indexOf("implementation: complete") + 1), "integration: started (fixture)");
+  assert.equal(lines(result.stdout).at(lines(result.stdout).indexOf("implementation: complete") + 1), "integration: started");
   assert.deepEqual(subjects(repo), ["add-thing: implement", "add-thing: revise implementation", "add-thing: archive"]);
 
   const base = repo.git("rev-parse", "main");
@@ -94,6 +94,7 @@ test("a failing check returns to the implementer, and the passing revision is re
   assert.ok(reviewPrompt.includes(`The change branches from commit ${base}, and commit ${head} is the candidate.`), reviewPrompt);
   assert.ok(reviewPrompt.includes(`- \`${MISSING}\``), reviewPrompt);
   assert.equal(state(repo).owedFindings, null);
+  assert.equal(state(repo).approvedPatch, patchIdOf(repo, base, head));
 });
 
 test("every check runs after one fails, and its failure is recorded as a finding", (t) => {
@@ -356,6 +357,8 @@ test("a stop during minor fixes is redone on resume, and the stage completes wit
     "implementation: complete",
   ]);
   assert.equal(repo.calls("verifier").length, 1);
+  const fixed = commitWith(repo, "add-thing: apply minor implementation fixes");
+  assert.equal(state(repo).approvedPatch, patchIdOf(repo, repo.git("rev-parse", "main"), fixed));
 });
 
 for (const agent of ["implementer", "verifier"]) {

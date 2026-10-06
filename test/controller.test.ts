@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
-import { makeRepo, runLoop } from "./helpers.js";
+import { makeRepo, runLoop, writeFile } from "./helpers.js";
 
 const LINE = /^\[\d{2}:\d{2}:\d{2}\] (.*)$/;
 
@@ -30,8 +30,8 @@ for (const branch of [undefined, "add-thing"]) {
         "implementation: attempt 1 of 3, review started (verifier)",
         "implementation: attempt 1 of 3, review APPROVE, 0 blocking, 0 minor (verifier)",
         "implementation: complete",
-        "integration: started (fixture)",
-        "integration: complete (fixture)",
+        "integration: started",
+        "integration: complete",
         "archive: started",
         `archive: committed ${repo.git("rev-parse", "--short=7", runBranch)}`,
         "archive: complete",
@@ -48,14 +48,15 @@ for (const branch of [undefined, "add-thing"]) {
     const report = result.stdout.slice(result.stdout.indexOf("Run add-thing completed"));
     assert.equal(
       report,
-      "Run add-thing completed. Stages integration and delivery were fixtures and did no real work.\n" +
+      "Run add-thing completed. Stage delivery was a fixture and did no real work.\n" +
         `Worktree: ${worktree}\nRun directory: ${repo.runDir()}\nTranscripts: ${join(repo.runDir(), "transcripts")}\n`,
     );
   });
 }
 
 test("a failing stage stops the run with a report naming the stage, cause, recovery and locations", (t) => {
-  const repo = makeRepo(t, { fixture: { integration: "echo boom; exit 3" } });
+  const repo = makeRepo(t);
+  repo.queue("implementer", { exit: 3 });
   const result = runLoop(repo, ["run", "add-thing"]);
   assert.equal(result.status, 1);
   assert.deepEqual(progressLines(result.stdout), [
@@ -63,42 +64,40 @@ test("a failing stage stops the run with a report naming the stage, cause, recov
     "proposal-review: review 1 of 3 APPROVE, 0 blocking, 0 minor (reviewer)",
     "proposal-review: complete",
     "implementation: attempt 1 of 3, implementer started (implementer)",
-    "implementation: attempt 1 of 3, implementer made no changes (implementer)",
-    "implementation: attempt 1 of 3, review started (verifier)",
-    "implementation: attempt 1 of 3, review APPROVE, 0 blocking, 0 minor (verifier)",
-    "implementation: complete",
-    "integration: started (fixture)",
-    "integration: execution failure, exit status 3 (fixture)",
+    "implementation: attempt 1 of 3, implementer execution failure, exit status 3 (implementer)",
   ]);
   const dir = repo.runDir();
+  const step = join(dir, "transcripts", "002-implementation");
   const report = result.stdout.slice(result.stdout.indexOf("Run add-thing stopped"));
   assert.equal(
     report,
-    "Run add-thing stopped at integration.\nCause: execution failure, exit status 3 (fixture)\n" +
+    "Run add-thing stopped at implementation.\n" +
+      `Cause: execution failure of implementer agent "implementer": exit status 3\nTranscript: ${step}.log\nReply: ${step}.reply.json\n` +
       "Recovery: loop resume add-thing\n" +
       `Worktree: ${repo.worktree}\nRun directory: ${dir}\nTranscripts: ${join(dir, "transcripts")}\n`,
   );
-  assert.equal(readFileSync(join(dir, "transcripts", "004-integration.log"), "utf8"), "boom\n");
+  assert.match(readFileSync(`${step}.log`, "utf8"), /^stub implementer turn/);
 });
 
 test("a step runs in the run's worktree", (t) => {
-  const repo = makeRepo(t, { fixture: { integration: "pwd" } });
+  const repo = makeRepo(t);
+  writeFile(repo.top, "openspec/loop.local.yaml", "checks:\n  - pwd\n");
   assert.equal(runLoop(repo, ["run", "add-thing"]).status, 0);
-  const dir = repo.runDir();
-  assert.equal(readFileSync(join(dir, "transcripts", "004-integration.log"), "utf8"), `${repo.worktree}\n`);
+  const transcripts = join(repo.runDir(), "transcripts");
+  const checks = readdirSync(transcripts).filter((name) => name.endsWith("-check.log"));
+  assert.equal(checks.length, 2);
+  for (const check of checks) assert.equal(readFileSync(join(transcripts, check), "utf8"), `${repo.worktree}\n`);
 });
 
 test("a repeated stage gets a new transcript", (t) => {
-  const repo = makeRepo(t, { fixture: { integration: "echo first; exit 1" } });
+  const repo = makeRepo(t);
+  repo.refuseArchive();
   assert.equal(runLoop(repo, ["run", "add-thing"]).status, 1);
-  repo.setFixture({ integration: "echo second" });
-  assert.equal(runLoop(repo, ["resume", "add-thing"]).status, 0);
+  assert.equal(runLoop(repo, ["resume", "add-thing"]).status, 1);
   const transcripts = join(repo.runDir(), "transcripts");
-  assert.deepEqual(readdirSync(transcripts).filter((name) => name.endsWith("-integration.log")), [
-    "004-integration.log",
-    "005-integration.log",
-  ]);
-  assert.equal(readFileSync(join(transcripts, "005-integration.log"), "utf8"), "second\n");
+  const archives = readdirSync(transcripts).filter((name) => name.endsWith("-archive.log"));
+  assert.equal(archives.length, 2);
+  assert.notEqual(archives[0], archives[1]);
 });
 
 test("run refuses when LOOP_FIXTURE is unset", (t) => {
@@ -106,7 +105,7 @@ test("run refuses when LOOP_FIXTURE is unset", (t) => {
   delete repo.env.LOOP_FIXTURE;
   const result = runLoop(repo, ["run", "add-thing"]);
   assert.equal(result.status, 2);
-  assert.match(result.stderr, /stages integration and delivery are not implemented yet; set LOOP_FIXTURE/);
+  assert.match(result.stderr, /stage delivery is not implemented yet; set LOOP_FIXTURE/);
 });
 
 test("run refuses a fixture that does not name every stage", (t) => {
@@ -154,10 +153,11 @@ test("a second loop run of the same change is refused", (t) => {
 });
 
 test("a step killed by a signal is an execution failure naming the signal", (t) => {
-  const repo = makeRepo(t, { fixture: { integration: "kill -KILL $$" } });
+  const repo = makeRepo(t);
+  repo.queue("implementer", { kill: true });
   const result = runLoop(repo, ["run", "add-thing"]);
   assert.equal(result.status, 1);
-  assert.match(result.stdout, /Cause: execution failure, signal SIGKILL \(fixture\)/);
+  assert.match(result.stdout, /Cause: execution failure of implementer agent "implementer": signal SIGKILL\n/);
 });
 
 test("a run stopped after archival resumes to completion although the change directory has moved", (t) => {
