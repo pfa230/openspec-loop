@@ -47,7 +47,7 @@ function usageTotals(dir: string): string {
   for (const file of existsSync(transcripts) ? readdirSync(transcripts) : []) {
     const role = STEP_ROLES[/^\d+-(.+)\.prompt\.md$/.exec(file)?.[1] ?? ""];
     if (role === undefined) continue;
-    const total = totals.get(role) ?? { steps: 0, withoutUsage: 0, tokens: {}, costSteps: 0, cost: 0 };
+    const total = totals.get(role) ?? { steps: 0, withoutUsage: 0, tokens: Object.create(null) as Record<string, number>, costSteps: 0, cost: 0 };
     totals.set(role, total);
     total.steps++;
     const read = readUsage(join(transcripts, file.replace(/\.prompt\.md$/, ".usage.json")));
