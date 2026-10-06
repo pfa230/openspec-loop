@@ -25,6 +25,8 @@ export interface RunState {
   owedFindings: string | null;
   // The patch ID of the change as its implementation completed, which the approval covers; integration compares against it.
   approvedPatch: string | null;
+  // The process group of the step started last, which a takeover checks so it never redoes a step beside it.
+  stepGroup: number | null;
 }
 
 export function runDir(top: string, change: string): string {
@@ -44,9 +46,17 @@ export function writeState(dir: string, state: RunState): void {
 
 // Only a positive PID names one process; 0 and negative values signal whole process groups.
 export function isAlive(pid: number): boolean {
-  if (!Number.isInteger(pid) || pid <= 0) return false;
+  return Number.isInteger(pid) && pid > 0 && exists(pid);
+}
+
+// Whether any process of a group runs. Only a positive ID names a group; 0 would signal the loop's own.
+function isGroupAlive(group: number | null | undefined): boolean {
+  return typeof group === "number" && Number.isInteger(group) && group > 0 && exists(-group);
+}
+
+function exists(target: number): boolean {
   try {
-    process.kill(pid, 0);
+    process.kill(target, 0);
     return true;
   } catch (error) {
     return (error as NodeJS.ErrnoException).code === "EPERM";
@@ -70,7 +80,8 @@ export function lockHolder(dir: string): LockHolder | undefined {
 }
 
 // Takes the run's lock for this process. Returns the PID of a dead advancement it took over, if any.
-// The lock is linked into place already holding the PID, so no reader ever sees it empty.
+// The lock is linked into place already holding the PID, so no reader ever sees it empty. A dead advancement
+// whose step still runs keeps its lock, so status still names it and the takeover waits for the step.
 export function acquireLock(dir: string, change: string): number | undefined {
   const path = join(dir, "lock");
   const mine = `${path}.${process.pid}`;
@@ -88,6 +99,12 @@ export function acquireLock(dir: string, change: string): number | undefined {
       if (!holder) continue;
       if (holder.alive) {
         throw new Refusal(`run ${change} is already advancing in process ${holder.pid} (lock ${path})`);
+      }
+      const group = readState(dir)?.stepGroup;
+      if (isGroupAlive(group)) {
+        throw new Refusal(
+          `run ${change} has a step still running in process group ${group}, started by process ${holder.pid}, which died; end it with \`kill -- -${group}\` or wait for it to exit, then run \`loop resume ${change}\``,
+        );
       }
       unlinkSync(path);
       takenOver = holder.pid;

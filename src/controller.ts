@@ -130,7 +130,15 @@ export async function advance(dir: string, state: RunState, setup: Setup): Promi
   async function exec(step: Step): Promise<StepResult> {
     current = step;
     try {
+      if (step.group !== undefined) {
+        state.stepGroup = step.group;
+        writeState(dir, state);
+      }
       return await step.result;
+    } catch (error) {
+      // A step whose group could not be recorded must not outlive this advancement unseen.
+      step.kill();
+      throw error;
     } finally {
       current = undefined;
     }

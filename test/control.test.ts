@@ -162,6 +162,9 @@ test("a run whose controller died with its step shows as interrupted, and resume
   process.kill(-step.pid(), "SIGKILL");
   running.child.kill("SIGKILL");
   await running.exited;
+  // A killed group reads as alive until its processes are reaped.
+  assert.ok(await gone(step.pid()));
+  assert.ok(await gone(step.child()));
 
   const status = runLoop(repo, ["status", "add-thing"]);
   assert.match(
@@ -174,4 +177,31 @@ test("a run whose controller died with its step shows as interrupted, and resume
   assert.equal(resumed.status, 0, resumed.stderr);
   assert.match(resumed.stdout, new RegExp(`took over run add-thing from process ${controller}, which died\n`));
   assert.match(resumed.stdout, /\] implementation: attempt 1 of 3, implementer started/);
+});
+
+test("resume refuses while the step of a dead controller still runs, and takes over once it ends", async (t) => {
+  const repo = makeRepo(t);
+  const step = sleepingStep(repo);
+  step.use();
+  const running = startLoop(repo, ["run", "add-thing"]);
+  await running.waitFor(/check .* started/);
+  await step.started();
+  const controller = running.child.pid!;
+  running.child.kill("SIGKILL");
+  await running.exited;
+
+  step.use(false);
+  const refused = runLoop(repo, ["resume", "add-thing"]);
+  assert.equal(refused.status, 2);
+  assert.match(refused.stderr, new RegExp(`process group ${step.pid()}, started by process ${controller}, which died`));
+  assert.ok(isAlive(step.child()));
+  const status = runLoop(repo, ["status", "add-thing"]);
+  assert.match(status.stdout, new RegExp(`^Run add-thing: interrupted at implementation; process ${controller} died\n`));
+
+  process.kill(-step.pid(), "SIGKILL");
+  assert.ok(await gone(step.pid()));
+  assert.ok(await gone(step.child()));
+  const resumed = runLoop(repo, ["resume", "add-thing"]);
+  assert.equal(resumed.status, 0, resumed.stderr);
+  assert.match(resumed.stdout, new RegExp(`took over run add-thing from process ${controller}, which died\n`));
 });
