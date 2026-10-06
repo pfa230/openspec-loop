@@ -284,9 +284,9 @@ export function makeRepo(t: After, options: RepoOptions = {}): Repo {
   return repo;
 }
 
-// The patch ID the loop records for the change from base to tip.
+// The patch ID the loop records for the change from base to tip, outside the change's directory.
 export function patchIdOf(repo: Repo, base: string, tip: string): string {
-  return execFileSync("sh", ["-c", `git diff --unified=0 ${base} ${tip} | git patch-id --verbatim`], { cwd: repo.top, env: repo.env, encoding: "utf8" }).split(" ")[0];
+  return execFileSync("sh", ["-c", `git diff --unified=0 ${base} ${tip} -- ':(top,exclude)openspec/changes/add-thing' | git patch-id --verbatim`], { cwd: repo.top, env: repo.env, encoding: "utf8" }).split(" ")[0];
 }
 
 // The short hash of the latest commit with this subject on the run's branch.

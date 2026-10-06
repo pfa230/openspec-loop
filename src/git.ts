@@ -21,12 +21,12 @@ export function gitMessage(error: unknown): string {
   return stderr || (error as Error).message;
 }
 
-// Identifies a patch by its changed lines alone: no context lines, line numbers or display settings.
+// Identifies a patch within pathspec by its changed lines alone: no context lines, line numbers or display settings.
 // The flags override user Git configuration (color.ui, diff drivers, textconv, diff.interHunkContext)
 // that would otherwise change the diff, or with color.ui=always leave patch-id with nothing to read.
-export function patchId(cwd: string, from: string, to: string): string {
-  const pipeline = 'git diff --no-color --no-ext-diff --no-textconv --unified=0 --inter-hunk-context=0 "$1" "$2" | git patch-id --verbatim';
-  const output = execFileSync("sh", ["-c", pipeline, "sh", from, to], { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+export function patchId(cwd: string, from: string, to: string, pathspec: string): string {
+  const pipeline = 'git diff --no-color --no-ext-diff --no-textconv --unified=0 --inter-hunk-context=0 "$1" "$2" -- "$3" | git patch-id --verbatim';
+  const output = execFileSync("sh", ["-c", pipeline, "sh", from, to, pathspec], { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
   return output.split(" ")[0].trim();
 }
 
