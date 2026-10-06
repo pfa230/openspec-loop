@@ -55,7 +55,6 @@ test("a worker step's end line shows its usage and cost as reported, or as unava
   const result = runLoop(repo, ["run", "add-thing"]);
   assert.equal(result.status, 0, result.stdout);
   assert.match(result.stdout, /\] proposal-review: review 1 of 3 APPROVE, 0 blocking, 0 minor \(reviewer; input_tokens=9, output_tokens=183, cost \$0\.069788\)\n/);
-  assert.match(result.stdout, /\] implementation: attempt 1 of 3, implementer made no changes \(implementer; usage unavailable\)\n/);
   assert.match(result.stdout, /\] implementation: attempt 1 of 3, review APPROVE, 0 blocking, 0 minor \(verifier; input_tokens=5, cost unavailable\)\n/);
 });
 

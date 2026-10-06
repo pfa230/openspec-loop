@@ -78,8 +78,9 @@ export function readUsage(path: string): { usage?: Usage } | { problem: string }
   let text: string;
   try {
     text = readFileSync(path, "utf8");
-  } catch {
-    return {};
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return {};
+    return { problem: `the usage file cannot be read: ${(error as Error).message}` };
   }
   let value: unknown;
   try {

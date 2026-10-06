@@ -148,7 +148,7 @@ Usage by role:
   implementer: 3 steps, 1 without usage; input_tokens=27, cache_creation_input_tokens=90210, cache_read_input_tokens=401177, output_tokens=5120, cost $1.2034117, 1 step without cost
 ```
 
-- **Roles** appear in configuration order, and only when they have steps. A run with no worker steps prints no block.
+- **Roles** appear in the fixed order proposal reviewer, plan reviser, implementer, implementation reviewer, and only when they have steps. A run with no worker steps prints no block.
 - **Cost.** `, N steps without cost` follows the cost only when some of the role's steps reported a cost and others did not. When none did, the cost reads `cost unavailable`.
 - **Tokens.** When no step reported tokens, the line reads `tokens unavailable`.
 
