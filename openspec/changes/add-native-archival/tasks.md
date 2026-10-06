@@ -22,7 +22,7 @@
 
 ## 4. Real archival acceptance
 
-- [ ] 4.1 In a disposable repository with real OpenSpec 1.14.0, run a change that adds a requirement to a main spec through the loop, with stub or real agents and one required check. Verify that implementation is reviewed and checked, that `openspec/specs/<capability>/spec.md` on the run's branch holds the added requirement, and that the change lies under `openspec/changes/archive/` in the `<change>: archive` commit
+- [x] 4.1 In a disposable repository with real OpenSpec 1.14.0, run a change that adds a requirement to a main spec through the loop, with stub or real agents and one required check. Verify that implementation is reviewed and checked, that `openspec/specs/<capability>/spec.md` on the run's branch holds the added requirement, and that the change lies under `openspec/changes/archive/` in the `<change>: archive` commit
 
 ## 5. Final checks
 
