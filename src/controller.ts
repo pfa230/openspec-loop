@@ -711,10 +711,10 @@ async function work<T>(
     else {
       const reply = readReply(files.reply, check);
       if ("problem" in reply) problem = reply.problem;
-      else if (!("problem" in usage)) return { value: reply.value, tag };
+      else if ("problem" in usage) problem = usage.problem;
+      else return { value: reply.value, tag };
     }
   }
-  problem = [problem, "problem" in usage ? usage.problem : undefined].filter((part) => part !== undefined).join("; ");
   progress(`${stage}: ${label} execution failure, ${problem} ${tag}`);
   const where = files ? `\nTranscript: ${files.transcript}\nReply: ${files.reply}\nUsage: ${files.usage}` : "";
   return { cause: `execution failure of ${role} agent "${agent.alias}" in ${label}: ${problem}${where}` };
