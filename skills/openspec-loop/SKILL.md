@@ -16,9 +16,9 @@ The loop runs a committed OpenSpec change unattended. You supervise it only thro
 
 - Run every `loop` command outside your sandbox. The loop writes the repository's Git directory, which sandboxes make read-only, and it starts its own workers. In a Codex session, request escalated permissions for each `loop` command.
 - Relay each progress line to the user as it appears, in order and unchanged. Do not batch them until the run ends.
-- When the command exits, show the user the report. On a stop, name the stopped stage, the cause and the recovery the report gives, and say where the transcripts are.
+- When the command exits, show the user the report. On a stop, name the stopped stage, the cause and the recovery the report gives, say where the transcripts are, and diagnose the stop with the user as described under Diagnosing a stop.
 - Run `loop stop` only when the user asks. Run `loop resume` only after the user agrees, even when the report names it as the recovery.
-- Do not edit the run's state, worktree or transcripts, and do not investigate a failure by changing anything. Read the report, `loop status` and the transcripts, and tell the user what they show. The one exception is answering a decision stop, below, and only with the user's agreement.
+- Change nothing to investigate a stop: do not edit the run's state, worktree or transcripts, and do not commit, resume or rerun anything to test a theory. Diagnose by reading only, as described under Diagnosing a stop. The one exception is answering a decision stop, below, and only with the user's agreement.
 
 ## Watching a run in Claude Code
 
@@ -33,6 +33,23 @@ Verified with Codex CLI 0.160.0. Start the command with `exec_command` and a sho
 ## Stopping and resuming
 
 To stop, run `loop stop <change>` from any checkout of the repository; the watched `loop run` prints the stop report and exits 1. To continue after the user agrees, start `loop resume <change>` and watch it the same way. If `loop status` shows the run as interrupted, the process advancing it died; `loop resume` takes the run over and redoes the interrupted step.
+
+## Diagnosing a stop
+
+The loop reports what it observed and investigates nothing; finding out why a run stopped is your work with the user. Use only reads: the report, `loop status`, `cat`, `tail` and `jq` on the files under the run directory, and `git log` and `git diff` in the run's worktree. The report names the worktree, the run directory and the transcripts directory.
+
+1. **Classify the stop from the report's cause.** A stop by the user needs no diagnosis. A decision stop is answered as described below. A stop at integration or delivery for a dirty checkout, unpushed or diverged commits, or a rejected push carries its own recovery: explain it. Diagnose the rest as an execution failure or as exhausted attempts.
+2. **An execution failure.** Read the end of the transcript the cause names, the reply file if there is one, and the usage on the step's end line.
+   - Name the likely cause and quote the lines that show it, such as an authentication failure, a quota or rate limit (`401`, `402`, `429`), a network error, a permission the harness denied, a turn limit, a missing command, or a reply that does not match the schema.
+   - Say what the evidence does not show. A transcript that ends without an error, an empty transcript, a step killed by a signal or a step with no usage leaves the cause open: say so instead of guessing.
+   - A failed `git` or `gh` command quotes its output in the cause. A refused `openspec archive` names only its transcript, which holds OpenSpec's explanation: read it. An execution failure of the loop itself has no transcript, and its cause is all the evidence there is.
+3. **Exhausted attempts.** List the run's `*.verdict.json` and `*.findings.json` files in the transcripts directory in step order, and compare their findings from attempt to attempt:
+   - The same finding repeats: the implementer or plan reviser does not address it, or cannot within the plan.
+   - The findings change every attempt: the reviewer's demands move, or each fix breaks something new.
+   - The same check failure repeats unchanged: it may fail on the base too, and the implementer must not repair what the change did not break. Suggest the user check the base.
+
+   Then look at what each attempt changed. Each implementation review record names the `commit` it reviewed: `git diff` consecutive ones in the worktree. For proposal review, diff the plan between the `<change>: revise plan` commits that `git log` shows on the run's branch.
+4. **Present and wait.** Give the likely cause with the files and lines that support it, what the evidence leaves open, and the recoveries that fit: `loop resume <change>` after the user fixes the environment, `loop resume <change> --attempts <n>`, a decision or plan edit committed on the run's branch and then resumed, or discarding the run as the README describes. Do nothing more until the user chooses.
 
 ## Answering a decision stop
 
