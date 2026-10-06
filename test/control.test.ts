@@ -16,7 +16,7 @@ async function gone(pid: number): Promise<boolean> {
   return true;
 }
 
-// A fixture step whose shell, the process group leader, waits on a child process.
+// A required check whose shell, the process group leader, waits on a child process.
 // Both record their PIDs, so a test can check that stopping ends the whole group.
 function sleepingStep(repo: Repo) {
   const read = (name: string) => () => {
@@ -27,33 +27,42 @@ function sleepingStep(repo: Repo) {
   const child = read("child.pid");
   return {
     command: `echo $$ > ${join(repo.root, "step.pid")}; sleep 30 & echo $! > ${join(repo.root, "child.pid")}; wait`,
+    // Makes the step the run's only required check, or with false, leaves the run no checks.
+    use(on = true) {
+      writeFile(repo.top, "openspec/loop.local.yaml", on ? `checks:\n  - ${JSON.stringify(this.command)}\n` : "checks: []\n");
+    },
     pid,
     child,
     async started() {
       const deadline = Date.now() + 10_000;
       while (!(pid() > 0 && child() > 0)) {
-        if (Date.now() > deadline) throw new Error("the fixture step did not start");
+        if (Date.now() > deadline) throw new Error("the check did not start");
         await sleep(25);
       }
     },
   };
 }
 
-test("resume after a failure reruns only the failed stage and later ones", (t) => {
-  const repo = makeRepo(t, { fixture: { integration: "exit 1" } });
+// A run stopped at archive, with OpenSpec accepting the archive again.
+function stoppedAtArchive(t: Parameters<typeof makeRepo>[0]): Repo {
+  const repo = makeRepo(t);
+  repo.refuseArchive();
   assert.equal(runLoop(repo, ["run", "add-thing"]).status, 1);
-  repo.setFixture({});
+  repo.refuseArchive(false);
+  return repo;
+}
+
+test("resume after a failure reruns only the failed stage and later ones", (t) => {
+  const repo = stoppedAtArchive(t);
   const result = runLoop(repo, ["resume", "add-thing"]);
   assert.equal(result.status, 0, result.stderr);
-  assert.doesNotMatch(result.stdout, /proposal-review/);
-  assert.match(result.stdout, /\] integration: started \(fixture\)/);
+  assert.doesNotMatch(result.stdout, /proposal-review|implementation|integration/);
+  assert.match(result.stdout, /\] archive: started/);
   assert.match(result.stdout, /Run add-thing completed/);
 });
 
 test("resume reads the configuration again", (t) => {
-  const repo = makeRepo(t, { fixture: { integration: "exit 1" } });
-  assert.equal(runLoop(repo, ["run", "add-thing"]).status, 1);
-  repo.setFixture({});
+  const repo = stoppedAtArchive(t);
   writeFile(repo.top, "openspec/loop.yaml", `${configYaml()}remote: origin\n`);
   const refused = runLoop(repo, ["resume", "add-thing"]);
   assert.equal(refused.status, 2);
@@ -63,19 +72,16 @@ test("resume reads the configuration again", (t) => {
 });
 
 test("a resumed run keeps its worktree after the worktrees directory changes", (t) => {
-  const repo = makeRepo(t, { fixture: { integration: "exit 1" } });
-  assert.equal(runLoop(repo, ["run", "add-thing"]).status, 1);
-  repo.setFixture({ integration: "pwd" });
+  const repo = stoppedAtArchive(t);
   writeFile(repo.top, "openspec/loop.yaml", configYaml().replace("worktrees: .worktrees", "worktrees: elsewhere"));
   const result = runLoop(repo, ["resume", "add-thing"]);
   assert.equal(result.status, 0, result.stderr);
-  assert.equal(readFileSync(join(repo.runDir(), "transcripts", "005-integration.log"), "utf8"), `${repo.worktree}\n`);
+  assert.equal(repo.gitIn(repo.worktree, "log", "-1", "--format=%s"), "add-thing: archive");
+  assert.equal(existsSync(join(repo.top, "elsewhere")), false);
 });
 
 test("resume works from another checkout of the repository", (t) => {
-  const repo = makeRepo(t, { fixture: { integration: "exit 1" } });
-  assert.equal(runLoop(repo, ["run", "add-thing"]).status, 1);
-  repo.setFixture({});
+  const repo = stoppedAtArchive(t);
   const result = runLoop(repo, ["resume", "add-thing"], repo.worktree);
   assert.equal(result.status, 0, result.stderr);
 });
@@ -85,19 +91,19 @@ test("resume of a completed run reports it complete", (t) => {
   assert.equal(runLoop(repo, ["run", "add-thing"]).status, 0);
   const result = runLoop(repo, ["resume", "add-thing"]);
   assert.equal(result.status, 0);
-  assert.match(result.stdout, /^Run add-thing completed\. Stages integration and delivery were fixtures and did no real work\.\n/);
+  assert.match(result.stdout, /^Run add-thing completed\. Stage delivery was a fixture and did no real work\.\n/);
 });
 
 test("a second advancement is refused while one is live, and stop ends the step at once", async (t) => {
   const repo = makeRepo(t);
   const step = sleepingStep(repo);
-  repo.setFixture({ integration: step.command });
+  step.use();
   const running = startLoop(repo, ["run", "add-thing"]);
-  await running.waitFor(/integration: started/);
+  await running.waitFor(/check .* started/);
   await step.started();
 
   const status = runLoop(repo, ["status", "add-thing"]);
-  assert.match(status.stdout, new RegExp(`^Run add-thing: advancing in process ${running.child.pid}, at integration`));
+  assert.match(status.stdout, new RegExp(`^Run add-thing: advancing in process ${running.child.pid}, at implementation`));
 
   const refused = runLoop(repo, ["resume", "add-thing"]);
   assert.equal(refused.status, 2);
@@ -110,29 +116,29 @@ test("a second advancement is refused while one is live, and stop ends the step 
   const result = await running.exited;
   assert.ok(Date.now() - started < 5_000);
   assert.equal(result.status, 1);
-  assert.match(result.stdout, /\] integration: stopped by the user \(fixture\)\n/);
+  assert.match(result.stdout, /\] implementation: attempt 1 of 3, check `.*` stopped by the user\n/);
   assert.match(result.stdout, /Cause: stopped by the user\nRecovery: loop resume add-thing\n/);
   assert.ok(await gone(step.pid()));
   assert.ok(await gone(step.child()));
 
   const statusAfter = runLoop(repo, ["status", "add-thing"]);
-  assert.match(statusAfter.stdout, /^Run add-thing: stopped at integration\nCause: stopped by the user\nRecovery: loop resume add-thing\n/);
-  assert.match(statusAfter.stdout, /\n {2}implementation {3}complete\n {2}integration {6}pending\n/);
+  assert.match(statusAfter.stdout, /^Run add-thing: stopped at implementation\nCause: stopped by the user\nRecovery: loop resume add-thing\n/);
+  assert.match(statusAfter.stdout, /\n {2}proposal-review {2}complete\n {2}implementation {3}pending\n/);
   assert.equal(runLoop(repo, ["stop", "add-thing"]).stdout, "Run add-thing is not advancing.\n");
 
-  repo.setFixture({});
+  step.use(false);
   const resumed = runLoop(repo, ["resume", "add-thing"]);
   assert.equal(resumed.status, 0, resumed.stderr);
-  assert.match(resumed.stdout, /^\[[\d:]+\] integration: started \(fixture\)/);
+  assert.match(resumed.stdout, /^\[[\d:]+\] implementation: attempt 1 of 3, implementer started/);
 });
 
 for (const signal of ["SIGINT", "SIGHUP"] as const) {
   test(`${signal} to loop run stops the run like loop stop`, async (t) => {
     const repo = makeRepo(t);
     const step = sleepingStep(repo);
-    repo.setFixture({ integration: step.command });
+    step.use();
     const running = startLoop(repo, ["run", "add-thing"]);
-    await running.waitFor(/integration: started/);
+    await running.waitFor(/check .* started/);
     await step.started();
     running.child.kill(signal);
     const result = await running.exited;
@@ -146,9 +152,9 @@ for (const signal of ["SIGINT", "SIGHUP"] as const) {
 test("a run whose controller died with its step shows as interrupted, and resume redoes the step", async (t) => {
   const repo = makeRepo(t);
   const step = sleepingStep(repo);
-  repo.setFixture({ integration: step.command });
+  step.use();
   const running = startLoop(repo, ["run", "add-thing"]);
-  await running.waitFor(/integration: started/);
+  await running.waitFor(/check .* started/);
   await step.started();
   const controller = running.child.pid!;
   // Freeze the controller first, so it cannot record the step's death before it dies too.
@@ -160,12 +166,12 @@ test("a run whose controller died with its step shows as interrupted, and resume
   const status = runLoop(repo, ["status", "add-thing"]);
   assert.match(
     status.stdout,
-    new RegExp(`^Run add-thing: interrupted at integration; process ${controller} died\nRecovery: loop resume add-thing\n`),
+    new RegExp(`^Run add-thing: interrupted at implementation; process ${controller} died\nRecovery: loop resume add-thing\n`),
   );
 
-  repo.setFixture({});
+  step.use(false);
   const resumed = runLoop(repo, ["resume", "add-thing"]);
   assert.equal(resumed.status, 0, resumed.stderr);
   assert.match(resumed.stdout, new RegExp(`took over run add-thing from process ${controller}, which died\n`));
-  assert.match(resumed.stdout, /\] integration: started \(fixture\)/);
+  assert.match(resumed.stdout, /\] implementation: attempt 1 of 3, implementer started/);
 });

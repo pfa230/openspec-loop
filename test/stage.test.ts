@@ -211,20 +211,21 @@ test("a plan reviser failure stops the run without relaunching it", (t) => {
   assert.equal(repo.calls("reviser").length, 1);
 });
 
-function stoppedAtIntegration(t: Parameters<typeof makeRepo>[0]): Repo {
-  const repo = makeRepo(t, { fixture: { integration: "exit 1" } });
+function stoppedAtArchive(t: Parameters<typeof makeRepo>[0]): Repo {
+  const repo = makeRepo(t);
+  repo.refuseArchive();
   assert.equal(runLoop(repo, ["run", "add-thing"]).status, 1);
-  repo.setFixture({});
+  repo.refuseArchive(false);
   return repo;
 }
 
 test("a plan edited by hand while the run is stopped resumes where it stopped", (t) => {
-  const repo = stoppedAtIntegration(t);
+  const repo = stoppedAtArchive(t);
   const calls = repo.calls().length;
   writeFile(repo.worktree, TASKS, "## 1. Work\n\n- [ ] 1.1 Do another thing\n");
   const resumed = runLoop(repo, ["resume", "add-thing"]);
   assert.equal(resumed.status, 0, resumed.stdout);
-  assert.equal(lines(resumed.stdout)[0], "integration: started (fixture)");
+  assert.equal(lines(resumed.stdout)[0], "archive: started");
   assert.equal(repo.calls().length, calls);
 });
 

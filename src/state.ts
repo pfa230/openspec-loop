@@ -23,6 +23,8 @@ export interface RunState {
   owedReview: string | null;
   // The findings record the next implementer turn must address: failed checks, or an implementation review.
   owedFindings: string | null;
+  // The patch ID of the change as its implementation completed, which the approval covers; integration compares against it.
+  approvedPatch: string | null;
 }
 
 export function runDir(top: string, change: string): string {

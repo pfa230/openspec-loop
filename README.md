@@ -125,6 +125,18 @@ Once the plan is approved, the implementation stage runs without you, in attempt
 
 Changes you leave uncommitted in the run's worktree while the run is stopped are committed with the next implementer turn and become part of the patch. They are checked, and reviewed unless that turn applies minor fixes, which complete without another review. A run started before proposal review or implementation became real treated them as fixtures and may skip them on resume: discard such a run as described above and start it again.
 
+### Integration
+
+Once implementation completes, the loop integrates the change with the current base: the remote's default branch in `pr` mode, and the local default branch in `local` and `merge` modes.
+
+- **Bringing the base in.** `pr` mode merges the base into the run's branch, so the branch it pushes is never rewritten. `local` and `merge` rebase the branch onto the base, which keeps the default branch's history linear. When the rebase conflicts, the loop abandons it and merges instead. A rebase rewrites the branch's commits, so review records and stop reports from before it name commits that are no longer on the branch; Git keeps them until it prunes unreachable objects, so `git diff` against them still works. The loop overrides `rebase.updateRefs` and `merge.ff` from your Git configuration for these commands without changing it.
+- **Conflicts.** A conflicted merge stays in progress in the run's worktree, and the next attempt's implementer gets the conflicted files as a finding. The loop commits the resolution as the merge commit, with Git's message, and the checks and review run as in any attempt.
+- **A changed patch.** When integration changes the change's patch, compared without context lines or line numbers, for example because the base already holds part of the change, the result goes back to the implementer the same way and is checked and reviewed again.
+- **Checks.** The required checks run on the integrated result, and a failure goes back to the implementer as a finding. Each return to the implementer uses an implementation attempt.
+- **The default branch in `merge` mode.** The loop first fetches the upstream and brings the local default branch level with it. When it is behind, the loop fast-forwards it in the checkout that holds it, and stops if that checkout has uncommitted changes to tracked files; untracked files do not count. When the local default branch is ahead of its upstream, or the two have diverged, the run stops: push or remove the extra commits, or reconcile the branches, then run `loop resume <change>`. A proposal commit left unpushed on the default branch stops the run this way, so in `merge` mode push the proposal before `loop run`, or propose on a branch of its own.
+- **Unpushed commits in `pr` mode.** The base is the remote's branch, so commits on your local default branch that are not pushed become part of the pull request. Push them first if they should not.
+- **Interruptions.** A rebase or merge that a stop or crash left in progress before its conflict reached the implementer is aborted when integration runs again.
+
 ### Archive
 
 After integration, the loop archives the change by running `openspec archive <change> --yes` in the run's worktree. OpenSpec validates the change, applies its spec deltas to the main specs under `openspec/specs/`, and moves the change to `openspec/changes/archive/<date>-<change>/`. The loop commits the result on the run's branch as `<change>: archive`. OpenSpec's output is kept as `NNN-archive.log` in the transcripts.

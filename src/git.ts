@@ -21,6 +21,15 @@ export function gitMessage(error: unknown): string {
   return stderr || (error as Error).message;
 }
 
+// Identifies a patch by its changed lines alone: no context lines, line numbers or display settings.
+// The flags override user Git configuration (color.ui, diff drivers, textconv, diff.interHunkContext)
+// that would otherwise change the diff, or with color.ui=always leave patch-id with nothing to read.
+export function patchId(cwd: string, from: string, to: string): string {
+  const pipeline = 'git diff --no-color --no-ext-diff --no-textconv --unified=0 --inter-hunk-context=0 "$1" "$2" | git patch-id --verbatim';
+  const output = execFileSync("sh", ["-c", pipeline, "sh", from, to], { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+  return output.split(" ")[0].trim();
+}
+
 export function topLevel(cwd: string): string {
   try {
     return git(cwd, "rev-parse", "--show-toplevel");
@@ -57,4 +66,22 @@ export function deliveryBase(top: string, config: Config): Base {
     throw new Refusal(`default branch ${branch} has no upstream; set one with \`git branch --set-upstream-to=<remote>/${branch} ${branch}\``);
   }
   return { ref: config.delivery === "pr" ? upstream.ref : branch, upstream };
+}
+
+// The checkouts that have branch checked out.
+export function checkoutsHolding(cwd: string, branch: string): string[] {
+  return git(cwd, "worktree", "list", "--porcelain")
+    .split("\n\n")
+    .map((entry) => entry.split("\n"))
+    .filter((lines) => lines.includes(`branch refs/heads/${branch}`))
+    .map((lines) => lines[0].slice("worktree ".length));
+}
+
+// Files with unresolved conflicts in the worktree.
+export function conflicted(cwd: string): string[] {
+  return git(cwd, "diff", "--name-only", "--diff-filter=U").split("\n").filter(Boolean);
+}
+
+export function merging(cwd: string): boolean {
+  return gitSucceeds(cwd, "rev-parse", "-q", "--verify", "MERGE_HEAD");
 }
