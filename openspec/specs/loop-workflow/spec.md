@@ -12,7 +12,7 @@ Every mechanism, configuration option and guarantee in the loop SHALL serve a co
 
 #### Scenario: Manual work during a run
 - **WHEN** a person edits or tests something by hand
-- **THEN** verifying that work is the person's responsibility, and the loop adds no gate for it beyond its ordinary approval checks
+- **THEN** verifying that work is the person's responsibility, and the loop adds no gate for it
 
 ### Requirement: Explicit enrollment
 
@@ -92,7 +92,7 @@ The configuration SHALL define agents, each an alias for a command that implemen
 
 ### Requirement: Reviews and verdicts
 
-Each review SHALL end in a recorded `APPROVE` or `REVISE` verdict, and each finding SHALL be classified as blocking or minor. The reviewer SHALL classify the findings, and the loop SHALL derive the verdict from them. A blocking finding means the work fails the review's criteria; a minor finding has a local fix that cannot change behavior or a decision recorded in the design. A review with any blocking finding SHALL be `REVISE`, which requires revision followed by another review. A review with only minor findings SHALL be `APPROVE`: the plan reviser applies minor plan fixes and the implementer applies minor implementation fixes, the required checks run again for implementation, and the approval covers the result. Reviewers SHALL NOT modify the candidate they review. Each recorded verdict SHALL identify its reviewed inputs precisely enough to tell whether they changed afterward. The plan is the change's OpenSpec planning artifacts (proposal, design, spec deltas, tasks) excluding task completion marks. Proposal review SHALL judge whether the whole plan can be implemented and verified as one change without asking the user, and whether it keeps the decisions recorded in the design. An implementation approval covers the change's patch, not the base it applies to. Proposal approval SHALL start implementation automatically, after any minor plan fixes.
+Each review SHALL end in a recorded `APPROVE` or `REVISE` verdict, and each finding SHALL be classified as blocking or minor. The reviewer SHALL classify the findings, and the loop SHALL derive the verdict from them. A blocking finding means the work fails the review's criteria; a minor finding has a local fix that cannot change behavior or a decision recorded in the design. A review with any blocking finding SHALL be `REVISE`, which requires revision followed by another review. A review with only minor findings SHALL be `APPROVE`: the plan reviser applies minor plan fixes and the implementer applies minor implementation fixes, the required checks run again for implementation, and the approval covers the result. Reviewers SHALL NOT modify the candidate they review. The plan is the change's OpenSpec planning artifacts (proposal, design, spec deltas, tasks) excluding task completion marks. Proposal review SHALL judge whether the whole plan can be implemented and verified as one change without asking the user, and whether it keeps the decisions recorded in the design. An implementation approval covers the change's patch, not the base it applies to. Proposal approval SHALL start implementation automatically, after any minor plan fixes.
 
 #### Scenario: Plan approved
 - **WHEN** the proposal reviewer returns `APPROVE`
@@ -112,15 +112,15 @@ Each review SHALL end in a recorded `APPROVE` or `REVISE` verdict, and each find
 
 #### Scenario: Ticking a task box
 - **WHEN** the implementer marks a task complete
-- **THEN** the plan approval still applies
+- **THEN** the plan is unchanged and implementation continues under its approval
 
 #### Scenario: Task instructions changed after approval
-- **WHEN** approved task instructions change, other than by approved minor fixes
-- **THEN** the plan needs another approving review before work under the changed tasks continues
+- **WHEN** an implementer turn changes approved task instructions or any other part of the plan
+- **THEN** the run stops at implementation, names the turn's commit, and does not return to proposal review
 
 ### Requirement: Autonomous plan revision
 
-Once a proposal is committed, revising its plan SHALL need no user. When proposal review returns `REVISE`, or the implementer finds that the approved plan needs a change, the plan reviser SHALL revise the plan in a fresh context and the plan SHALL return to proposal review. The reviser SHALL NOT change a decision recorded in the design. A finding or plan problem that needs a decision the plan does not record SHALL stop the run with the question; the user answers by recording the decision in the plan on the run's branch and resuming. A reviewer SHALL raise such a decision as a question on its finding, and any finding with a question SHALL stop the run before the plan is revised.
+Once a proposal is committed, revising its plan SHALL need no user. When proposal review returns `REVISE`, or the implementer finds that the approved plan needs a change, the plan reviser SHALL revise the plan in a fresh context and the plan SHALL return to proposal review. The implementer SHALL report a needed plan change instead of making it, and an implementer turn that changes the plan SHALL stop the run as a failure of the implementer; the loop compares the plan before and after each turn, so a turn interrupted before it ends is not checked. The reviser SHALL NOT change a decision recorded in the design. A finding or plan problem that needs a decision the plan does not record SHALL stop the run with the question; the user answers by recording the decision in the plan on the run's branch and resuming. A reviewer SHALL raise such a decision as a question on its finding, and any finding with a question SHALL stop the run before the plan is revised.
 
 #### Scenario: Plan review requests changes
 - **WHEN** the proposal reviewer returns `REVISE`
@@ -194,21 +194,9 @@ Each external role SHALL run under the execution restrictions configured for it,
 - **WHEN** the implementation reviewer's agent runs its adapter inside a sandbox wrapper
 - **THEN** the reviewer runs inside that sandbox while the implementer runs under its own agent's command
 
-### Requirement: Pre-archive gate and native archival
-
-Before archiving, the controller SHALL check that every earlier stage is complete; an incomplete stage SHALL block archival and be named. Archival SHALL use native OpenSpec validation and archive. The expected archive effects, moving the change under the archive and applying its spec deltas to the main specs, SHALL NOT invalidate the approvals.
-
-#### Scenario: Edit after implementation approval
-- **WHEN** the change's patch changes after its implementation approval, other than by the approved minor fixes
-- **THEN** the gate blocks archival
-
-#### Scenario: Archive keeps approvals
-- **WHEN** native archive moves the change and updates the main specs
-- **THEN** the run's approvals remain valid for delivery
-
 ### Requirement: Integration and delivery
 
-The run SHALL work on the change's branch. When `loop run` is given on a branch other than the default branch, that branch is the change's branch and the run works in its worktree; when it is given on the default branch, the loop creates the change's branch from that commit in a worktree of its own. The run SHALL preserve unrelated work in every checkout. The base, which the loop integrates the change with and delivers it to, is the remote's default branch in `pr` mode and the local default branch in `local` and `merge` modes. Before the pre-archive gate, the loop SHALL integrate the change with the current base; a conflict or a failed required check SHALL return to the implementer as findings. Only `merge` mode SHALL change the local default branch, and only by fast-forward when every checkout holding it is clean; otherwise the run SHALL stop and name the checkout. Before integrating in `merge` mode, the loop SHALL fast-forward a local default branch that is behind its remote, and SHALL stop the run when it is ahead or has diverged. Every action outside the run's worktree, such as updating or pushing a branch or opening a pull request, SHALL be reported as its own progress line. The configuration SHALL select one delivery mode: `local`, where the run stops with the archived change committed on its branch and pushes nothing; `pr`, where the loop pushes the change branch and opens a pull request on the repository's GitHub remote; or `merge`, where the loop fast-forwards the default branch to the change branch and pushes it. A failed fast-forward or a rejected push SHALL stop the run.
+The run SHALL work on the change's branch. When `loop run` is given on a branch other than the default branch, that branch is the change's branch and the run works in its worktree; when it is given on the default branch, the loop creates the change's branch from that commit in a worktree of its own. The run SHALL preserve unrelated work in every checkout. The base, which the loop integrates the change with and delivers it to, is the remote's default branch in `pr` mode and the local default branch in `local` and `merge` modes. Before archival, the loop SHALL integrate the change with the current base; a conflict or a failed required check SHALL return to the implementer as findings. Only `merge` mode SHALL change the local default branch, and only by fast-forward when every checkout holding it is clean; otherwise the run SHALL stop and name the checkout. Before integrating in `merge` mode, the loop SHALL fast-forward a local default branch that is behind its remote, and SHALL stop the run when it is ahead or has diverged. Every action outside the run's worktree, such as updating or pushing a branch or opening a pull request, SHALL be reported as its own progress line. The configuration SHALL select one delivery mode: `local`, where the run stops with the archived change committed on its branch and pushes nothing; `pr`, where the loop pushes the change branch and opens a pull request on the repository's GitHub remote; or `merge`, where the loop fast-forwards the default branch to the change branch and pushes it. A failed fast-forward or a rejected push SHALL stop the run.
 
 #### Scenario: Run on the default branch
 - **WHEN** the user runs `loop run` on the default branch
@@ -252,15 +240,15 @@ The run SHALL work on the change's branch. When `loop run` is given on a branch 
 
 ### Requirement: Run control
 
-The loop SHALL provide deterministic `run`, `status`, `stop` and `resume` commands. `run` SHALL exit with a report when the run completes or stops; a stop report SHALL name the step that stopped, the observed cause such as the verdict, check output or exit status, and the recovery available. The loop SHALL NOT investigate failures itself. Stop SHALL end the current step at once. Anything that blocks progression SHALL stop the run and report why, and a stopped run SHALL advance only on an explicit resume. A stage SHALL count as complete only while its result applies to the current inputs; an input change that invalidates an approval SHALL make that stage and every later stage incomplete again. Resume SHALL continue from the first incomplete stage without repeating complete ones. After an interruption around archival, merge, push or pull request creation, resume SHALL inspect the effects that actually happened and SHALL NOT replay them blindly.
+The loop SHALL provide deterministic `run`, `status`, `stop` and `resume` commands. `run` SHALL exit with a report when the run completes or stops; a stop report SHALL name the step that stopped, the observed cause such as the verdict, check output or exit status, and the recovery available. The loop SHALL NOT investigate failures itself. Stop SHALL end the current step at once. Anything that blocks progression SHALL stop the run and report why, and a stopped run SHALL advance only on an explicit resume. Resume SHALL continue from the first incomplete stage without repeating complete ones. After an interruption around archival, merge, push or pull request creation, resume SHALL inspect the effects that actually happened and SHALL NOT replay them blindly.
 
 #### Scenario: Resume after interrupted merge
 - **WHEN** a run was interrupted after its merge completed and the user resumes it
 - **THEN** the loop detects the completed merge and does not merge again
 
 #### Scenario: Plan edited while stopped
-- **WHEN** the plan changes while a run is stopped after implementation review, and the user resumes it
-- **THEN** the run resumes at proposal review instead of archival
+- **WHEN** a person changes the plan while a run is stopped after implementation completed, and resumes it
+- **THEN** the run resumes where it stopped without reviewing the plan again
 
 #### Scenario: Stop
 - **WHEN** the user stops a run during an implementer turn
@@ -309,6 +297,7 @@ The loop SHALL run OpenSpec through the `openspec` command on PATH, the same CLI
 #### Scenario: Native setup only
 - **WHEN** a repository has only native OpenSpec setup with its default schema
 - **THEN** `loop run` needs no loop-specific schema or OpenSpec configuration
+
 ### Requirement: Loop configuration
 
 The loop SHALL read its configuration from `openspec/loop.yaml` in the checkout where `loop run` or `loop resume` is given, each time either is given, and from `openspec/loop.local.yaml` beside it when that file exists. A value the local file sets SHALL replace the committed value: a top-level setting as a whole, and `agents`, `roles` and `attempts` entry by entry. The configuration SHALL name the default branch, and the loop SHALL take it from the configuration and SHALL NOT detect it. The configuration SHALL name the worktrees directory, under which `loop run` on the default branch creates the change's worktree at `<directory>/<change>`. A relative worktrees directory SHALL resolve against the checkout where `loop run` is given, and an absolute one SHALL be used as given. A run SHALL keep the worktree it was created with. The loop SHALL NOT change Git's ignore files or configuration. A missing `openspec/loop.yaml`, unparseable YAML, an unknown key or a value of the wrong type in either file SHALL refuse the command and name the problem and the file. A required field missing after the files are combined SHALL refuse the command and name the field.
@@ -372,3 +361,15 @@ The loop SHALL ship worker commands for Claude Code, Codex, Antigravity and Open
 #### Scenario: Harness without schema enforcement
 - **WHEN** OpenCode's final message for a review is prose instead of one JSON object
 - **THEN** the OpenCode adapter fails and the run stops with an execution failure
+
+### Requirement: Native archival
+
+After every earlier stage completes, the controller SHALL archive the change with native OpenSpec archive in the run's worktree, which validates the change, moves it under the archive and applies its spec deltas to the main specs, and SHALL commit the result on the change's branch. When OpenSpec refuses to archive the change, the run SHALL stop at archival, name OpenSpec's output, and commit nothing.
+
+#### Scenario: Change archived
+- **WHEN** the run reaches archival with a valid change
+- **THEN** the change is moved under the archive, its spec deltas are applied to the main specs, and the result is committed on the change's branch
+
+#### Scenario: Archive refused
+- **WHEN** OpenSpec refuses to archive the change, such as when its spec deltas fail validation
+- **THEN** the run stops at archival, the report names OpenSpec's output, and the change's branch gains no commit
