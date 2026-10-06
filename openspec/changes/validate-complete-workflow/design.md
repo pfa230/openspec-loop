@@ -20,13 +20,13 @@ The contract is `openspec/specs/loop-workflow/spec.md`. The test suite covers it
 
 **2. Evidence lives on issue #9, and nothing else is written to the repository.** Each run gets one comment, and a closing comment maps every case to pass, defect (with its issue) or unsupported. A run comment holds:
 
-- **Setup:** the repository, `openspec/loop.yaml`, the supervisor and the harness versions.
+- **Setup:** the commands that create the disposable repository, including the plan and check files they write, so the case can be run again; `openspec/loop.yaml`; the supervisor; the commit of the loop under test; and the harness versions. For A and E it also holds the required check's output on the base.
 - **What happened:** the commands typed, the progress lines and report, the exit status and the Git state that shows the outcome.
 - **Usage:** the `Usage by role` block.
 
 Alternative rejected by pfa: an evidence file in the change directory or under `docs/`.
 
-**3. The loop under test is this branch's build, linked onto PATH.** `npm ci`, `npm run build` and `npm link` in this worktree put `loop` and the four adapters on PATH. The branch carries no code, so the build is the default branch's code, including any merged defect fixes after the branch takes the default branch again. `npm unlink -g openspec-loop` removes the link at the end. #10 covers installation from the packaged artifact.
+**3. The loop under test is this branch's build, linked onto PATH.** `npm ci`, `npm test` and `npm link` in this worktree put `loop` and the four adapters on PATH. The branch carries no code, so the build is the default branch's code, including any merged defect fixes after the branch takes the default branch again. `npm unlink -g openspec-loop` removes the link at the end. #10 covers installation from the packaged artifact.
 
 **4. Every run uses real workers.** The test suite is the fixture coverage, with stub agents and stub OpenSpec; these runs are the real evidence, with real harnesses, real OpenSpec and real Git throughout. One rule for every case keeps the evidence uniform; the cases that depend only on Git state, in run F, add little usage because completed stages do not rerun on resume.
 
@@ -40,7 +40,7 @@ Alternative rejected by pfa: an evidence file in the change directory or under `
 | Harness failure | The agent is a real adapter given a model name that does not exist, so its first worker step exits nonzero. |
 | Attempt exhaustion | A required check fails on the base for a reason the change does not cause, with `attempts.implementation: 2`. |
 | Moved default branch | A second clone pushes an unrelated commit to `origin/main` while implementation runs. |
-| Killed advancing process | `kill -9` on the `loop run` process during a worker step. |
+| Killed advancing process | `kill -9` on the `loop run` process during a worker step. The worker runs in its own process group and can outlive it, so the resume waits until that group has exited, and the evidence says whether it outlived the controller. |
 
 **6. Supervisors are interactive sessions in tmux.** People supervise from the interactive Claude Code and Codex apps, and the skill's watch steps are written for them, so headless print mode would test something else. Each supervisor is `claude` or `codex` started in a tmux pane in the disposable repository, with the skill copied to `.claude/skills/openspec-loop/` and `.agents/skills/openspec-loop/`. The applier types the user's turns with `tmux send-keys`, and `tmux capture-pane -p -S -` saves the session's rendered transcript when the run ends. Every agreement to resume, stop or record a decision is a separate user turn, never part of the first prompt.
 
@@ -55,12 +55,19 @@ Alternative rejected by pfa: an evidence file in the change directory or under `
 | E | terminal | `local` | default branch | real implementer and implementation reviewer | attempt exhaustion, diagnosed by a Claude and a Codex session |
 | F | terminal | `merge`, bare local `origin` | default branch | one agent in all four roles | the loud stops: a dirty checkout, unpushed commits, diverged branches and a rejected push, each followed by its recovery and resume |
 
-Readonly reviewer and editing arguments follow the README's adapter table. Native work in D means creating, editing and archiving a third change with `openspec` commands and committing it, then checking that neither run reacts and that `.git/hooks` holds only Git's samples.
+In A, B and E, reviewers take the README's read-only arguments and the editing roles its editing arguments. In C, D and F one agent fills every role, so it takes editing arguments, and the evidence checks that each review left the worktree unchanged. F's stops come in an order where each one precedes the stage that would clear it, because resume does not repeat a completed stage:
+
+1. **Unpushed commits.** The local default branch has a commit `origin` lacks, so integration stops. Recovery: push it.
+2. **Diverged branches.** Before resuming, a commit on the local default branch and another pushed from a second clone make them diverge, so integration stops again. Recovery: merge the remote into the local default branch and push.
+3. **Dirty checkout.** Before resuming, a commit pushed from the second clone puts the local default branch behind, and a tracked file is edited in the checkout holding it, so the fast-forward before integration stops. Recovery: discard the edit.
+4. **Rejected push.** The resume sets `checks` in `openspec/loop.local.yaml` to sleep before `sh test.sh`, and a commit pushed from the second clone while the integrated check sleeps makes the delivery push fail. Recovery: as the stop's recovery says, fetch and merge `origin/main` into the run's branch in its worktree, and resume. Delivery does not repeat integration, so merging the local default branch, which lacks the new commit, would be rejected again.
+
+Native work in D means creating, editing and archiving a third change with `openspec` commands and committing it, then checking that neither run reacts and that `.git/hooks` holds only Git's samples.
 
 **8. Two measurements, taken from the runs.**
 
 - **Usage.** The `Usage by role` block of every report goes into its run's comment. The implementer's end lines in A and E give its usage per attempt: what a fresh context costs on a second attempt compared with the first. That is the evidence #5 deferred for reusing harness sessions.
-- **Operator steps.** For each delivery mode, the commands a person types from a committed proposal to the delivered result on the clean path, taken from A, B and C. Each recovery adds its own commands, counted from the stop that needed it.
+- **Operator steps.** For each delivery mode, the commands a person types from a committed proposal to the delivered result when nothing stops. No run is that clean, so the count comes from the commands recorded in A, B and C, leaving out the commands each induced stop and its recovery added, and naming what was left out. Each recovery's commands are counted separately.
 
 Alternative rejected by pfa: line counts against `openspec-loop-legacy2`.
 
