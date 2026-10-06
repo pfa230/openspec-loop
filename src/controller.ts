@@ -256,20 +256,15 @@ function dirtyHolder(run: Run): Halt | undefined {
   };
 }
 
-// Fast-forwards the local default branch to commit, moving the files of the checkout that holds it.
+// Fast-forwards the local default branch to commit, which callers have checked contains it, moving the files
+// of the checkout that holds it.
 function fastForward(run: Run, stage: Stage, commit: string): Halt | undefined {
   const { worktree } = run.state;
   const branch = run.setup.config.defaultBranch;
   const short = git(worktree, "rev-parse", "--short=7", commit);
   const [checkout] = checkoutsHolding(worktree, branch);
-  const resume = `loop resume ${run.state.change}`;
   if (checkout === undefined) {
-    // The branch may have moved since the caller looked, so the check and update-ref use the same old commit.
-    const old = git(worktree, "rev-parse", branch);
-    if (!gitSucceeds(worktree, "merge-base", "--is-ancestor", old, commit)) {
-      return { cause: `${branch} has commits that ${short} lacks, so it cannot fast-forward`, recovery: `bring them into branch ${run.state.branch}, then run \`${resume}\`` };
-    }
-    git(worktree, "update-ref", `refs/heads/${branch}`, commit, old);
+    git(worktree, "update-ref", `refs/heads/${branch}`, commit, git(worktree, "rev-parse", branch));
     progress(`${stage}: fast-forwarded ${branch} to ${short}`);
     return undefined;
   }
@@ -278,7 +273,7 @@ function fastForward(run: Run, stage: Stage, commit: string): Halt | undefined {
     git(checkout, "merge", "--quiet", "--ff-only", "--no-overwrite-ignore", commit);
   } catch (error) {
     progress(`${stage}: fast-forward of ${branch} failed`);
-    return { cause: `fast-forwarding ${branch} to ${short} in checkout ${checkout} failed: ${gitMessage(error)}`, recovery: `clear what Git names in ${checkout}, then run \`${resume}\`` };
+    return { cause: `fast-forwarding ${branch} to ${short} in checkout ${checkout} failed: ${gitMessage(error)}`, recovery: `clear what Git names in ${checkout}, then run \`loop resume ${run.state.change}\`` };
   }
   progress(`${stage}: fast-forwarded ${branch} to ${short} in checkout ${checkout}`);
   return undefined;
