@@ -76,7 +76,7 @@ Alternatives considered:
 **Checkout rules for the default branch.** `git worktree list --porcelain` names every checkout holding `refs/heads/<defaultBranch>`. A checkout is clean when `git status --porcelain --untracked-files=no` prints nothing. Untracked files do not count, because a worktrees directory inside a checkout that Git does not ignore shows as untracked, which the contract allows. Fast-forwarding the default branch to commit `C` works like this:
 
 - **When a checkout holds the branch,** the loop runs `git merge --ff-only --no-overwrite-ignore C` in that checkout, so its files follow. Git refuses when the fast-forward would overwrite an untracked file, ignored ones included because of `--no-overwrite-ignore`, which Git otherwise overwrites silently. That failed fast-forward stops the run, and the recovery asks the person to move the named file.
-- **When no checkout holds it,** the loop runs `git update-ref refs/heads/<defaultBranch> C <old>`. Both callers have already checked that `C` contains the branch: integration only fast-forwards a branch that is behind, and delivery checks first.
+- **When no checkout holds it,** the loop reads the branch's commit once, checks with `git merge-base --is-ancestor` that `C` contains it, and runs `git update-ref refs/heads/<defaultBranch> C <old>` with that same commit as `<old>`. The callers' earlier checks do not suffice: delivery pushes in between, and the branch may move meanwhile.
 
 Each fast-forward prints `<stage>: fast-forwarded main to 1a2b3c4 in checkout <path>`, or without the checkout part when no checkout holds the branch.
 

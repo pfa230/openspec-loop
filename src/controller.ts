@@ -175,8 +175,8 @@ async function integration(run: Run): Promise<Halt | typeof REPLAN | undefined> 
         progress(`integration: rebased onto ${name} at ${at}`);
       } catch (error) {
         const files = conflicted(worktree);
-        git(worktree, "rebase", "--abort");
         if (files.length === 0) throw new Error(`\`git rebase ${name}\` failed: ${gitMessage(error)}`);
+        git(worktree, "rebase", "--abort");
         progress(`integration: rebase onto ${name} conflicts; merging instead`);
         merge = true;
       }
@@ -256,15 +256,20 @@ function dirtyHolder(run: Run): Halt | undefined {
   };
 }
 
-// Fast-forwards the local default branch to commit, which callers have checked contains it, moving the files
-// of the checkout that holds it.
+// Fast-forwards the local default branch to commit, moving the files of the checkout that holds it.
 function fastForward(run: Run, stage: Stage, commit: string): Halt | undefined {
   const { worktree } = run.state;
   const branch = run.setup.config.defaultBranch;
   const short = git(worktree, "rev-parse", "--short=7", commit);
   const [checkout] = checkoutsHolding(worktree, branch);
+  const resume = `loop resume ${run.state.change}`;
   if (checkout === undefined) {
-    git(worktree, "update-ref", `refs/heads/${branch}`, commit, git(worktree, "rev-parse", branch));
+    // The branch may have moved since the caller looked, so the check and update-ref use the same old commit.
+    const old = git(worktree, "rev-parse", branch);
+    if (!gitSucceeds(worktree, "merge-base", "--is-ancestor", old, commit)) {
+      return { cause: `${branch} has commits that ${short} lacks, so it cannot fast-forward`, recovery: `bring them into branch ${run.state.branch}, then run \`${resume}\`` };
+    }
+    git(worktree, "update-ref", `refs/heads/${branch}`, commit, old);
     progress(`${stage}: fast-forwarded ${branch} to ${short}`);
     return undefined;
   }
@@ -273,7 +278,7 @@ function fastForward(run: Run, stage: Stage, commit: string): Halt | undefined {
     git(checkout, "merge", "--quiet", "--ff-only", "--no-overwrite-ignore", commit);
   } catch (error) {
     progress(`${stage}: fast-forward of ${branch} failed`);
-    return { cause: `fast-forwarding ${branch} to ${short} in checkout ${checkout} failed: ${gitMessage(error)}`, recovery: `clear what Git names in ${checkout}, then run \`loop resume ${run.state.change}\`` };
+    return { cause: `fast-forwarding ${branch} to ${short} in checkout ${checkout} failed: ${gitMessage(error)}`, recovery: `clear what Git names in ${checkout}, then run \`${resume}\`` };
   }
   progress(`${stage}: fast-forwarded ${branch} to ${short} in checkout ${checkout}`);
   return undefined;
@@ -356,7 +361,7 @@ function urls(transcript: string): string[] {
 // The change's proposal under the archive, taking the newest when the change was archived more than once.
 function archivedProposal(worktree: string, change: string): string {
   const archive = join(worktree, "openspec/changes/archive");
-  const [newest] = readdirSync(archive).filter((name) => name.endsWith(`-${change}`)).sort().reverse();
+  const [newest] = readdirSync(archive).filter((name) => /^\d{4}-\d{2}-\d{2}-/.test(name) && name.slice(11) === change).sort().reverse();
   return join(archive, newest, "proposal.md");
 }
 

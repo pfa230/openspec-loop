@@ -41,6 +41,10 @@ test("local mode pushes nothing and leaves the default branch alone", (t) => {
 
 test("pr mode pushes the branch without an upstream and opens a pull request described by the proposal", (t) => {
   const repo = makeRepo(t, { delivery: "pr" });
+  // An archived change whose name ends like this one's must not supply the body.
+  writeFile(repo.top, "openspec/changes/archive/2026-12-31-other-add-thing/proposal.md", "## Why\n\nOther.\n");
+  repo.git("add", ".");
+  repo.git("commit", "--quiet", "-m", "other change");
   const origin = repo.addOrigin();
   const main = repo.git("rev-parse", "main");
   const result = runLoop(repo, ["run", "add-thing"]);
