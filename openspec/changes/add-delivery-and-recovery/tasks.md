@@ -56,12 +56,12 @@
 
 ## 5. Real acceptance
 
-- [ ] 5.1 In disposable local repositories with real OpenSpec 1.14.0, a bare `origin` and stub or real agents, run one change through `local` and through `merge`. Then make one `merge` run hit a conflict that the implementer resolves. Verify:
+- [x] 5.1 In disposable local repositories with real OpenSpec 1.14.0, a bare `origin` and stub or real agents, run one change through `local` and through `merge`. Then make one `merge` run hit a conflict that the implementer resolves. Verify:
   - `local` leaves `main` untouched.
   - `merge` fast-forwards and pushes `main`.
   - The conflict run ends with a merge commit and a reviewed resolution.
   - A dirty checkout, unpushed commits, a diverged branch and a rejected push each stop with their cause.
-- [ ] 5.2 Create a private disposable GitHub repository with `gh repo create`, then run one change through `pr` mode against it. Interrupt the run with `loop stop` during delivery and resume it. Verify that one pull request is open against the default branch, its body is the archived proposal, and local `main` is unchanged. Report the repository's URL so pfa can delete it
+- [x] 5.2 Create a private disposable GitHub repository with `gh repo create`, then run one change through `pr` mode against it. Interrupt the run with `loop stop` during delivery and resume it. Verify that one pull request is open against the default branch, its body is the archived proposal, and local `main` is unchanged. Report the repository's URL so pfa can delete it
 
 ## 6. Final checks
 
