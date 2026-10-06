@@ -17,10 +17,10 @@
 
 ## 3. Totals by role
 
-- [ ] 3.1 Add `usageTotals()` to `src/controller.ts` as design.md decision 6 describes, and print its block after the locations in both the stopped and the completed report. Verify with a stub-agent test whose configuration sets `attempts.implementation: 1`:
+- [x] 3.1 Add `usageTotals()` to `src/controller.ts` as design.md decision 6 describes, and print its block after the locations in both the stopped and the completed report. Verify with a stub-agent test whose configuration sets `attempts.implementation: 1`:
   - **First advancement.** The reviewer approves with usage `{"tokens":{"in":10},"costUsd":0.5}`, the implementer writes `{"tokens":{"in":1},"costUsd":0.25}`, and the verifier returns one blocking finding with `{"tokens":{"in":2}}`. The run stops, and the stopped report's block reads `proposalReviewer: 1 step; in=10, cost $0.5`, `implementer: 1 step; in=1, cost $0.25` and `implementationReviewer: 1 step; in=2, cost unavailable`.
   - **Resume.** Proposal review is complete, so only the implementer and verifier run. The implementer writes `{"tokens":{"in":3}}`, and the verifier approves without a usage file. The completed report's block reads `proposalReviewer: 1 step; in=10, cost $0.5`, `implementer: 2 steps; in=4, cost $0.25, 1 step without cost` and `implementationReviewer: 2 steps, 1 without usage; in=2, cost unavailable`, and has no `planReviser` line
-- [ ] 3.2 Document the totals in `README.md`'s description of the report. Verify by reading it against design.md decision 6
+- [x] 3.2 Document the totals in `README.md`'s description of the report. Verify by reading it against design.md decision 6
 
 ## 4. Supervised diagnosis
 

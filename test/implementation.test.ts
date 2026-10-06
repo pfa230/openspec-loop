@@ -392,3 +392,33 @@ for (const [name, script] of [
     assert.equal(repo.calls("implementer").length, 0);
   });
 }
+
+test("the reports total each role's usage and cost over every worker step of every advancement", (t) => {
+  const repo = makeRepo(t);
+  configure(repo, "attempts:\n  implementation: 1\n");
+  repo.queue("reviewer", { usage: { tokens: { in: 10 }, costUsd: 0.5 } });
+  repo.queue("implementer", { usage: { tokens: { in: 1 }, costUsd: 0.25 } }, { usage: { tokens: { in: 3 } } });
+  repo.queue("verifier", { reply: { findings: [finding("blocking", "not done")] }, usage: { tokens: { in: 2 } } });
+  const stopped = runLoop(repo, ["run", "add-thing"]);
+  assert.equal(stopped.status, 1, stopped.stdout);
+  assert.ok(
+    stopped.stdout.endsWith(
+      "Usage by role:\n" +
+        "  proposalReviewer: 1 step; in=10, cost $0.5\n" +
+        "  implementer: 1 step; in=1, cost $0.25\n" +
+        "  implementationReviewer: 1 step; in=2, cost unavailable\n",
+    ),
+    stopped.stdout,
+  );
+  const resumed = runLoop(repo, ["resume", "add-thing"]);
+  assert.equal(resumed.status, 0, resumed.stdout);
+  assert.ok(
+    resumed.stdout.endsWith(
+      "Usage by role:\n" +
+        "  proposalReviewer: 1 step; in=10, cost $0.5\n" +
+        "  implementer: 2 steps; in=4, cost $0.25, 1 step without cost\n" +
+        "  implementationReviewer: 2 steps, 1 without usage; in=2, cost unavailable\n",
+    ),
+    resumed.stdout,
+  );
+});

@@ -102,6 +102,16 @@ The commands work from any checkout of the repository:
 
 When a worker step ends, its progress line names the agent and what the harness reported it spent, such as `(gpt; input_tokens=16641, cached_input_tokens=0, output_tokens=59, reasoning_output_tokens=21, cost unavailable)`. The counters and cost are exactly what the harness reported. A value it did not report reads `unavailable`, never zero, and `usage unavailable` means it reported nothing.
 
+The report at the end of `loop run` and `loop resume`, whether the run completed or stopped, totals the usage by role over every worker step the run has had, across every resume:
+
+```
+Usage by role:
+  proposalReviewer: 2 steps; input_tokens=33282, cached_input_tokens=0, output_tokens=118, reasoning_output_tokens=42, cost unavailable
+  implementer: 3 steps, 1 without usage; input_tokens=27, cache_creation_input_tokens=90210, cache_read_input_tokens=401177, output_tokens=5120, cost $1.2034117, 1 step without cost
+```
+
+Each counter is summed by name. `without usage` counts the steps that reported nothing, such as a turn stopped before its harness reported. When only some of a role's steps reported a cost, the line says how many did not; when none did, the cost is unavailable. If a role's agent changes between resumes, its totals add up the counters of both harnesses under any name they share.
+
 A run accepts one advancement at a time. If the process advancing it dies, `loop resume` takes the run over and redoes the step that was in progress.
 
 Each run keeps its state in the repository's Git directory, at `.git/openspec-loop/<change>/` in a regular clone: `state.json` and the transcripts of every step under `transcripts/`. A run started on the default branch works in its worktree under `worktrees`. The report and `loop status` print the exact paths. To discard a run and start over, note the `Worktree` and `Run directory` lines of `loop status <change>`, then:
