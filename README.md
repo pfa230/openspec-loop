@@ -100,14 +100,14 @@ rm -rf "<run directory>"
 The first stage reviews the plan: the change's proposal, design, spec deltas and tasks.
 
 - **The review.** The proposal reviewer judges whether the whole plan can be implemented and verified as one change without asking you, and whether it keeps the decisions recorded in its design. It reports each problem as blocking or minor. A minor finding is a local fix, such as a typo or a wrong path, that cannot change behavior or a recorded decision.
-- **The verdict.** It follows from the findings: any blocking finding is `REVISE`; otherwise the verdict is `APPROVE`. Each review's verdict, findings and plan digest are kept as `NNN-proposal-review.verdict.json` in the transcripts.
+- **The verdict.** It follows from the findings: any blocking finding is `REVISE`; otherwise the verdict is `APPROVE`. Each review's verdict and findings are kept as `NNN-proposal-review.verdict.json` in the transcripts.
 - **Revision.** On `REVISE`, the plan reviser revises the plan in a fresh context, the loop commits the change directory on the run's branch, and the plan is reviewed again.
 - **Minor fixes.** On `APPROVE` with minor findings, the plan reviser applies them, the loop commits them, and implementation starts without another review.
-- **Approval.** It covers the plan as it then stands. Ticking a task box keeps it. Any other edit to the change directory voids it, and the next stage boundary or resume reviews the plan again.
+- **Approval.** It covers the plan as it then stands. The loop does not check the plan again for edits you make: if you change it by hand while the run is stopped, the run resumes where it stopped, and verifying the edit is up to you.
 - **Decisions.** When a finding needs a decision the plan does not record, the run stops with the reviewer's question before revising anything. Answer it by recording the decision in the design in the run's worktree, committing it on the run's branch, and running `loop resume <change>`. The report names the worktree and the branch.
 - **Attempts.** Each review uses one attempt. When the last allowed review is `REVISE`, the run stops after that review's revision. Every resume starts a fresh budget; `loop resume <change> --attempts 1` gives exactly one more review.
 
-A worker that exits nonzero, is killed, or writes a missing or malformed reply stops the run as an execution failure; the report names its transcript and reply. A run started before proposal review became real reviews its plan again when resumed.
+A worker that exits nonzero, is killed, or writes a missing or malformed reply stops the run as an execution failure; the report names its transcript and reply.
 
 ### Implementation
 
@@ -117,19 +117,26 @@ Once the plan is approved, the implementation stage runs without you, in attempt
 - **The checks.** Every required check runs, in order, even after one fails. A failed check is not a failure of the run: its exit status and the end of its output become a finding for the next attempt, kept as `NNN-checks.findings.json` in the transcripts, and review waits until the checks pass. The implementer fixes only failures the change caused, so a check that already fails on the base fails until attempts run out.
 - **The review.** The implementation reviewer judges whether the patch implements the whole approved plan, stays within it and keeps the decisions in the design. The verdict follows from the findings as in proposal review, and is kept as `NNN-implementation-review.verdict.json` with the base and candidate commits it covers. `REVISE` starts the next attempt on the review's findings.
 - **Minor fixes.** On `APPROVE` with minor findings, the implementer applies them, the checks run again, and the stage completes without another review. If a check fails after the fixes, the approval lapses and the next attempt runs a full round.
-- **Plan problems.** When the implementer reports that the plan needs a change, the plan reviser revises the plan and it returns to proposal review. When the implementer edits the plan beyond ticking boxes, the edited plan returns to proposal review directly. Either way, implementation continues after the plan is approved again, with the same attempt count.
+- **Plan problems.** When the implementer reports that the plan needs a change, the plan reviser revises the plan and it returns to proposal review. Implementation continues after the plan is approved again, with the same attempt count. The implementer may tick task boxes but not change the plan itself: a turn that edits the plan otherwise stops the run, and the report names the turn's commit. Revert that commit's plan changes on the run's branch and resume. The loop compares the plan before and after each turn, so a turn interrupted before it ends is not checked.
 - **Decisions.** A review finding that needs a decision the plan does not record stops the run, as in proposal review. Record the decision in the design, commit it, and resume; the plan is reviewed again first.
 - **Attempts.** When the last allowed attempt ends with failed checks or `REVISE`, the run stops and names the findings. Resume starts with an implementer turn on those findings and a fresh budget, or `--attempts <n>`. A resume after a stop in the middle of an attempt also starts with an implementer turn, so a stop during checks or review costs one extra turn.
 
-Changes you leave uncommitted in the run's worktree while the run is stopped are committed with the next implementer turn and become part of the patch. They are checked, and reviewed unless that turn applies minor fixes, which complete without another review. A run started before implementation became real treated it as a fixture and may skip it on resume: discard such a run as described above and start it again.
+Changes you leave uncommitted in the run's worktree while the run is stopped are committed with the next implementer turn and become part of the patch. They are checked, and reviewed unless that turn applies minor fixes, which complete without another review. A run started before proposal review or implementation became real treated them as fixtures and may skip them on resume: discard such a run as described above and start it again.
+
+### Archive
+
+After integration, the loop archives the change by running `openspec archive <change> --yes` in the run's worktree. OpenSpec validates the change, applies its spec deltas to the main specs under `openspec/specs/`, and moves the change to `openspec/changes/archive/<date>-<change>/`. The loop commits the result on the run's branch as `<change>: archive`. OpenSpec's output is kept as `NNN-archive.log` in the transcripts.
+
+When OpenSpec refuses, for example because a spec delta fails validation or names a requirement the main spec lacks, the run stops at archive and commits nothing; the report names the transcript. Fix the change in the run's worktree, commit the fix on the run's branch, and run `loop resume <change>`. Resume runs the archive again without reviewing the fix.
+
+If a run is stopped or dies after OpenSpec archived the change but before the loop committed it, resume fails because OpenSpec no longer finds the change. Undo the uncommitted archive in the run's worktree with `git restore --source=HEAD --staged --worktree openspec` and `git clean -fd openspec/changes/archive`, then resume.
 
 ### Fixture stages
 
-Integration, archive and delivery do no real work yet. Until later build steps replace them, each runs a shell command from a fixture file named by `LOOP_FIXTURE`, and every progress line and report marks the outcome `fixture`:
+Integration and delivery do no real work yet. Until later build steps replace them, each runs a shell command from a fixture file named by `LOOP_FIXTURE`, and every progress line and report marks the outcome `fixture`:
 
 ```yaml
 integration: "sleep 20"
-archive: "true"
 delivery: "true"
 ```
 

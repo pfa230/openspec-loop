@@ -12,7 +12,7 @@
 
 - [x] 3.1 Give the test `openspec` stub the `archive` branch from design.md and a `Repo` method that creates its refusal marker. Remove `archive` from `FIXTURE_STAGES` in `src/fixture.ts` and from the helpers' fixture list. Verify that the updated fixture tests name `integration` and `delivery`, and that the completion report and `loop status` say "Stages integration and delivery were fixtures and did no real work."
 - [x] 3.2 Make the archive stage real as design.md describes: run `openspec archive <change> --yes` in the run's worktree, commit the worktree as `<change>: archive`, stop on a refusal with the cause and recovery, and print the progress lines. Print `<stage>: complete` without `(fixture)` for every non-fixture stage. Verify with stub tests that a full run prints `archive: started`, `archive: committed <hash>` and `archive: complete`, that the run's branch ends with an `add-thing: archive` commit holding the moved change, and that a refused archive stops at `archive` with no new commit. After the marker is removed, resume archives. Update the tests that take the branch tip for a revision, fix or candidate commit, or that list the run's commits (`test/stage.test.ts`, `test/implementation.test.ts`, and `test/enrollment.test.ts`'s committing fixture and branch-tip checks), to select those commits by subject instead. Verify that a run stopped at the delivery fixture resumes to completion after archival has moved the change directory
-- [ ] 3.3 Document in `README.md`:
+- [x] 3.3 Document in `README.md`:
   - the archive stage, its commit and its refusal recovery
   - that an implementer editing the plan stops the run
   - that edits made by hand while a run is stopped are not reviewed again
