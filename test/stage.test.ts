@@ -37,11 +37,11 @@ test("REVISE, a revision and an approving review advance to implementation witho
   const revision = commitWith(repo, "add-thing: revise plan");
   assert.deepEqual(lines(result.stdout).slice(0, 8), [
     "proposal-review: review 1 of 3 started (reviewer)",
-    "proposal-review: review 1 of 3 REVISE, 1 blocking, 0 minor (reviewer)",
+    "proposal-review: review 1 of 3 REVISE, 1 blocking, 0 minor (reviewer; usage unavailable)",
     "proposal-review: plan revision started (reviser)",
-    `proposal-review: plan revision committed ${revision} (reviser)`,
+    `proposal-review: plan revision committed ${revision} (reviser; usage unavailable)`,
     "proposal-review: review 2 of 3 started (reviewer)",
-    "proposal-review: review 2 of 3 APPROVE, 0 blocking, 0 minor (reviewer)",
+    "proposal-review: review 2 of 3 APPROVE, 0 blocking, 0 minor (reviewer; usage unavailable)",
     "proposal-review: complete",
     "implementation: attempt 1 of 3, implementer started (implementer)",
   ]);
@@ -70,9 +70,9 @@ test("APPROVE with minor findings applies them and reviews no further", (t) => {
   assert.equal(result.status, 0, result.stdout);
   const fix = commitWith(repo, "add-thing: apply minor plan fixes");
   assert.deepEqual(lines(result.stdout).slice(1, 5), [
-    "proposal-review: review 1 of 3 APPROVE, 0 blocking, 1 minor (reviewer)",
+    "proposal-review: review 1 of 3 APPROVE, 0 blocking, 1 minor (reviewer; usage unavailable)",
     "proposal-review: minor plan fixes started (reviser)",
-    `proposal-review: minor plan fixes committed ${fix} (reviser)`,
+    `proposal-review: minor plan fixes committed ${fix} (reviser; usage unavailable)`,
     "proposal-review: complete",
   ]);
   assert.equal(repo.calls("reviewer").length, 1);
@@ -84,7 +84,7 @@ test("one blocking finding among minor ones is REVISE", (t) => {
   repo.queue("reviewer", { reply: { findings: [finding("minor", "a"), finding("blocking", "b"), finding("minor", "c")] } });
   repo.queue("reviser", { edits: { [DESIGN]: "x\n" } });
   const result = runLoop(repo, ["run", "add-thing"]);
-  assert.match(result.stdout, /review 1 of 3 REVISE, 1 blocking, 2 minor \(reviewer\)/);
+  assert.match(result.stdout, /review 1 of 3 REVISE, 1 blocking, 2 minor \(reviewer; usage unavailable\)/);
   assert.equal(record(repo, "001-proposal-review").verdict, "REVISE");
 });
 
@@ -93,7 +93,7 @@ test("a revision that changes nothing makes no commit", (t) => {
   repo.queue("reviewer", { reply: { findings: [finding("blocking", "no design")] } });
   const result = runLoop(repo, ["run", "add-thing"]);
   assert.equal(result.status, 0);
-  assert.match(result.stdout, /\] proposal-review: plan revision made no changes \(reviser\)\n/);
+  assert.match(result.stdout, /\] proposal-review: plan revision made no changes \(reviser; usage unavailable\)\n/);
   assert.deepEqual(subjects(repo), ["add-thing: archive"]);
 });
 
@@ -186,7 +186,7 @@ for (const [verdict, findings, step] of [
     assert.equal(runLoop(repo, ["stop", "add-thing"]).status, 0);
     const stopped = await running.exited;
     assert.equal(stopped.status, 1);
-    assert.match(stopped.stdout, new RegExp(`\\] proposal-review: ${step} stopped by the user \\(reviser\\)\\n`));
+    assert.match(stopped.stdout, new RegExp(`\\] proposal-review: ${step} stopped by the user \\(reviser; usage unavailable\\)\\n`));
     assert.match(state(repo).owedReview, /001-proposal-review\.verdict\.json$/);
 
     const resumed = runLoop(repo, ["resume", "add-thing"]);
@@ -207,7 +207,7 @@ test("a plan reviser failure stops the run without relaunching it", (t) => {
   repo.queue("reviser", { exit: 4 });
   const result = runLoop(repo, ["run", "add-thing"]);
   assert.equal(result.status, 1);
-  assert.match(result.stdout, /Cause: execution failure of planReviser agent "reviser": exit status 4\n/);
+  assert.match(result.stdout, /Cause: execution failure of planReviser agent "reviser" in plan revision: exit status 4\n/);
   assert.equal(repo.calls("reviser").length, 1);
 });
 

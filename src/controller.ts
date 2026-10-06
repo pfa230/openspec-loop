@@ -18,7 +18,7 @@ import {
   reviewPrompt,
 } from "./prompts.js";
 import { releaseLock, STAGES, type RunState, type Stage, writeState } from "./state.js";
-import { nextStep, readReply, runStep, startWorker, type Step, type StepResult } from "./step.js";
+import { nextStep, readReply, readUsage, runStep, startWorker, type Step, type StepResult, type Usage, type WorkerFiles } from "./step.js";
 
 export function progress(message: string): void {
   const time = new Date().toTimeString().slice(0, 8);
@@ -421,7 +421,7 @@ async function proposalReview(run: Run): Promise<Halt | undefined> {
     const record: Verdict = { verdict: blocking > 0 ? "REVISE" : "APPROVE", findings };
     const recordPath = `${base}.verdict.json`;
     writeFileSync(recordPath, `${JSON.stringify(record, null, 2)}\n`);
-    progress(`proposal-review: ${label} ${record.verdict}, ${blocking} blocking, ${findings.length - blocking} minor (${setup.agents.proposalReviewer.alias})`);
+    progress(`proposal-review: ${label} ${record.verdict}, ${blocking} blocking, ${findings.length - blocking} minor ${reply.tag}`);
 
     const questions = decisionStop(state, `review ${review}`, findings, recordPath);
     if (questions) return questions;
@@ -458,14 +458,13 @@ async function reviserTurn(run: Run, record: Verdict): Promise<Halt | undefined>
   if ("cause" in reply) return reply;
   const dir = changeDir(state.change);
   git(state.worktree, "add", "--all", "--", dir);
-  const alias = run.setup.agents.planReviser.alias;
   if (git(state.worktree, "status", "--porcelain", "--", dir) === "") {
-    progress(`proposal-review: ${label} made no changes (${alias})`);
+    progress(`proposal-review: ${label} made no changes ${reply.tag}`);
     return undefined;
   }
   const message = fix ? `${state.change}: apply minor plan fixes` : `${state.change}: revise plan`;
   git(state.worktree, "commit", "--quiet", "-m", message, "--", dir);
-  progress(`proposal-review: ${label} committed ${git(state.worktree, "rev-parse", "--short=7", "HEAD")} (${alias})`);
+  progress(`proposal-review: ${label} committed ${git(state.worktree, "rev-parse", "--short=7", "HEAD")} ${reply.tag}`);
   return undefined;
 }
 
@@ -549,16 +548,16 @@ async function implementerTurn(run: Run, at: string, findings: Finding[], fix: b
   // A merge integration left in progress is concluded with Git's message, even when the resolution changed nothing.
   const concluding = merging(state.worktree);
   if (!concluding && git(state.worktree, "status", "--porcelain") === "") {
-    progress(`implementation: ${label} made no changes (${alias})`);
+    progress(`implementation: ${label} made no changes ${reply.tag}`);
   } else {
     const message = fix ? "apply minor implementation fixes" : findings.length > 0 ? "revise implementation" : "implement";
     if (concluding) git(state.worktree, "commit", "--quiet", "--no-edit");
     else git(state.worktree, "commit", "--quiet", "-m", `${state.change}: ${message}`);
-    progress(`implementation: ${label} committed ${git(state.worktree, "rev-parse", "--short=7", "HEAD")} (${alias})`);
+    progress(`implementation: ${label} committed ${git(state.worktree, "rev-parse", "--short=7", "HEAD")} ${reply.tag}`);
   }
   if (planDigest(state.worktree, state.change) !== plan) {
     const commit = git(state.worktree, "rev-parse", "--short=7", "HEAD");
-    progress(`implementation: ${label} changed the plan (${alias})`);
+    progress(`implementation: ${label} changed the plan ${reply.tag}`);
     return {
       cause: `failure of implementer agent "${alias}": it changed the plan beyond ticking task boxes in commit ${commit}`,
       recovery: `revert the plan changes of ${commit} in worktree ${state.worktree} on branch ${state.branch}, then run \`loop resume ${state.change}\``,
@@ -626,11 +625,12 @@ async function implementationReview(run: Run, at: string): Promise<{ record: Fin
   const record = { verdict: blocking > 0 ? ("REVISE" as const) : ("APPROVE" as const), base, commit, findings };
   const path = `${step}.verdict.json`;
   writeFileSync(path, `${JSON.stringify(record, null, 2)}\n`);
-  progress(`implementation: ${label} ${record.verdict}, ${blocking} blocking, ${findings.length - blocking} minor (${setup.agents.implementationReviewer.alias})`);
+  progress(`implementation: ${label} ${record.verdict}, ${blocking} blocking, ${findings.length - blocking} minor ${reply.tag}`);
   return { record, path };
 }
 
-// Runs one worker turn of a role and returns its checked reply, or why the run must stop.
+// Runs one worker turn of a role and returns its checked reply with the suffix that ends its end line
+// (the agent's alias and the turn's usage), or why the run must stop.
 async function work<T>(
   run: Run,
   stage: Stage,
@@ -640,32 +640,55 @@ async function work<T>(
   prompt: string,
   schema: object,
   check: (value: unknown) => value is T,
-): Promise<{ value: T } | Halt> {
+): Promise<{ value: T; tag: string } | Halt> {
   const agent = run.setup.agents[role];
   if (run.stopping()) return { cause: USER_STOP };
   progress(`${stage}: ${label} started (${agent.alias})`);
-  let problem: string;
-  let files: { transcript: string; reply: string } | undefined;
+  let problem: string | undefined;
+  let files: WorkerFiles | undefined;
+  let exit: StepResult | undefined;
   try {
     const worker = startWorker(agent.command, run.state.worktree, base, prompt, schema);
     files = worker.files;
-    const { code, signal } = await run.exec(worker.step);
-    if (run.stopping()) {
-      progress(`${stage}: ${label} ${USER_STOP} (${agent.alias})`);
-      return { cause: USER_STOP };
-    }
-    if (code !== 0) problem = code === null ? `signal ${signal}` : `exit status ${code}`;
-    else {
-      const reply = readReply(files.reply, check);
-      if ("value" in reply) return reply;
-      problem = reply.problem;
-    }
+    exit = await run.exec(worker.step);
   } catch (error) {
     problem = (error as Error).message;
   }
-  progress(`${stage}: ${label} execution failure, ${problem} (${agent.alias})`);
-  const where = files ? `\nTranscript: ${files.transcript}\nReply: ${files.reply}` : "";
-  return { cause: `execution failure of ${role} agent "${agent.alias}": ${problem}${where}` };
+  const usage = files ? readUsage(files.usage) : {};
+  const tag = `(${agent.alias}; ${"problem" in usage ? "usage unavailable" : usageText(usage.usage)})`;
+  if (exit && run.stopping()) {
+    progress(`${stage}: ${label} ${USER_STOP} ${tag}`);
+    return { cause: USER_STOP };
+  }
+  if (exit && files) {
+    if (exit.code !== 0) problem = exit.code === null ? `signal ${exit.signal}` : `exit status ${exit.code}`;
+    else {
+      const reply = readReply(files.reply, check);
+      if ("problem" in reply) problem = reply.problem;
+      else if (!("problem" in usage)) return { value: reply.value, tag };
+    }
+  }
+  problem = [problem, "problem" in usage ? usage.problem : undefined].filter((part) => part !== undefined).join("; ");
+  progress(`${stage}: ${label} execution failure, ${problem} ${tag}`);
+  const where = files ? `\nTranscript: ${files.transcript}\nReply: ${files.reply}\nUsage: ${files.usage}` : "";
+  return { cause: `execution failure of ${role} agent "${agent.alias}" in ${label}: ${problem}${where}` };
+}
+
+// A step's usage for its end line: its token counters and cost as the harness reported them.
+function usageText(usage: Usage | undefined): string {
+  if (!hasTokens(usage?.tokens) && usage?.costUsd === undefined) return "usage unavailable";
+  return `${tokensText(usage?.tokens)}, ${usage?.costUsd === undefined ? "cost unavailable" : `cost $${usage.costUsd}`}`;
+}
+
+function hasTokens(tokens: Record<string, number> | undefined): tokens is Record<string, number> {
+  return tokens !== undefined && Object.keys(tokens).length > 0;
+}
+
+function tokensText(tokens: Record<string, number> | undefined): string {
+  if (!hasTokens(tokens)) return "tokens unavailable";
+  return Object.entries(tokens)
+    .map(([name, count]) => `${name}=${count}`)
+    .join(", ");
 }
 
 function stop(dir: string, state: RunState, stage: Stage, halt: Halt): number {

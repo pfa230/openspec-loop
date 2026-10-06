@@ -7,13 +7,13 @@ import { REVIEW_SCHEMA } from "../src/prompts.js";
 import { nextStep } from "../src/step.js";
 import { makeRepo, runLoop, type Turn } from "./helpers.js";
 
-test("a worker gets the prompt, schema and reply paths last and runs in the run's worktree", (t) => {
+test("a worker gets the prompt, schema, reply and usage paths last and runs in the run's worktree", (t) => {
   const repo = makeRepo(t);
   const result = runLoop(repo, ["run", "add-thing"]);
   assert.equal(result.status, 0, result.stdout);
   const [call] = repo.calls("reviewer");
   const base = join(repo.runDir(), "transcripts", "001-proposal-review");
-  assert.deepEqual(call.args, ["reviewer", `${base}.prompt.md`, `${base}.schema.json`, `${base}.reply.json`]);
+  assert.deepEqual(call.args, ["reviewer", `${base}.prompt.md`, `${base}.schema.json`, `${base}.reply.json`, `${base}.usage.json`]);
   assert.equal(call.cwd, repo.worktree);
   assert.match(readFileSync(`${base}.prompt.md`, "utf8"), /- openspec\/changes\/add-thing\/proposal\.md\n- openspec\/changes\/add-thing\/tasks\.md\n/);
   assert.deepEqual(JSON.parse(readFileSync(`${base}.schema.json`, "utf8")), REVIEW_SCHEMA);
@@ -26,6 +26,8 @@ const failures: Record<string, [Turn, string]> = {
   "a missing reply": [{ noReply: true }, "the worker wrote no reply"],
   "a reply that is not JSON": [{ raw: "APPROVE" }, "the reply is not JSON"],
   "a reply that does not match the schema": [{ reply: { verdict: "APPROVE" } }, "the reply does not match the schema"],
+  "a usage file that is not JSON": [{ usage: "{" }, "the usage file is not JSON"],
+  "a usage file with an unknown key": [{ usage: { cost: 1 } }, "the usage file does not match the usage format"],
 };
 
 for (const [name, [turn, problem]] of Object.entries(failures)) {
@@ -35,16 +37,36 @@ for (const [name, [turn, problem]] of Object.entries(failures)) {
     const result = runLoop(repo, ["run", "add-thing"]);
     assert.equal(result.status, 1);
     const base = join(repo.runDir(), "transcripts", "001-proposal-review");
-    assert.match(result.stdout, new RegExp(`\\] proposal-review: review 1 of 3 execution failure, ${problem} \\(reviewer\\)\\n`));
+    assert.match(result.stdout, new RegExp(`\\] proposal-review: review 1 of 3 execution failure, ${problem} \\(reviewer; usage unavailable\\)\\n`));
     assert.ok(
       result.stdout.includes(
-        `Cause: execution failure of proposalReviewer agent "reviewer": ${problem}\nTranscript: ${base}.log\nReply: ${base}.reply.json\nRecovery: loop resume add-thing\n`,
+        `Cause: execution failure of proposalReviewer agent "reviewer" in review 1 of 3: ${problem}\nTranscript: ${base}.log\nReply: ${base}.reply.json\nUsage: ${base}.usage.json\nRecovery: loop resume add-thing\n`,
       ),
       result.stdout,
     );
     assert.equal(repo.calls("reviewer").length, 1);
   });
 }
+
+test("a worker step's end line shows its usage and cost as reported, or as unavailable", (t) => {
+  const repo = makeRepo(t);
+  repo.queue("reviewer", { usage: { tokens: { input_tokens: 9, output_tokens: 183 }, costUsd: 0.069788 } });
+  repo.queue("verifier", { usage: { tokens: { input_tokens: 5 } } });
+  const result = runLoop(repo, ["run", "add-thing"]);
+  assert.equal(result.status, 0, result.stdout);
+  assert.match(result.stdout, /\] proposal-review: review 1 of 3 APPROVE, 0 blocking, 0 minor \(reviewer; input_tokens=9, output_tokens=183, cost \$0\.069788\)\n/);
+  assert.match(result.stdout, /\] implementation: attempt 1 of 3, implementer made no changes \(implementer; usage unavailable\)\n/);
+  assert.match(result.stdout, /\] implementation: attempt 1 of 3, review APPROVE, 0 blocking, 0 minor \(verifier; input_tokens=5, cost unavailable\)\n/);
+});
+
+test("a failed worker's usage shows on its execution-failure line, and the cause names the step", (t) => {
+  const repo = makeRepo(t);
+  repo.queue("reviewer", { usage: { tokens: { input_tokens: 7 } }, exit: 3 });
+  const result = runLoop(repo, ["run", "add-thing"]);
+  assert.equal(result.status, 1);
+  assert.match(result.stdout, /\] proposal-review: review 1 of 3 execution failure, exit status 3 \(reviewer; input_tokens=7, cost unavailable\)\n/);
+  assert.match(result.stdout, /Cause: execution failure of proposalReviewer agent "reviewer" in review 1 of 3: exit status 3\n/);
+});
 
 test("step numbers keep increasing past 999", (t) => {
   const dir = mkdtempSync(join(tmpdir(), "loop-steps-"));

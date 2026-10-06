@@ -47,17 +47,61 @@ export interface WorkerFiles {
   prompt: string;
   schema: string;
   reply: string;
+  usage: string;
   transcript: string;
 }
 
 // Starts a worker: writes its prompt and schema, then runs its command with the paths of the prompt,
-// the schema and the reply appended, in the worktree with no input.
+// the schema, the reply and the usage appended, in the worktree with no input.
 export function startWorker(command: string[], cwd: string, base: string, prompt: string, schema: object): { step: Step; files: WorkerFiles } {
-  const files = { prompt: `${base}.prompt.md`, schema: `${base}.schema.json`, reply: `${base}.reply.json`, transcript: `${base}.log` };
+  const files = {
+    prompt: `${base}.prompt.md`,
+    schema: `${base}.schema.json`,
+    reply: `${base}.reply.json`,
+    usage: `${base}.usage.json`,
+    transcript: `${base}.log`,
+  };
   writeFileSync(files.prompt, prompt);
   writeFileSync(files.schema, `${JSON.stringify(schema, null, 2)}\n`);
   const [executable, ...args] = command;
-  return { step: runStep(executable, [...args, files.prompt, files.schema, files.reply], cwd, files.transcript), files };
+  return { step: runStep(executable, [...args, files.prompt, files.schema, files.reply, files.usage], cwd, files.transcript), files };
+}
+
+// What a worker reports its harness spent: token counters under the harness's own names, and a cost in US dollars.
+export interface Usage {
+  tokens?: Record<string, number>;
+  costUsd?: number;
+}
+
+// Reads a worker's usage file. A missing file reports no usage; a malformed one is a problem.
+export function readUsage(path: string): { usage?: Usage } | { problem: string } {
+  let text: string;
+  try {
+    text = readFileSync(path, "utf8");
+  } catch {
+    return {};
+  }
+  let value: unknown;
+  try {
+    value = JSON.parse(text);
+  } catch {
+    return { problem: "the usage file is not JSON" };
+  }
+  return isUsage(value) ? { usage: value } : { problem: "the usage file does not match the usage format" };
+}
+
+function isUsage(value: unknown): value is Usage {
+  if (!isObject(value) || !Object.keys(value).every((key) => key === "tokens" || key === "costUsd")) return false;
+  const { tokens, costUsd } = value;
+  return (tokens === undefined || (isObject(tokens) && Object.values(tokens).every(isCount))) && (costUsd === undefined || isCount(costUsd));
+}
+
+function isObject(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function isCount(value: unknown): boolean {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0;
 }
 
 // Reads a worker's reply and checks it against the step's shape. Returns the reply, or why it is unusable.

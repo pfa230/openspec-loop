@@ -36,6 +36,8 @@ export interface Turn {
   reply?: unknown;
   // Written to the reply file as is, instead of reply.
   raw?: string;
+  // Written to the usage file: an object as JSON, a string as is.
+  usage?: unknown;
   noReply?: boolean;
   exit?: number;
   // Kills the stub with SIGKILL instead of replying.
@@ -62,7 +64,7 @@ function stubAgent(queue: string, log: string): string {
 const fs = require("node:fs");
 const path = require("node:path");
 const args = process.argv.slice(2);
-const [, schema, reply] = args.slice(-3);
+const [, schema, reply, usage] = args.slice(-4);
 fs.appendFileSync(${JSON.stringify(log)}, JSON.stringify({ args, cwd: process.cwd() }) + "\\n");
 const queues = fs.existsSync(${JSON.stringify(queue)}) ? JSON.parse(fs.readFileSync(${JSON.stringify(queue)}, "utf8")) : {};
 const turn = (queues[args[0]] || []).shift() || {};
@@ -78,6 +80,7 @@ for (const [file, content] of Object.entries(turn.edits || {})) {
 console.log("stub " + args[0] + " turn " + JSON.stringify(turn));
 if (turn.sh) require("node:child_process").execSync(turn.sh, { stdio: "inherit" });
 function finish() {
+  if (turn.usage !== undefined) fs.writeFileSync(usage, typeof turn.usage === "string" ? turn.usage : JSON.stringify(turn.usage));
   if (turn.kill) process.kill(process.pid, "SIGKILL");
   if (turn.exit !== undefined) process.exit(turn.exit);
   if (turn.noReply) return;
