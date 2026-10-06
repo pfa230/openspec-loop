@@ -143,7 +143,7 @@ After integration, the loop archives the change by running `openspec archive <ch
 
 When OpenSpec refuses, for example because a spec delta fails validation or names a requirement the main spec lacks, the run stops at archive and commits nothing; the report names the transcript. Fix the change in the run's worktree, commit the fix on the run's branch, and run `loop resume <change>`. Resume runs the archive again without reviewing the fix.
 
-If a run is stopped or dies after OpenSpec archived the change but before the loop committed it, resume fails because OpenSpec no longer finds the change. Undo the uncommitted archive in the run's worktree with `git restore --source=HEAD --staged --worktree openspec` and `git clean -fd openspec/changes/archive`, then resume.
+If a run is stopped or dies after OpenSpec archived the change, resume sees that the change has left `openspec/changes/<change>/`, does not run OpenSpec again, and commits the archive if the loop had not yet. Only an interruption inside `openspec archive` itself can leave its work half done, with the change still in place; resume then fails with OpenSpec's message. Undo the partial archive in the run's worktree with `git restore --source=HEAD --staged --worktree openspec` and `git clean -fd openspec/changes/archive`, then resume.
 
 ### Delivery
 
@@ -158,6 +158,8 @@ When delivery stops, the report says what to fix:
 - **A dirty checkout:** commit or discard its changes, then resume.
 - **Commits on the default branch that the run's branch lacks, or a rejected push because the upstream moved:** bring them into the run's branch in its worktree, then resume.
 - **A failed fast-forward:** clear what Git names in the checkout, such as a file in the way, then resume.
+
+Resume after an interrupted delivery repeats its steps safely. Git does nothing for a push or a fast-forward whose commit is already there, and in `pr` mode the loop reports a pull request that is already open for the run's branch against the upstream branch instead of opening another.
 
 ## Development
 

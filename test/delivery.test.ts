@@ -130,3 +130,34 @@ test("an ignored file in the fast-forward's way survives, and the run stops at d
   assert.equal(readFileSync(join(repo.top, "a.txt"), "utf8"), "mine\n");
   assert.equal(repo.git("rev-parse", "main"), main);
 });
+
+test("resume after the pull request opened reports it and opens no second one", (t) => {
+  const repo = makeRepo(t, { delivery: "pr" });
+  repo.addOrigin();
+  repo.failPrCreate();
+  const result = runLoop(repo, ["run", "add-thing"]);
+  assert.equal(result.status, 1, result.stdout);
+  assert.match(result.stdout, /Run add-thing stopped at delivery\.\nCause: `gh pr create .*` failed with exit status 1:\nhttps:\/\/github\.com\/test\/repo\/pull\/1\n/);
+  repo.failPrCreate(false);
+  const resumed = runLoop(repo, ["resume", "add-thing"]);
+  assert.equal(resumed.status, 0, resumed.stdout);
+  assert.ok(resumed.stdout.includes("] delivery: pull request already open: https://github.com/test/repo/pull/1\n"), resumed.stdout);
+  assert.equal(repo.ghCalls().filter((args) => args[1] === "create").length, 1);
+});
+
+test("resume after a fast-forward failed behind a completed push finishes the delivery", (t) => {
+  const repo = makeRepo(t, { delivery: "merge" });
+  repo.addOrigin();
+  repo.queue("implementer", { edits: { "a.txt": "a\n" } });
+  writeFile(repo.top, "a.txt", "in the way\n");
+  const result = runLoop(repo, ["run", "add-thing"]);
+  assert.equal(result.status, 1, result.stdout);
+  const tip = repo.git("rev-parse", "loop/add-thing");
+  assert.equal(remoteTip(repo, "main"), tip);
+  assert.notEqual(repo.git("rev-parse", "main"), tip);
+  repo.git("clean", "--quiet", "--force", "a.txt");
+  const resumed = runLoop(repo, ["resume", "add-thing"]);
+  assert.equal(resumed.status, 0, resumed.stdout);
+  assert.equal(remoteTip(repo, "main"), tip);
+  assert.equal(repo.git("rev-parse", "main"), tip);
+});

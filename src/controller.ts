@@ -375,21 +375,28 @@ function shortRef(ref: string): string {
 async function archive(run: Run): Promise<Halt | undefined> {
   const { state } = run;
   progress("archive: started");
-  const transcript = `${nextStep(run.dir, "archive")}.log`;
-  const { code, signal } = await run.exec(runStep("openspec", ["archive", state.change, "--yes"], state.worktree, transcript));
-  if (run.stopping()) {
-    progress(`archive: ${USER_STOP}`);
-    return { cause: USER_STOP };
-  }
-  if (code !== 0) {
-    const outcome = code === null ? `signal ${signal}` : `exit status ${code}`;
-    progress(`archive: openspec archive failed, ${outcome}`);
-    return {
-      cause: `\`openspec archive ${state.change}\` failed with ${outcome}\nTranscript: ${transcript}`,
-      recovery: `fix the change in worktree ${state.worktree}, commit it on branch ${state.branch}, then run \`loop resume ${state.change}\``,
-    };
+  // OpenSpec moves the change out of the changes directory, so once it is gone an earlier archive ran,
+  // and at most its commit is missing.
+  if (!existsSync(join(state.worktree, changeDir(state.change)))) {
+    progress("archive: change already archived");
+  } else {
+    const transcript = `${nextStep(run.dir, "archive")}.log`;
+    const { code, signal } = await run.exec(runStep("openspec", ["archive", state.change, "--yes"], state.worktree, transcript));
+    if (run.stopping()) {
+      progress(`archive: ${USER_STOP}`);
+      return { cause: USER_STOP };
+    }
+    if (code !== 0) {
+      const outcome = code === null ? `signal ${signal}` : `exit status ${code}`;
+      progress(`archive: openspec archive failed, ${outcome}`);
+      return {
+        cause: `\`openspec archive ${state.change}\` failed with ${outcome}\nTranscript: ${transcript}`,
+        recovery: `fix the change in worktree ${state.worktree}, commit it on branch ${state.branch}, then run \`loop resume ${state.change}\``,
+      };
+    }
   }
   git(state.worktree, "add", "--all");
+  if (git(state.worktree, "status", "--porcelain") === "") return undefined;
   git(state.worktree, "commit", "--quiet", "-m", `${state.change}: archive`);
   progress(`archive: committed ${git(state.worktree, "rev-parse", "--short=7", "HEAD")}`);
   return undefined;
