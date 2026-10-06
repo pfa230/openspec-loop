@@ -1,6 +1,6 @@
 import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import type { Agent, Config, Role } from "./config.js";
+import { type Agent, type Config, type Role, ROLES } from "./config.js";
 import { type Base, checkoutsHolding, conflicted, git, gitMessage, gitSucceeds, merging, patchId } from "./git.js";
 import { applyInstructions } from "./openspec.js";
 import { changeDir, planDigest, planFiles } from "./plan.js";
@@ -27,6 +27,52 @@ export function progress(message: string): void {
 
 export function locations(dir: string, state: RunState): string {
   return `Worktree: ${state.worktree}\nRun directory: ${dir}\nTranscripts: ${join(dir, "transcripts")}\n`;
+}
+
+// The role whose agent runs each worker step, by step name.
+const STEP_ROLES: Record<string, Role> = {
+  "proposal-review": "proposalReviewer",
+  "plan-revision": "planReviser",
+  "plan-fixes": "planReviser",
+  implementation: "implementer",
+  "implementation-fixes": "implementer",
+  "implementation-review": "implementationReviewer",
+};
+
+// The report's usage block: each role's counters and cost summed over every worker step of the run, in every
+// advancement, with how many steps reported none. Every worker step leaves its prompt among the transcripts.
+function usageTotals(dir: string): string {
+  const transcripts = join(dir, "transcripts");
+  const totals = new Map<Role, { steps: number; withoutUsage: number; tokens: Record<string, number>; costSteps: number; cost: number }>();
+  for (const file of existsSync(transcripts) ? readdirSync(transcripts) : []) {
+    const role = STEP_ROLES[/^\d+-(.+)\.prompt\.md$/.exec(file)?.[1] ?? ""];
+    if (role === undefined) continue;
+    const total = totals.get(role) ?? { steps: 0, withoutUsage: 0, tokens: {}, costSteps: 0, cost: 0 };
+    totals.set(role, total);
+    total.steps++;
+    const read = readUsage(join(transcripts, file.replace(/\.prompt\.md$/, ".usage.json")));
+    const usage = "usage" in read ? read.usage : undefined;
+    if (!hasTokens(usage?.tokens) && usage?.costUsd === undefined) total.withoutUsage++;
+    for (const [name, count] of Object.entries(usage?.tokens ?? {})) total.tokens[name] = (total.tokens[name] ?? 0) + count;
+    if (usage?.costUsd !== undefined) {
+      total.costSteps++;
+      total.cost += usage.costUsd;
+    }
+  }
+  if (totals.size === 0) return "";
+  const lines = ROLES.flatMap((role) => {
+    const total = totals.get(role);
+    if (total === undefined) return [];
+    const missing = total.steps - total.costSteps;
+    const steps = `${plural(total.steps, "step")}${total.withoutUsage > 0 ? `, ${total.withoutUsage} without usage` : ""}`;
+    const cost = total.costSteps === 0 ? "cost unavailable" : `cost $${total.cost}${missing > 0 ? `, ${plural(missing, "step")} without cost` : ""}`;
+    return [`  ${role}: ${steps}; ${tokensText(total.tokens)}, ${cost}\n`];
+  });
+  return `Usage by role:\n${lines.join("")}`;
+}
+
+function plural(count: number, noun: string): string {
+  return `${count} ${noun}${count === 1 ? "" : "s"}`;
 }
 
 // Makes proposal review and every later stage incomplete. Findings owed to the implementer predate the plan
@@ -116,7 +162,7 @@ export async function advance(dir: string, state: RunState, setup: Setup): Promi
       writeState(dir, state);
       progress(`${stage}: complete`);
     }
-    process.stdout.write(`Run ${state.change} completed.\n${locations(dir, state)}`);
+    process.stdout.write(`Run ${state.change} completed.\n${locations(dir, state)}${usageTotals(dir)}`);
     return 0;
   } finally {
     for (const signal of SIGNALS) process.off(signal, onSignal);
@@ -696,7 +742,7 @@ function stop(dir: string, state: RunState, stage: Stage, halt: Halt): number {
   state.stop = { stage, cause: halt.cause, recovery: halt.recovery ?? `loop resume ${state.change}` };
   writeState(dir, state);
   process.stdout.write(
-    `Run ${state.change} stopped at ${stage}.\nCause: ${halt.cause}\nRecovery: ${state.stop.recovery}\n${locations(dir, state)}`,
+    `Run ${state.change} stopped at ${stage}.\nCause: ${halt.cause}\nRecovery: ${state.stop.recovery}\n${locations(dir, state)}${usageTotals(dir)}`,
   );
   return 1;
 }

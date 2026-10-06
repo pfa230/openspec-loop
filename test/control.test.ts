@@ -56,7 +56,7 @@ test("resume after a failure reruns only the failed stage and later ones", (t) =
   const repo = stoppedAtArchive(t);
   const result = runLoop(repo, ["resume", "add-thing"]);
   assert.equal(result.status, 0, result.stderr);
-  assert.doesNotMatch(result.stdout, /proposal-review|implementation|integration/);
+  assert.doesNotMatch(result.stdout, /\] (proposal-review|implementation|integration):/);
   assert.match(result.stdout, /\] archive: started/);
   assert.match(result.stdout, /Run add-thing completed/);
 });
