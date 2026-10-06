@@ -6,4 +6,4 @@
 
 ## 2. Final checks
 
-- [ ] 2.1 Run `openspec validate review-patch-without-plan --strict` and `npm test`, and verify on the pull request with `gh run watch` that CI passes on Linux and macOS
+- [x] 2.1 Run `openspec validate review-patch-without-plan --strict` and `npm test`, and verify on the pull request with `gh run watch` that CI passes on Linux and macOS
