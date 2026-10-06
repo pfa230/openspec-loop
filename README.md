@@ -145,16 +145,19 @@ When OpenSpec refuses, for example because a spec delta fails validation or name
 
 If a run is stopped or dies after OpenSpec archived the change but before the loop committed it, resume fails because OpenSpec no longer finds the change. Undo the uncommitted archive in the run's worktree with `git restore --source=HEAD --staged --worktree openspec` and `git clean -fd openspec/changes/archive`, then resume.
 
-### Fixture stages
+### Delivery
 
-Integration and delivery do no real work yet. Until later build steps replace them, each runs a shell command from a fixture file named by `LOOP_FIXTURE`, and every progress line and report marks the outcome `fixture`:
+The last stage delivers the archived change as `delivery` says. Every action outside the run's worktree gets its own progress line, and the output of each fetch, push and `gh` command is kept in the transcripts.
 
-```yaml
-integration: "sleep 20"
-delivery: "true"
-```
+- **`local`.** Nothing is pushed and the default branch is untouched. The run ends with the archived change committed on the run's branch.
+- **`pr`.** The loop pushes the run's branch to the upstream remote, without setting an upstream for it, and opens a pull request with `gh` against the upstream branch, on the upstream remote's repository. The pull request is titled with the change's name, and its body is the archived proposal. The local default branch is untouched. `gh` must be installed and logged in; if it is missing or fails, the run stops at delivery, and `loop resume <change>` continues after the push it already made.
+- **`merge`.** The loop first checks that the checkout holding the default branch has no uncommitted changes to tracked files and that the run's branch contains the default branch. It then pushes the run's branch tip to the upstream branch and only then fast-forwards the local default branch to it, so a rejected push leaves the local default branch where it was. The fast-forward moves the files of the checkout that holds the default branch, and stops rather than overwrite a file there, ignored files included.
 
-A command that exits 0 completes its stage; any other exit stops the run as an execution failure. `loop run` and `loop resume` refuse when `LOOP_FIXTURE` is unset or does not name every fixture stage.
+When delivery stops, the report says what to fix:
+
+- **A dirty checkout:** commit or discard its changes, then resume.
+- **Commits on the default branch that the run's branch lacks, or a rejected push because the upstream moved:** bring them into the run's branch in its worktree, then resume.
+- **A failed fast-forward:** clear what Git names in the checkout, such as a file in the way, then resume.
 
 ## Development
 

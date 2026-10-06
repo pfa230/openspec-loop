@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 import { makeRepo, runLoop, writeFile } from "./helpers.js";
@@ -35,8 +35,9 @@ for (const branch of [undefined, "add-thing"]) {
         "archive: started",
         `archive: committed ${repo.git("rev-parse", "--short=7", runBranch)}`,
         "archive: complete",
-        "delivery: started (fixture)",
-        "delivery: complete (fixture)",
+        "delivery: started",
+        "delivery: local, nothing pushed",
+        "delivery: complete",
       ],
     );
     assert.equal(repo.git("log", "-1", "--format=%s", runBranch), "add-thing: archive");
@@ -48,7 +49,7 @@ for (const branch of [undefined, "add-thing"]) {
     const report = result.stdout.slice(result.stdout.indexOf("Run add-thing completed"));
     assert.equal(
       report,
-      "Run add-thing completed. Stage delivery was a fixture and did no real work.\n" +
+      "Run add-thing completed.\n" +
         `Worktree: ${worktree}\nRun directory: ${repo.runDir()}\nTranscripts: ${join(repo.runDir(), "transcripts")}\n`,
     );
   });
@@ -100,25 +101,6 @@ test("a repeated stage gets a new transcript", (t) => {
   assert.notEqual(archives[0], archives[1]);
 });
 
-test("run refuses when LOOP_FIXTURE is unset", (t) => {
-  const repo = makeRepo(t);
-  delete repo.env.LOOP_FIXTURE;
-  const result = runLoop(repo, ["run", "add-thing"]);
-  assert.equal(result.status, 2);
-  assert.match(result.stderr, /stage delivery is not implemented yet; set LOOP_FIXTURE/);
-});
-
-test("run refuses a fixture that does not name every stage", (t) => {
-  const repo = makeRepo(t);
-  repo.setFixture({});
-  const path = repo.env.LOOP_FIXTURE!;
-  const lines = readFileSync(path, "utf8").split("\n").filter((line) => !line.startsWith("delivery:"));
-  writeFileSync(path, lines.join("\n"));
-  const result = runLoop(repo, ["run", "add-thing"]);
-  assert.equal(result.status, 2);
-  assert.match(result.stderr, /names no command for delivery/);
-});
-
 test("a refused archive stops the run without a commit, and resume archives once OpenSpec accepts", (t) => {
   const repo = makeRepo(t);
   repo.refuseArchive();
@@ -160,11 +142,3 @@ test("a step killed by a signal is an execution failure naming the signal", (t) 
   assert.match(result.stdout, /Cause: execution failure of implementer agent "implementer": signal SIGKILL\n/);
 });
 
-test("a run stopped after archival resumes to completion although the change directory has moved", (t) => {
-  const repo = makeRepo(t, { fixture: { delivery: "exit 1" } });
-  assert.equal(runLoop(repo, ["run", "add-thing"]).status, 1);
-  repo.setFixture({});
-  const resumed = runLoop(repo, ["resume", "add-thing"]);
-  assert.equal(resumed.status, 0, resumed.stdout);
-  assert.deepEqual(progressLines(resumed.stdout), ["delivery: started (fixture)", "delivery: complete (fixture)"]);
-});

@@ -10,5 +10,5 @@ test("status given from another worktree of the repository finds the run", (t) =
   repo.git("worktree", "add", "--quiet", "-b", "other", other);
   const result = runLoop(repo, ["status", "add-thing"], other);
   assert.equal(result.status, 0, result.stderr);
-  assert.match(result.stdout, /^Run add-thing: complete\. Stage delivery was a fixture and did no real work\.\n/);
+  assert.match(result.stdout, /^Run add-thing: complete\n/);
 });

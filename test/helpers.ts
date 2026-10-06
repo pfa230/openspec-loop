@@ -9,8 +9,6 @@ const root = new URL("../../", import.meta.url);
 const pkg = JSON.parse(readFileSync(new URL("package.json", root), "utf8"));
 export const BIN = fileURLToPath(new URL(pkg.bin.loop, root));
 
-export const FIXTURE_STAGES = ["delivery"];
-
 export function configYaml(defaultBranch = "main", delivery = "local"): string {
   return `defaultBranch: ${defaultBranch}
 worktrees: .worktrees
@@ -93,6 +91,30 @@ else finish();
 `;
 }
 
+// The stub gh: answers `pr list` from the pull requests in a file, filtered by --head and --base, and on
+// `pr create` adds one with a fixed URL and prints it, then exits 1 while the failure marker exists.
+function stubGh(prs: string, log: string, failMarker: string): string {
+  return `#!/usr/bin/env node
+const fs = require("node:fs");
+const args = process.argv.slice(2);
+fs.appendFileSync(${JSON.stringify(log)}, JSON.stringify(args) + "\\n");
+const prs = fs.existsSync(${JSON.stringify(prs)}) ? JSON.parse(fs.readFileSync(${JSON.stringify(prs)}, "utf8")) : [];
+const option = (name) => args[args.indexOf(name) + 1];
+if (args[0] === "pr" && args[1] === "list") {
+  for (const pr of prs) if (pr.head === option("--head") && pr.base === option("--base")) console.log(pr.url);
+  process.exit(0);
+}
+if (args[0] === "pr" && args[1] === "create") {
+  const url = "https://github.com/test/repo/pull/" + (prs.length + 1);
+  prs.push({ url, base: option("--base"), head: option("--head") });
+  fs.writeFileSync(${JSON.stringify(prs)}, JSON.stringify(prs));
+  console.log(url);
+  process.exit(fs.existsSync(${JSON.stringify(failMarker)}) ? 1 : 0);
+}
+process.exit(2);
+`;
+}
+
 // The stub openspec's answer to `openspec instructions apply --change <change> --json`.
 export const APPLY_INSTRUCTION = "Read context files, work through pending tasks, mark complete as you go.";
 export const APPLY_GUIDANCE = "Keep summaries short.";
@@ -141,13 +163,16 @@ export interface Repo {
   git(...args: string[]): string;
   gitIn(cwd: string, ...args: string[]): string;
   runDir(change?: string): string;
-  setFixture(commands: Record<string, string>): void;
   // Installs a stub openspec reporting the version and answering `instructions apply` and `archive` as OpenSpec 1.14.0 does.
   setOpenSpec(version: string | null): void;
   // Makes the stub openspec refuse to archive, or, with false, archive again.
   refuseArchive(refuse?: boolean): void;
   // Creates a bare repository as origin, pushes the default branch to it and makes it the upstream. Returns its path.
   addOrigin(): string;
+  // The arguments of every stub gh call, in order.
+  ghCalls(): string[][];
+  // Makes the stub gh's `pr create` exit 1 after opening the pull request, or, with false, succeed again.
+  failPrCreate(fail?: boolean): void;
   // Appends scripted turns for the stub agent named reviewer or reviser.
   queue(agent: string, ...turns: Turn[]): void;
   calls(agent?: string): Call[];
@@ -159,7 +184,6 @@ export interface RepoOptions {
   // The branch the proposal is committed on; the default branch when omitted.
   branch?: string;
   openspec?: string | null;
-  fixture?: Record<string, string>;
   delivery?: string;
 }
 
@@ -172,10 +196,11 @@ export function makeRepo(t: After, options: RepoOptions = {}): Repo {
   t.after(() => rmSync(base, { recursive: true, force: true }));
   const top = join(base, "repo");
   const bin = join(base, "bin");
-  const fixturePath = join(base, "fixture.yaml");
   const queuePath = join(base, "queue.json");
   const logPath = join(base, "calls.jsonl");
   const archiveMarker = join(base, "refuse-archive");
+  const ghLog = join(base, "gh.jsonl");
+  const ghFailMarker = join(base, "fail-pr-create");
   mkdirSync(top);
   mkdirSync(bin);
   const gitConfig = join(base, "gitconfig");
@@ -183,7 +208,6 @@ export function makeRepo(t: After, options: RepoOptions = {}): Repo {
   const env: NodeJS.ProcessEnv = {
     ...process.env,
     PATH: `${bin}${delimiter}${BASE_PATH}`,
-    LOOP_FIXTURE: fixturePath,
     GIT_CONFIG_GLOBAL: gitConfig,
     GIT_CONFIG_NOSYSTEM: "1",
     GIT_AUTHOR_NAME: "Test",
@@ -201,10 +225,6 @@ export function makeRepo(t: After, options: RepoOptions = {}): Repo {
     git: (...args) => gitIn(top, ...args),
     gitIn,
     runDir: (name = change) => join(top, ".git", "openspec-loop", name),
-    setFixture(commands) {
-      const all = { ...Object.fromEntries(FIXTURE_STAGES.map((stage) => [stage, "true"])), ...commands };
-      writeFileSync(fixturePath, Object.entries(all).map(([stage, command]) => `${stage}: ${JSON.stringify(command)}\n`).join(""));
-    },
     setOpenSpec(version) {
       const stub = join(bin, "openspec");
       rmSync(stub, { force: true });
@@ -223,6 +243,13 @@ export function makeRepo(t: After, options: RepoOptions = {}): Repo {
       repo.git("push", "--quiet", "-u", "origin", defaultBranch);
       return origin;
     },
+    ghCalls() {
+      return existsSync(ghLog) ? readFileSync(ghLog, "utf8").trim().split("\n").map((line) => JSON.parse(line)) : [];
+    },
+    failPrCreate(fail = true) {
+      if (fail) writeFileSync(ghFailMarker, "");
+      else rmSync(ghFailMarker, { force: true });
+    },
     queue(agent, ...turns) {
       const queues = existsSync(queuePath) ? JSON.parse(readFileSync(queuePath, "utf8")) : {};
       queues[agent] = [...(queues[agent] ?? []), ...turns];
@@ -236,8 +263,9 @@ export function makeRepo(t: After, options: RepoOptions = {}): Repo {
   };
   writeFileSync(join(bin, "stub-agent"), stubAgent(queuePath, logPath));
   chmodSync(join(bin, "stub-agent"), 0o755);
+  writeFileSync(join(bin, "gh"), stubGh(join(base, "prs.json"), ghLog, ghFailMarker));
+  chmodSync(join(bin, "gh"), 0o755);
   repo.setOpenSpec(options.openspec === undefined ? "1.14.0" : options.openspec);
-  repo.setFixture(options.fixture ?? {});
 
   repo.git("init", "--quiet", "-b", defaultBranch);
   // Ignored as the README tells users to, so a run leaves the checkout's status unchanged.

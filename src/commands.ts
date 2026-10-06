@@ -2,8 +2,7 @@ import { existsSync, mkdirSync } from "node:fs";
 import { setTimeout as sleep } from "node:timers/promises";
 import { join, resolve } from "node:path";
 import { type Config, readConfig, resolveRoles } from "./config.js";
-import { advance, FIXTURE_NOTE, locations, progress, type Setup } from "./controller.js";
-import { loadFixture } from "./fixture.js";
+import { advance, locations, progress, type Setup } from "./controller.js";
 import { deliveryBase, git, gitMessage, gitSucceeds, topLevel } from "./git.js";
 import { checkOpenSpec } from "./openspec.js";
 import { Refusal } from "./refusal.js";
@@ -39,7 +38,7 @@ function prepare(top: string, attempts: number | undefined): Setup {
   const agents = resolveRoles(top, config);
   const base = deliveryBase(top, config);
   checkOpenSpec();
-  return { config, agents, fixture: loadFixture(), base, attempts };
+  return { config, agents, base, attempts };
 }
 
 // Checks the change can run and creates its run. Called under the run's lock.
@@ -120,7 +119,7 @@ export async function status(change: string): Promise<number> {
   } else if (state.stop && !holder) {
     summary = `stopped at ${state.stop.stage}\nCause: ${state.stop.cause}\nRecovery: ${state.stop.recovery}`;
   } else if (STAGES.every((stage) => state.stages[stage] === "complete")) {
-    summary = `complete. ${FIXTURE_NOTE}`;
+    summary = "complete";
   } else {
     const at = state.current ? ` at ${state.current}` : "";
     const died = holder ? `; process ${holder.pid} died` : "";
