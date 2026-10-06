@@ -171,7 +171,7 @@ async function integration(run: Run): Promise<Halt | typeof REPLAN | undefined> 
     let merge = setup.config.delivery === "pr";
     if (!merge) {
       try {
-        git(worktree, "rebase", "--quiet", "--no-update-refs", "--no-rebase-merges", base.ref);
+        git(worktree, "rebase", "--quiet", "--no-update-refs", base.ref);
         progress(`integration: rebased onto ${name} at ${at}`);
       } catch (error) {
         const files = conflicted(worktree);
@@ -187,10 +187,7 @@ async function integration(run: Run): Promise<Halt | typeof REPLAN | undefined> 
         progress(`integration: merged ${name} at ${at}`);
       } catch (error) {
         const files = conflicted(worktree);
-        if (files.length === 0) {
-          if (merging(worktree)) git(worktree, "merge", "--abort");
-          throw new Error(`\`git merge ${name}\` failed: ${gitMessage(error)}`);
-        }
+        if (files.length === 0) throw new Error(`\`git merge ${name}\` failed: ${gitMessage(error)}`);
         progress(`integration: merge of ${name} conflicts in ${files.length} file${files.length === 1 ? "" : "s"}`);
         return reopenImplementation(run, "integration", {
           severity: "blocking",
@@ -259,19 +256,15 @@ function dirtyHolder(run: Run): Halt | undefined {
   };
 }
 
-// Fast-forwards the local default branch to commit, moving the files of the checkout that holds it.
+// Fast-forwards the local default branch to commit, which callers have checked contains it, moving the files
+// of the checkout that holds it.
 function fastForward(run: Run, stage: Stage, commit: string): Halt | undefined {
   const { worktree } = run.state;
   const branch = run.setup.config.defaultBranch;
   const short = git(worktree, "rev-parse", "--short=7", commit);
   const [checkout] = checkoutsHolding(worktree, branch);
-  const resume = `loop resume ${run.state.change}`;
   if (checkout === undefined) {
-    const old = git(worktree, "rev-parse", branch);
-    if (!gitSucceeds(worktree, "merge-base", "--is-ancestor", old, commit)) {
-      return { cause: `${branch} has commits that ${short} lacks, so it cannot fast-forward`, recovery: `bring them into branch ${run.state.branch}, then run \`${resume}\`` };
-    }
-    git(worktree, "update-ref", `refs/heads/${branch}`, commit, old);
+    git(worktree, "update-ref", `refs/heads/${branch}`, commit, git(worktree, "rev-parse", branch));
     progress(`${stage}: fast-forwarded ${branch} to ${short}`);
     return undefined;
   }
@@ -280,7 +273,7 @@ function fastForward(run: Run, stage: Stage, commit: string): Halt | undefined {
     git(checkout, "merge", "--quiet", "--ff-only", "--no-overwrite-ignore", commit);
   } catch (error) {
     progress(`${stage}: fast-forward of ${branch} failed`);
-    return { cause: `fast-forwarding ${branch} to ${short} in checkout ${checkout} failed: ${gitMessage(error)}`, recovery: `clear what Git names in ${checkout}, then run \`${resume}\`` };
+    return { cause: `fast-forwarding ${branch} to ${short} in checkout ${checkout} failed: ${gitMessage(error)}`, recovery: `clear what Git names in ${checkout}, then run \`loop resume ${run.state.change}\`` };
   }
   progress(`${stage}: fast-forwarded ${branch} to ${short} in checkout ${checkout}`);
   return undefined;
@@ -368,7 +361,7 @@ function archivedProposal(worktree: string, change: string): string {
 }
 
 function shortRef(ref: string): string {
-  return ref.replace(/^refs\/(remotes|heads)\//, "");
+  return ref.replace(/^refs\/remotes\//, "");
 }
 
 // Archives the change with native OpenSpec, which validates it and applies its spec deltas, and commits the result.
