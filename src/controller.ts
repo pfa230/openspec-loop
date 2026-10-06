@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { type Agent, type Config, type Role, ROLES } from "./config.js";
 import { type Base, checkoutsHolding, conflicted, git, gitMessage, gitSucceeds, merging, patchId } from "./git.js";
 import { applyInstructions } from "./openspec.js";
-import { changeDir, planDigest, planFiles } from "./plan.js";
+import { changeDir, outsideChange, planDigest, planFiles } from "./plan.js";
 import {
   ACK_SCHEMA,
   type Finding,
@@ -246,7 +246,7 @@ async function integration(run: Run): Promise<Halt | typeof REPLAN | undefined> 
   }
 
   const changeStart = git(worktree, "merge-base", "HEAD", base.ref);
-  if (patchId(worktree, changeStart, "HEAD") !== state.approvedPatch) {
+  if (patchId(worktree, changeStart, "HEAD", outsideChange(state.change)) !== state.approvedPatch) {
     progress("integration: the patch changed");
     return reopenImplementation(run, "integration", {
       severity: "blocking",
@@ -570,7 +570,7 @@ function owe(run: Run, path: string): void {
 // Records the patch the approval covers, against the base its review saw; the caller writes state as it marks the stage complete.
 function complete(state: RunState, base: string): undefined {
   state.owedFindings = null;
-  state.approvedPatch = patchId(state.worktree, base, "HEAD");
+  state.approvedPatch = patchId(state.worktree, base, "HEAD", outsideChange(state.change));
   return undefined;
 }
 

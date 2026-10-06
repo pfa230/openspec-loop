@@ -6,6 +6,11 @@ export function changeDir(change: string): string {
   return `openspec/changes/${change}`;
 }
 
+// A pathspec for everything outside the change's directory, anchored at the worktree root.
+export function outsideChange(change: string): string {
+  return `:(top,exclude)${changeDir(change)}`;
+}
+
 // Every file of the change, as paths relative to the worktree, sorted.
 export function planFiles(worktree: string, change: string): string[] {
   const root = join(worktree, changeDir(change));
