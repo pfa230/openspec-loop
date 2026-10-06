@@ -24,8 +24,8 @@
 
 ## 4. Supervised diagnosis
 
-- [ ] 4.1 Add the "Diagnosing a stop" section to `skills/openspec-loop/SKILL.md` as design.md decision 7 describes. Rework the rule about investigating so that it points to the section and keeps the read-only constraint and the decision-stop exception. Verify by reading the skill against decision 7 and the Supervision skill requirement in the change's spec delta
-- [ ] 4.2 Run a real supervised diagnosis in a disposable repository with real OpenSpec and stub agents. Produce two stopped runs:
+- [x] 4.1 Add the "Diagnosing a stop" section to `skills/openspec-loop/SKILL.md` as design.md decision 7 describes. Rework the rule about investigating so that it points to the section and keeps the read-only constraint and the decision-stop exception. Verify by reading the skill against decision 7 and the Supervision skill requirement in the change's spec delta
+- [x] 4.2 Run a real supervised diagnosis in a disposable repository with real OpenSpec and stub agents. Produce two stopped runs:
   - **Infrastructure failure:** an implementer whose command prints `Error: 429 rate limit exceeded` to stdout and exits 1.
   - **Repeated rejection:** a verifier that returns the same blocking finding every time, with `attempts.implementation: 2`.
 
@@ -35,4 +35,4 @@
 
 ## 5. Check
 
-- [ ] 5.1 Run `npm test` and verify it passes
+- [x] 5.1 Run `npm test` and verify it passes
