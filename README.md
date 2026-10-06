@@ -63,6 +63,17 @@ An agent's command is an adapter followed by arguments for its harness. The pack
 | `loop-agy` | Antigravity 1.2.17 | none | `--dangerously-skip-permissions` |
 | `loop-opencode` | OpenCode 1.18.34 | `--agent plan` | none |
 
+Each adapter writes the usage its harness reports to the usage file, even when the harness then fails:
+
+| Adapter | Token counters | Cost |
+|---|---|---|
+| `loop-claude` | `input_tokens`, `cache_creation_input_tokens`, `cache_read_input_tokens`, `output_tokens` | Reported |
+| `loop-codex` | `input_tokens`, `cached_input_tokens`, `cache_write_input_tokens`, `output_tokens`, `reasoning_output_tokens` | Not reported |
+| `loop-agy` | `input_tokens`, `cache_read_tokens`, `output_tokens`, `thinking_tokens` | Not reported |
+| `loop-opencode` | `input`, `cache.read`, `cache.write`, `output`, `reasoning`, summed over the model steps of the turn | Reported, summed likewise |
+
+Counters keep the harness's own names, because the harnesses count differently: Claude Code's `input_tokens` leaves out cache reads, while Codex's `input_tokens` includes its `cached_input_tokens`. A cost is the harness's own figure. Claude Code reports list price even under a subscription, and OpenCode reports `0` for a model it has no price for.
+
 Add the model flag of the harness (`--model`, `-m`) to choose a model. Without restriction arguments, a harness runs with its own defaults; headless Claude Code and Codex cannot edit files by default.
 
 Claude Code refuses to edit any path inside a `.git` directory without `bypassPermissions`, even with `--permission-mode acceptEdits`. A `worktrees` directory inside the repository's Git directory therefore needs `bypassPermissions` for an editing Claude agent. Run such an agent inside a sandbox if you want to limit what it can do: put the sandbox command first, for example `[ai-jail, --exec, ..., loop-claude, ...]`.

@@ -27,6 +27,7 @@ interface Outcome {
   stderr: string;
   args: string[];
   reply: unknown;
+  usage: unknown;
 }
 
 function adapter(t: { after: (fn: () => void) => void }, harness: string, env: Record<string, string>, args: string[] = []): Outcome {
@@ -37,8 +38,9 @@ function adapter(t: { after: (fn: () => void) => void }, harness: string, env: R
   writeFileSync(join(dir, "prompt.md"), "Review the plan.\n");
   writeFileSync(join(dir, "schema.json"), '{"type":"object"}\n');
   const reply = join(dir, "reply.json");
+  const usage = join(dir, "usage.json");
   const bin = fileURLToPath(new URL(`dist/src/adapters/${harness}.js`, root));
-  const result = spawnSync(process.execPath, [bin, ...args, join(dir, "prompt.md"), join(dir, "schema.json"), reply], {
+  const result = spawnSync(process.execPath, [bin, ...args, join(dir, "prompt.md"), join(dir, "schema.json"), reply, usage], {
     cwd: dir,
     encoding: "utf8",
     env: { ...process.env, PATH: `${dir}${delimiter}${process.env.PATH}`, STUB_LOG: join(dir, "args.json"), ...env },
@@ -48,6 +50,7 @@ function adapter(t: { after: (fn: () => void) => void }, harness: string, env: R
     stderr: result.stderr,
     args: existsSync(join(dir, "args.json")) ? JSON.parse(readFileSync(join(dir, "args.json"), "utf8")) : [],
     reply: existsSync(reply) ? JSON.parse(readFileSync(reply, "utf8")) : undefined,
+    usage: existsSync(usage) ? readFileSync(usage, "utf8") : undefined,
   };
 }
 
@@ -56,6 +59,14 @@ function textStream(dir: string, text: string): string {
   writeFileSync(path, `${JSON.stringify({ type: "step_start" })}\n${JSON.stringify({ type: "text", part: { type: "text", text } })}\n`);
   return path;
 }
+
+// The usage file each adapter writes for its recording, exactly.
+const USAGE = {
+  claude: '{"tokens":{"input_tokens":9,"cache_creation_input_tokens":34432,"cache_read_input_tokens":0,"output_tokens":183},"costUsd":0.06978799999999999}\n',
+  codex: '{"tokens":{"input_tokens":16641,"cached_input_tokens":0,"cache_write_input_tokens":0,"output_tokens":59,"reasoning_output_tokens":21}}\n',
+  agy: '{"tokens":{"input_tokens":12926,"cache_read_tokens":0,"output_tokens":700,"thinking_tokens":645}}\n',
+  opencode: '{"tokens":{"input":13808,"cache.read":0,"cache.write":0,"output":29,"reasoning":0},"costUsd":0.000111024}\n',
+};
 
 const cases = {
   claude: {
@@ -77,7 +88,8 @@ const cases = {
 };
 
 for (const [harness, { args, env }] of Object.entries(cases)) {
-  test(`loop-${harness} runs ${harness} with the agent's arguments and writes the recorded answer`, (t) => {
+  const usage = USAGE[harness as keyof typeof USAGE];
+  test(`loop-${harness} runs ${harness} with the agent's arguments and writes the recorded answer and usage`, (t) => {
     const outcome = adapter(t, harness, env, ["--model", "opus"]);
     assert.equal(outcome.status, 0, outcome.stderr);
     const actual = outcome.args.map((arg) =>
@@ -85,21 +97,36 @@ for (const [harness, { args, env }] of Object.entries(cases)) {
     );
     assert.deepEqual(actual, args);
     assert.deepEqual(outcome.reply, REPLY);
+    assert.equal(outcome.usage, usage);
   });
 
-  test(`loop-${harness} exits with the harness's status when it fails`, (t) => {
+  test(`loop-${harness} exits with the harness's status when it fails, keeping the usage it reported`, (t) => {
     const outcome = adapter(t, harness, { ...env, STUB_EXIT: "5" });
     assert.equal(outcome.status, 5);
     assert.match(outcome.stderr, new RegExp(`${harness} exited with status 5`));
     if (harness !== "codex") assert.equal(outcome.reply, undefined);
+    assert.equal(outcome.usage, usage);
   });
 
-  test(`loop-${harness} fails when the harness gives no answer`, (t) => {
+  test(`loop-${harness} fails when the harness gives no answer, and writes no usage`, (t) => {
     const outcome = adapter(t, harness, {});
     assert.equal(outcome.status, 1);
     assert.equal(outcome.reply, undefined);
+    assert.equal(outcome.usage, undefined);
   });
 }
+
+test("loop-opencode sums the tokens and cost of every model step", (t) => {
+  const dir = mkdtempSync(join(tmpdir(), "loop-stream-"));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const step = (input: number, cost: number) => ({ type: "step_finish", part: { tokens: { input, output: 1, reasoning: 0, cache: { read: 2, write: 0 } }, cost } });
+  const answer = { type: "text", part: { text: JSON.stringify(REPLY) } };
+  const stream = join(dir, "stream.jsonl");
+  writeFileSync(stream, [step(100, 0.25), answer, step(50, 0.5)].map((event) => JSON.stringify(event)).join("\n"));
+  const outcome = adapter(t, "opencode", { STUB_STREAM: stream });
+  assert.equal(outcome.status, 0, outcome.stderr);
+  assert.equal(outcome.usage, '{"tokens":{"input":150,"cache.read":4,"cache.write":0,"output":2,"reasoning":0},"costUsd":0.75}\n');
+});
 
 test("loop-opencode asks for bare JSON matching the schema", (t) => {
   const outcome = adapter(t, "opencode", { STUB_STREAM: recording("opencode.jsonl") });
