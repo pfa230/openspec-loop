@@ -46,13 +46,13 @@
 
 ## 4. Recovery
 
-- [ ] 4.1 Make the archive stage skip `openspec archive` when `openspec/changes/<change>` is gone from the worktree, commit any uncommitted result as `<change>: archive`, and complete. Verify with tests:
+- [x] 4.1 Make the archive stage skip `openspec archive` when `openspec/changes/<change>` is gone from the worktree, commit any uncommitted result as `<change>: archive`, and complete. Verify with tests:
   - **Archive not committed.** A run killed after the stub `openspec` moved the change, simulated by moving it by hand before resuming a run stopped at archive, resumes to completion with one `add-thing: archive` commit and no second `openspec archive` call.
   - **Archive committed.** A resume after the archive commit completes the stage without a new commit.
-- [ ] 4.2 Make `pr` delivery open no pull request when `gh pr list` finds one open for the branch against the remote branch, and report it instead. Verify with tests:
+- [x] 4.2 Make `pr` delivery open no pull request when `gh pr list` finds one open for the branch against the remote branch, and report it instead. Verify with tests:
   - **`pr` resume.** The stub `gh pr create` records the pull request and then exits 1, which stands in for an interruption after GitHub opened it. The run stops at delivery. On resume, the run prints `pull request already open`, and `gh pr create` has been called once in total.
   - **`merge` resume.** An untracked file in the main checkout at a path the change adds makes the fast-forward fail after the push, so the run stops at delivery. After the file is removed, resume completes, and `origin/main` and local `main` both equal the branch tip.
-- [ ] 4.3 In `README.md`, replace the manual archive undo with the automatic recovery, keep the undo only for an interruption inside `openspec archive` itself, and describe resume after an interrupted push, merge or pull request. Verify the documented undo in a temporary repository
+- [x] 4.3 In `README.md`, replace the manual archive undo with the automatic recovery, keep the undo only for an interruption inside `openspec archive` itself, and describe resume after an interrupted push, merge or pull request. Verify the documented undo in a temporary repository
 
 ## 5. Real acceptance
 

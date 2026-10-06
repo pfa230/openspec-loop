@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readdirSync, readFileSync } from "node:fs";
+import { mkdirSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 import { makeRepo, runLoop, writeFile } from "./helpers.js";
@@ -142,3 +142,35 @@ test("a step killed by a signal is an execution failure naming the signal", (t) 
   assert.match(result.stdout, /Cause: execution failure of implementer agent "implementer": signal SIGKILL\n/);
 });
 
+// A run stopped at archive whose change was moved by hand, as OpenSpec does, with OpenSpec still refusing:
+// any second `openspec archive` would stop the run again.
+function archivedByHand(t: Parameters<typeof makeRepo>[0]): ReturnType<typeof makeRepo> {
+  const repo = makeRepo(t);
+  repo.refuseArchive();
+  assert.equal(runLoop(repo, ["run", "add-thing"]).status, 1);
+  mkdirSync(join(repo.worktree, "openspec/changes/archive"));
+  repo.gitIn(repo.worktree, "mv", "openspec/changes/add-thing", "openspec/changes/archive/2026-01-01-add-thing");
+  return repo;
+}
+
+test("resume after an archive OpenSpec made but the loop did not commit commits it without archiving again", (t) => {
+  const repo = archivedByHand(t);
+  const resumed = runLoop(repo, ["resume", "add-thing"]);
+  assert.equal(resumed.status, 0, resumed.stdout);
+  assert.deepEqual(progressLines(resumed.stdout).slice(0, 3), [
+    "archive: started",
+    "archive: change already archived",
+    `archive: committed ${repo.git("rev-parse", "--short=7", "loop/add-thing")}`,
+  ]);
+  assert.equal(repo.git("log", "--format=%s", "main..loop/add-thing"), "add-thing: archive");
+});
+
+test("resume after the archive commit completes the stage without another commit", (t) => {
+  const repo = archivedByHand(t);
+  repo.gitIn(repo.worktree, "commit", "--quiet", "-m", "add-thing: archive");
+  const tip = repo.git("rev-parse", "loop/add-thing");
+  const resumed = runLoop(repo, ["resume", "add-thing"]);
+  assert.equal(resumed.status, 0, resumed.stdout);
+  assert.deepEqual(progressLines(resumed.stdout).slice(0, 3), ["archive: started", "archive: change already archived", "archive: complete"]);
+  assert.equal(repo.git("rev-parse", "loop/add-thing"), tip);
+});
