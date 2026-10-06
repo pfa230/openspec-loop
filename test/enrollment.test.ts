@@ -61,7 +61,7 @@ test("the default-branch path creates loop/<change> at the invoking HEAD and acc
   assert.equal(result.status, 0, result.stderr);
   const worktree = repo.worktree;
   assert.match(result.stdout, new RegExp(`created branch loop/add-thing at ${head.slice(0, 7)} in worktree ${worktree}`));
-  assert.equal(repo.git("rev-parse", "loop/add-thing"), head);
+  assert.equal(repo.git("rev-parse", "loop/add-thing~1"), head);
   assert.equal(repo.gitIn(worktree, "symbolic-ref", "--short", "HEAD"), "loop/add-thing");
   assert.equal(repo.git("rev-parse", "main"), head);
   assert.equal(repo.git("status", "--porcelain", "--untracked-files=all"), statusBefore);
@@ -77,7 +77,7 @@ test("a configured trunk is used while the remote's HEAD points to another branc
   repo.git("symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main");
   const result = runLoop(repo, ["run", "add-thing"]);
   assert.equal(result.status, 0, result.stderr);
-  assert.equal(repo.git("rev-parse", "loop/add-thing"), repo.git("rev-parse", "trunk"));
+  assert.equal(repo.git("rev-parse", "loop/add-thing~1"), repo.git("rev-parse", "trunk"));
 });
 
 test("a relative worktrees directory resolves against the invoking checkout", (t) => {
@@ -136,7 +136,7 @@ for (const branch of [undefined, "add-thing"]) {
     const result = runLoop(repo, ["run", "add-thing"]);
     assert.equal(result.status, 0, result.stderr);
     const runBranch = branch ?? "loop/add-thing";
-    assert.equal(repo.git("log", "-1", "--format=%s", runBranch), "fixture-commit");
+    assert.equal(repo.git("log", "-1", "--format=%s", `${runBranch}~1`), "fixture-commit");
     assert.equal(repo.git("log", "-1", "--format=%s", "main"), branch ? "init" : "propose");
   });
 }

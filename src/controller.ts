@@ -1,7 +1,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Agent, Config, Role } from "./config.js";
-import { FIXTURE_NAMES, type Fixture, type FixtureStage } from "./fixture.js";
+import { FIXTURE_NAMES, FIXTURE_STAGES, type Fixture, type FixtureStage } from "./fixture.js";
 import { git } from "./git.js";
 import { applyInstructions } from "./openspec.js";
 import { changeDir, planDigest, planFiles } from "./plan.js";
@@ -32,11 +32,6 @@ export function locations(dir: string, state: RunState): string {
   return `Worktree: ${state.worktree}\nRun directory: ${dir}\nTranscripts: ${join(dir, "transcripts")}\n`;
 }
 
-// True when proposal review is complete but the plan no longer matches what it approved.
-export function planChanged(state: RunState): boolean {
-  return state.stages["proposal-review"] === "complete" && planDigest(state.worktree, state.change) !== state.approvedPlan;
-}
-
 // Makes proposal review and every later stage incomplete. Findings owed to the implementer predate the plan
 // approved next, so they are dropped: implementation after reapproval starts with a full round.
 function reopenPlan(state: RunState): void {
@@ -54,7 +49,6 @@ export interface Setup {
 
 interface Verdict {
   verdict: "APPROVE" | "REVISE";
-  plan: string;
   findings: Finding[];
 }
 
@@ -101,17 +95,6 @@ export async function advance(dir: string, state: RunState, setup: Setup): Promi
     state.stop = null;
     writeState(dir, state);
     for (;;) {
-      let changed: boolean;
-      try {
-        changed = planChanged(state);
-      } catch (error) {
-        return stop(dir, state, "proposal-review", { cause: `execution failure of the loop: ${(error as Error).message}` });
-      }
-      if (changed) {
-        progress("plan changed since its approval; reviewing it again");
-        reopenPlan(state);
-        writeState(dir, state);
-      }
       const stage = STAGES.find((candidate) => state.stages[candidate] !== "complete");
       if (stage === undefined) break;
       if (stopping) return stop(dir, state, stage, { cause: USER_STOP });
@@ -121,6 +104,7 @@ export async function advance(dir: string, state: RunState, setup: Setup): Promi
       try {
         if (stage === "proposal-review") outcome = await proposalReview(run);
         else if (stage === "implementation") outcome = await implementation(run);
+        else if (stage === "archive") outcome = await archive(run);
         else outcome = await fixtureStage(run, stage);
       } catch (error) {
         outcome = { cause: `execution failure of the loop: ${(error as Error).message}` };
@@ -130,8 +114,7 @@ export async function advance(dir: string, state: RunState, setup: Setup): Promi
       state.stages[stage] = "complete";
       state.current = null;
       writeState(dir, state);
-      if (stage === "proposal-review" || stage === "implementation") progress(`${stage}: complete`);
-      else progress(`${stage}: complete (fixture)`);
+      progress(`${stage}: complete${FIXTURE_STAGES.includes(stage as FixtureStage) ? " (fixture)" : ""}`);
     }
     process.stdout.write(`Run ${state.change} completed. ${FIXTURE_NOTE}\n${locations(dir, state)}`);
     return 0;
@@ -169,8 +152,32 @@ async function fixtureStage(run: Run, stage: FixtureStage): Promise<Halt | undef
   return { cause: run.stopping() ? cause : `${cause} (fixture)` };
 }
 
+// Archives the change with native OpenSpec, which validates it and applies its spec deltas, and commits the result.
+async function archive(run: Run): Promise<Halt | undefined> {
+  const { state } = run;
+  progress("archive: started");
+  const transcript = `${nextStep(run.dir, "archive")}.log`;
+  const { code, signal } = await run.exec(runStep("openspec", ["archive", state.change, "--yes"], state.worktree, transcript));
+  if (run.stopping()) {
+    progress(`archive: ${USER_STOP}`);
+    return { cause: USER_STOP };
+  }
+  if (code !== 0) {
+    const outcome = code === null ? `signal ${signal}` : `exit status ${code}`;
+    progress(`archive: openspec archive failed, ${outcome}`);
+    return {
+      cause: `\`openspec archive ${state.change}\` failed with ${outcome}\nTranscript: ${transcript}`,
+      recovery: `fix the change in worktree ${state.worktree}, commit it on branch ${state.branch}, then run \`loop resume ${state.change}\``,
+    };
+  }
+  git(state.worktree, "add", "--all");
+  git(state.worktree, "commit", "--quiet", "-m", `${state.change}: archive`);
+  progress(`archive: committed ${git(state.worktree, "rev-parse", "--short=7", "HEAD")}`);
+  return undefined;
+}
+
 // Reviews the plan until it is approved, revising it after each REVISE, within the attempt budget.
-// Completing sets approvedPlan; the caller marks the stage complete in the same state write.
+// Completing clears owedReview; the caller marks the stage complete in the same state write.
 async function proposalReview(run: Run): Promise<Halt | undefined> {
   const { state, setup } = run;
   const budget = setup.attempts ?? setup.config.attempts.proposalReview;
@@ -178,7 +185,7 @@ async function proposalReview(run: Run): Promise<Halt | undefined> {
     const record = JSON.parse(readFileSync(state.owedReview, "utf8")) as Verdict;
     const halt = await reviserTurn(run, record);
     if (halt) return halt;
-    if (record.verdict === "APPROVE") return approve(state, planDigest(state.worktree, state.change));
+    if (record.verdict === "APPROVE") return approve(state);
     state.owedReview = null;
     writeState(run.dir, state);
   }
@@ -187,26 +194,25 @@ async function proposalReview(run: Run): Promise<Halt | undefined> {
     if (run.reviews >= budget) return { cause: `proposal review attempts exhausted (${run.reviews} of ${budget})${last}` };
     const review = ++run.reviews;
     const label = `review ${review} of ${budget}`;
-    const plan = planDigest(state.worktree, state.change);
     const base = nextStep(run.dir, "proposal-review");
     const reply = await work(run, "proposal-review", label, "proposalReviewer", base, reviewPrompt(state.change, planFiles(state.worktree, state.change)), REVIEW_SCHEMA, isReview);
     if ("cause" in reply) return reply;
     const { findings } = reply.value;
     const blocking = findings.filter((finding) => finding.severity === "blocking").length;
-    const record: Verdict = { verdict: blocking > 0 ? "REVISE" : "APPROVE", plan, findings };
+    const record: Verdict = { verdict: blocking > 0 ? "REVISE" : "APPROVE", findings };
     const recordPath = `${base}.verdict.json`;
     writeFileSync(recordPath, `${JSON.stringify(record, null, 2)}\n`);
     progress(`proposal-review: ${label} ${record.verdict}, ${blocking} blocking, ${findings.length - blocking} minor (${setup.agents.proposalReviewer.alias})`);
 
     const questions = decisionStop(state, `review ${review}`, findings, recordPath);
     if (questions) return questions;
-    if (findings.length === 0) return approve(state, plan);
+    if (findings.length === 0) return approve(state);
 
     state.owedReview = recordPath;
     writeState(run.dir, state);
     const halt = await reviserTurn(run, record);
     if (halt) return halt;
-    if (record.verdict === "APPROVE") return approve(state, planDigest(state.worktree, state.change));
+    if (record.verdict === "APPROVE") return approve(state);
     state.owedReview = null;
     writeState(run.dir, state);
     last = `; the last review was REVISE, ${blocking} blocking\nReview: ${recordPath}`;
@@ -223,8 +229,7 @@ function decisionStop(state: RunState, review: string, findings: Finding[], reco
   };
 }
 
-function approve(state: RunState, plan: string): undefined {
-  state.approvedPlan = plan;
+function approve(state: RunState): undefined {
   state.owedReview = null;
   return undefined;
 }
@@ -278,7 +283,12 @@ async function implementation(run: Run): Promise<Halt | typeof REPLAN | undefine
       if ("cause" in review) return review;
       const { record, path } = review;
       const questions = decisionStop(state, `implementation review in ${at}`, record.findings, path);
-      if (questions) return questions;
+      if (questions) {
+        // The answer is recorded in the plan, so resume reviews the plan before implementing on.
+        reopenPlan(state);
+        writeState(run.dir, state);
+        return questions;
+      }
       if (record.findings.length === 0) return complete(state);
       owe(run, path);
       if (record.verdict === "REVISE") {
@@ -314,6 +324,8 @@ async function implementerTurn(run: Run, at: string, findings: Finding[], fix: b
   const label = `${at}, ${fix ? "minor fixes" : "implementer"}`;
   const prompt = implementerPrompt(state.change, applyInstructions(state.worktree, state.change), changeBase(run), findings, fix);
   const base = nextStep(run.dir, fix ? "implementation-fixes" : "implementation");
+  // The implementer may tick task boxes but not change the plan; planDigest ignores the ticks.
+  const plan = planDigest(state.worktree, state.change);
   const reply = await work(run, "implementation", label, "implementer", base, prompt, IMPLEMENTATION_SCHEMA, isImplementation);
   if ("cause" in reply) return reply;
   const alias = run.setup.agents.implementer.alias;
@@ -325,22 +337,23 @@ async function implementerTurn(run: Run, at: string, findings: Finding[], fix: b
     git(state.worktree, "commit", "--quiet", "-m", `${state.change}: ${message}`);
     progress(`implementation: ${label} committed ${git(state.worktree, "rev-parse", "--short=7", "HEAD")} (${alias})`);
   }
+  if (planDigest(state.worktree, state.change) !== plan) {
+    const commit = git(state.worktree, "rev-parse", "--short=7", "HEAD");
+    progress(`implementation: ${label} changed the plan (${alias})`);
+    return {
+      cause: `failure of implementer agent "${alias}": it changed the plan beyond ticking task boxes in commit ${commit}`,
+      recovery: `revert the plan changes of ${commit} in worktree ${state.worktree} on branch ${state.branch}, then run \`loop resume ${state.change}\``,
+    };
+  }
   const { planProblem } = reply.value;
   if (planProblem !== null) {
     progress(`implementation: ${at}, implementer reports the plan needs a change (${alias})`);
     const path = `${nextStep(run.dir, "plan-problem")}.json`;
     const finding: Finding = { severity: "blocking", location: "implementation", problem: planProblem, question: null };
-    const record: Verdict = { verdict: "REVISE", plan: planDigest(state.worktree, state.change), findings: [finding] };
+    const record: Verdict = { verdict: "REVISE", findings: [finding] };
     writeFileSync(path, `${JSON.stringify(record, null, 2)}\n`);
     reopenPlan(state);
     state.owedReview = path;
-    state.approvedPlan = null;
-    writeState(run.dir, state);
-    return REPLAN;
-  }
-  if (planChanged(state)) {
-    progress("plan changed since its approval; reviewing it again");
-    reopenPlan(state);
     writeState(run.dir, state);
     return REPLAN;
   }

@@ -4,7 +4,7 @@ import { Refusal } from "./refusal.js";
 import { STAGES } from "./state.js";
 
 // Fixture stages stand in for stages that later build steps make real. Remove this module with the last one.
-export const FIXTURE_STAGES = STAGES.filter((stage) => stage !== "proposal-review" && stage !== "implementation");
+export const FIXTURE_STAGES = STAGES.filter((stage) => stage === "integration" || stage === "delivery");
 export type FixtureStage = (typeof FIXTURE_STAGES)[number];
 export type Fixture = Record<FixtureStage, string>;
 export const FIXTURE_NAMES = `${FIXTURE_STAGES.slice(0, -1).join(", ")} and ${FIXTURE_STAGES.at(-1)}`;

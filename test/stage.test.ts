@@ -3,8 +3,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { test } from "node:test";
-import { planDigest } from "../src/plan.js";
-import { finding, makeRepo, type Repo, runLoop, startLoop, writeFile } from "./helpers.js";
+import { commitWith, finding, makeRepo, type Repo, runLoop, startLoop, writeFile } from "./helpers.js";
 
 const DESIGN = "openspec/changes/add-thing/design.md";
 const TASKS = "openspec/changes/add-thing/tasks.md";
@@ -35,7 +34,7 @@ test("REVISE, a revision and an approving review advance to implementation witho
   repo.queue("reviser", { edits: { [DESIGN]: "## Decisions\n\nUse files.\n" } });
   const result = runLoop(repo, ["run", "add-thing"]);
   assert.equal(result.status, 0, result.stdout);
-  const revision = repo.git("rev-parse", "--short=7", "loop/add-thing");
+  const revision = commitWith(repo, "add-thing: revise plan");
   assert.deepEqual(lines(result.stdout).slice(0, 8), [
     "proposal-review: review 1 of 3 started (reviewer)",
     "proposal-review: review 1 of 3 REVISE, 1 blocking, 0 minor (reviewer)",
@@ -46,13 +45,11 @@ test("REVISE, a revision and an approving review advance to implementation witho
     "proposal-review: complete",
     "implementation: attempt 1 of 3, implementer started (implementer)",
   ]);
-  assert.deepEqual(subjects(repo), ["add-thing: revise plan"]);
+  assert.deepEqual(subjects(repo), ["add-thing: archive", "add-thing: revise plan"]);
   const first = record(repo, "001-proposal-review");
   const second = record(repo, "003-proposal-review");
   assert.equal(first.verdict, "REVISE");
   assert.equal(second.verdict, "APPROVE");
-  assert.notEqual(first.plan, second.plan);
-  assert.equal(state(repo).approvedPlan, second.plan);
   assert.equal(state(repo).owedReview, null);
 });
 
@@ -65,13 +62,13 @@ test("two agents of one adapter each pass their own model arguments", (t) => {
   assert.deepEqual(repo.calls("reviser")[0].args.slice(0, 3), ["reviser", "--model", "m2"]);
 });
 
-test("APPROVE with minor findings applies them, records the post-fix plan and reviews no further", (t) => {
+test("APPROVE with minor findings applies them and reviews no further", (t) => {
   const repo = makeRepo(t);
   repo.queue("reviewer", { reply: { findings: [finding("minor", "typo")] } });
   repo.queue("reviser", { edits: { [DESIGN]: "## Decisions\n\nFixed typo.\n" } });
   const result = runLoop(repo, ["run", "add-thing"]);
   assert.equal(result.status, 0, result.stdout);
-  const fix = repo.git("rev-parse", "--short=7", "loop/add-thing");
+  const fix = commitWith(repo, "add-thing: apply minor plan fixes");
   assert.deepEqual(lines(result.stdout).slice(1, 5), [
     "proposal-review: review 1 of 3 APPROVE, 0 blocking, 1 minor (reviewer)",
     "proposal-review: minor plan fixes started (reviser)",
@@ -79,10 +76,7 @@ test("APPROVE with minor findings applies them, records the post-fix plan and re
     "proposal-review: complete",
   ]);
   assert.equal(repo.calls("reviewer").length, 1);
-  assert.deepEqual(subjects(repo), ["add-thing: apply minor plan fixes"]);
-  const approved = state(repo).approvedPlan;
-  assert.equal(approved, planDigest(repo.worktree, "add-thing"));
-  assert.notEqual(approved, record(repo, "001-proposal-review").plan);
+  assert.deepEqual(subjects(repo), ["add-thing: archive", "add-thing: apply minor plan fixes"]);
 });
 
 test("one blocking finding among minor ones is REVISE", (t) => {
@@ -100,7 +94,7 @@ test("a revision that changes nothing makes no commit", (t) => {
   const result = runLoop(repo, ["run", "add-thing"]);
   assert.equal(result.status, 0);
   assert.match(result.stdout, /\] proposal-review: plan revision made no changes \(reviser\)\n/);
-  assert.deepEqual(subjects(repo), []);
+  assert.deepEqual(subjects(repo), ["add-thing: archive"]);
 });
 
 test("a revision commit leaves unrelated staged and unstaged work in the worktree alone", (t) => {
@@ -224,76 +218,22 @@ function stoppedAtIntegration(t: Parameters<typeof makeRepo>[0]): Repo {
   return repo;
 }
 
-test("ticking a task box keeps the approval", (t) => {
+test("a plan edited by hand while the run is stopped resumes where it stopped", (t) => {
   const repo = stoppedAtIntegration(t);
-  writeFile(repo.worktree, TASKS, "## 1. Work\n\n- [x] 1.1 Do the thing\n");
-  const resumed = runLoop(repo, ["resume", "add-thing"]);
-  assert.equal(resumed.status, 0, resumed.stdout);
-  assert.equal(lines(resumed.stdout)[0], "integration: started (fixture)");
-});
-
-test("editing a task's text voids the approval and resumes at proposal review", (t) => {
-  const repo = stoppedAtIntegration(t);
+  const calls = repo.calls().length;
   writeFile(repo.worktree, TASKS, "## 1. Work\n\n- [ ] 1.1 Do another thing\n");
   const resumed = runLoop(repo, ["resume", "add-thing"]);
   assert.equal(resumed.status, 0, resumed.stdout);
-  assert.deepEqual(lines(resumed.stdout).slice(0, 2), [
-    "plan changed since its approval; reviewing it again",
-    "proposal-review: review 1 of 3 started (reviewer)",
-  ]);
-});
-
-test("a plan changed during advancement is reviewed again at the next stage boundary", (t) => {
-  const repo = makeRepo(t, { fixture: { integration: `printf '## 1. Work\\n\\n- [ ] 1.1 Do another thing\\n' > ${TASKS}` } });
-  const result = runLoop(repo, ["run", "add-thing"]);
-  assert.equal(result.status, 0, result.stdout);
-  const progress = lines(result.stdout);
-  const changed = progress.indexOf("plan changed since its approval; reviewing it again");
-  assert.deepEqual(progress.slice(changed - 1, changed + 2), [
-    "integration: complete (fixture)",
-    "plan changed since its approval; reviewing it again",
-    "proposal-review: review 2 of 3 started (reviewer)",
-  ]);
-  assert.equal(repo.calls("reviewer").length, 2);
+  assert.equal(lines(resumed.stdout)[0], "integration: started (fixture)");
+  assert.equal(repo.calls().length, calls);
 });
 
 test("returning to proposal review within one advancement spends the same budget", (t) => {
-  const repo = makeRepo(t, { fixture: { integration: `printf '## 1. Work\\n\\n- [ ] 1.1 Do another thing\\n' > ${TASKS}` } });
+  const repo = makeRepo(t);
   writeFile(repo.top, "openspec/loop.local.yaml", "attempts:\n  proposalReview: 1\n");
+  repo.queue("implementer", { reply: { planProblem: "task 1.1 needs a file format" } });
   const result = runLoop(repo, ["run", "add-thing"]);
   assert.equal(result.status, 1, result.stdout);
   assert.match(result.stdout, /Cause: proposal review attempts exhausted \(1 of 1\)\nRecovery: loop resume add-thing\n/);
   assert.equal(repo.calls("reviewer").length, 1);
-});
-
-test("a plan that cannot be read stops the run as an execution failure of the loop", (t) => {
-  const repo = makeRepo(t, { fixture: { integration: "rm -r openspec/changes/add-thing" } });
-  const result = runLoop(repo, ["run", "add-thing"]);
-  assert.equal(result.status, 1, result.stdout);
-  assert.match(result.stdout, /Run add-thing stopped at proposal-review\.\nCause: execution failure of the loop: ENOENT/);
-  assert.match(state(repo).stop.cause, /^execution failure of the loop/);
-  assert.match(runLoop(repo, ["status", "add-thing"]).stdout, /^Run add-thing: stopped at proposal-review\n/);
-});
-
-test("a completed run whose plan cannot be read shows the stop in status", (t) => {
-  const repo = makeRepo(t);
-  assert.equal(runLoop(repo, ["run", "add-thing"]).status, 0);
-  repo.gitIn(repo.worktree, "rm", "-r", "--quiet", "openspec/changes/add-thing");
-  assert.equal(runLoop(repo, ["resume", "add-thing"]).status, 1);
-  assert.match(runLoop(repo, ["status", "add-thing"]).stdout, /^Run add-thing: stopped at proposal-review\nCause: execution failure of the loop: ENOENT/);
-
-  repo.gitIn(repo.worktree, "checkout", "--quiet", "HEAD", "--", "openspec/changes/add-thing");
-  assert.equal(runLoop(repo, ["resume", "add-thing"]).status, 0);
-  assert.equal(state(repo).stop, null);
-  assert.match(runLoop(repo, ["status", "add-thing"]).stdout, /^Run add-thing: complete\./);
-});
-
-test("a completed run whose plan changed is reviewed again on resume", (t) => {
-  const repo = makeRepo(t);
-  assert.equal(runLoop(repo, ["run", "add-thing"]).status, 0);
-  writeFile(repo.worktree, DESIGN, "## Decisions\n");
-  const resumed = runLoop(repo, ["resume", "add-thing"]);
-  assert.equal(resumed.status, 0, resumed.stdout);
-  assert.equal(lines(resumed.stdout)[0], "plan changed since its approval; reviewing it again");
-  assert.match(resumed.stdout, /Run add-thing completed\./);
 });

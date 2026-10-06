@@ -19,8 +19,6 @@ export interface RunState {
   stages: Record<Stage, "pending" | "complete">;
   current: Stage | null;
   stop: Stop | null;
-  // The plan digest the last approving proposal review covers.
-  approvedPlan: string | null;
   // The verdict record of a review whose plan reviser turn has not yet been committed.
   owedReview: string | null;
   // The findings record the next implementer turn must address: failed checks, or an implementation review.
