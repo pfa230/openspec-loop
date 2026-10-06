@@ -9,7 +9,6 @@ const root = new URL("../../", import.meta.url);
 const pkg = JSON.parse(readFileSync(new URL("package.json", root), "utf8"));
 export const BIN = fileURLToPath(new URL(pkg.bin.loop, root));
 
-export const STAGES = ["proposal-review", "implementation", "integration", "archive", "delivery"];
 export const FIXTURE_STAGES = ["integration", "delivery"];
 
 export function configYaml(defaultBranch = "main"): string {
@@ -103,6 +102,10 @@ fi
 // as OpenSpec 1.14.0 does, or, while the marker file exists, refuses as OpenSpec does on a failed validation.
 function archiveStub(marker: string): string {
   return `if [ "$1" = archive ]; then
+  if [ $# -ne 3 ] || [ "$3" != --yes ]; then
+    echo "unexpected archive arguments: $*"
+    exit 2
+  fi
   if [ -e ${JSON.stringify(marker)} ]; then
     echo "Validation failed. Please fix the errors before archiving."
     exit 1

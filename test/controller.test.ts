@@ -136,7 +136,7 @@ test("a refused archive stops the run without a commit, and resume archives once
     result.stdout,
   );
   assert.match(readFileSync(transcript, "utf8"), /Validation failed/);
-  assert.notEqual(repo.git("log", "-1", "--format=%s", "loop/add-thing"), "add-thing: archive");
+  assert.equal(repo.git("rev-parse", "loop/add-thing"), repo.git("rev-parse", "main"));
 
   repo.refuseArchive(false);
   const resumed = runLoop(repo, ["resume", "add-thing"]);
