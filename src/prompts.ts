@@ -1,6 +1,7 @@
 // The prompts and reply schemas of worker turns. The loop checks replies against the same shapes
 // in code (isReview, isAck, isImplementation) rather than with a JSON Schema validator.
 import type { ApplyInstructions } from "./openspec.js";
+import { outsideChange } from "./plan.js";
 
 export interface Finding {
   severity: "blocking" | "minor";
@@ -148,7 +149,7 @@ export function implementationReviewPrompt(change: string, files: string[], base
 
 ${files.map((file) => `- ${file}`).join("\n")}
 
-The change branches from commit ${base}, and commit ${commit} is the candidate. Review the patch \`git diff ${base} ${commit}\`. Task completion marks in the tasks file are bookkeeping, not part of the plan. ${checked}
+The change branches from commit ${base}, and commit ${commit} is the candidate. Review the patch \`git diff ${base} ${commit} -- '${outsideChange(change)}'\`, which leaves out the change's directory: the plan there is approved and is not under review. ${checked}
 
 Judge two things:
 1. Does the patch implement the whole approved plan?

@@ -1,0 +1,9 @@
+## 1. The patch leaves out the change's directory
+
+- [x] 1.1 Add `outsideChange(change)` to `src/plan.ts`, returning `:(top,exclude)openspec/changes/<change>`. Give `patchId()` in `src/git.ts` a `pathspec` parameter appended to its `git diff` as `-- "$3"`, and pass `outsideChange(state.change)` from `complete()` and `integration()`. Make `patchIdOf()` in `test/helpers.ts` leave out `openspec/changes/add-thing` the same way. Verify that the existing `approvedPatch` assertions pass, and with one new stub-agent test: stop a run with `loop stop` during an integration check, commit an edit to a task's text in the run's worktree, and resume. The run completes with no further implementer or reviewer call, and the output has no `integration: the patch changed` line
+- [x] 1.2 In `implementationReviewPrompt()`, give the review command as `git diff <base> <commit> -- '<outsideChange(change)>'` and replace the sentence on task completion marks with the note from design.md. Verify with one stub-agent test: the proposal reviewer returns one minor finding, the plan reviser edits `proposal.md`, and the implementer writes `a.txt` and ticks its task. Run the review prompt's command with `--name-only` in the run's worktree; it prints only `a.txt`. The run completes
+- [x] 1.3 In `README.md`, say in the implementation review bullet that the patch is the change's work outside `openspec/changes/<change>/`, so plan revisions, minor plan fixes and decisions recorded on the branch are not part of it, and that the integration comparison uses the same patch. Verify that the README describes no reviewed or compared diff that includes the change's directory
+
+## 2. Final checks
+
+- [x] 2.1 Run `openspec validate review-patch-without-plan --strict` and `npm test`, and verify on the pull request with `gh run watch` that CI passes on Linux and macOS

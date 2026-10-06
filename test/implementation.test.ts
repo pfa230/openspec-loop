@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { chmodSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
@@ -95,6 +96,21 @@ test("a failing check returns to the implementer, and the passing revision is re
   assert.ok(reviewPrompt.includes(`- \`${MISSING}\``), reviewPrompt);
   assert.equal(state(repo).owedFindings, null);
   assert.equal(state(repo).approvedPatch, patchIdOf(repo, base, head));
+});
+
+test("the reviewed patch leaves out the plan's minor fixes and the task ticks", (t) => {
+  const repo = makeRepo(t);
+  repo.queue("reviewer", { reply: { findings: [finding("minor", "unclear sentence in proposal.md")] } });
+  repo.queue("reviser", { edits: { "openspec/changes/add-thing/proposal.md": "## Why\n\nA clearer test.\n" } });
+  repo.queue("implementer", { edits: { "a.txt": "a\n", [TASKS]: "## 1. Work\n\n- [x] 1.1 Do the thing\n" } });
+  const result = runLoop(repo, ["run", "add-thing"]);
+  assert.equal(result.status, 0, result.stdout);
+  assert.deepEqual(subjects(repo).slice(0, 2), ["add-thing: apply minor plan fixes", "add-thing: implement"]);
+  const [review] = transcripts(repo, "-implementation-review.prompt.md");
+  const command = /Review the patch `git diff ([^`]+)`/.exec(readFileSync(review, "utf8"))?.[1];
+  assert.ok(command, review);
+  const files = execFileSync("sh", ["-c", `git diff --name-only ${command}`], { cwd: repo.worktree, env: repo.env, encoding: "utf8" });
+  assert.equal(files, "a.txt\n");
 });
 
 test("every check runs after one fails, and its failure is recorded as a finding", (t) => {

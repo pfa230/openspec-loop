@@ -166,6 +166,27 @@ test("integration aborts a merge left in progress and integrates again", async (
   assert.deepEqual(lines(resumed.stdout).slice(0, 2), ["integration: started", "integration: aborted an unfinished merge"]);
 });
 
+test("a plan edit committed while the run is stopped at integration leaves the patch unchanged", async (t) => {
+  const repo = makeRepo(t);
+  const hold = join(repo.root, "hold");
+  writeFile(repo.top, "openspec/loop.local.yaml", `checks:\n  - ${JSON.stringify(`test ! -e ${hold} || sleep 30`)}\n`);
+  repo.queue("implementer", { edits: { "a.txt": "a\n" } });
+  repo.queue("verifier", { sh: `touch ${hold}` });
+  const running = startLoop(repo, ["run", "add-thing"]);
+  await running.waitFor(/integration: check .* started/);
+  assert.equal(runLoop(repo, ["stop", "add-thing"]).status, 0);
+  assert.equal((await running.exited).status, 1);
+
+  writeFile(repo.worktree, "openspec/changes/add-thing/tasks.md", "## 1. Work\n\n- [ ] 1.1 Do another thing\n");
+  repo.gitIn(repo.worktree, "commit", "--quiet", "-am", "edit the plan");
+  writeFile(repo.top, "openspec/loop.local.yaml", "checks: []\n");
+  const calls = repo.calls().length;
+  const resumed = runLoop(repo, ["resume", "add-thing"]);
+  assert.equal(resumed.status, 0, resumed.stdout);
+  assert.ok(!lines(resumed.stdout).includes("integration: the patch changed"), resumed.stdout);
+  assert.equal(repo.calls().length, calls);
+});
+
 test("a base that takes in one of the change's commits changes the patch", (t) => {
   const repo = makeRepo(t);
   repo.queue("implementer", { edits: { "a.txt": "a\n" } }, { edits: { "b.txt": "b\n" } });
