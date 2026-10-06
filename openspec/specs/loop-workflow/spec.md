@@ -196,7 +196,7 @@ Each external role SHALL run under the execution restrictions configured for it,
 
 ### Requirement: Integration and delivery
 
-The run SHALL work on the change's branch. When `loop run` is given on a branch other than the default branch, that branch is the change's branch and the run works in its worktree; when it is given on the default branch, the loop creates the change's branch from that commit in a worktree of its own. The run SHALL preserve unrelated work in every checkout. The base, which the loop integrates the change with and delivers it to, is the remote's default branch in `pr` mode and the local default branch in `local` and `merge` modes. Before archival, the loop SHALL integrate the change with the current base; a conflict or a failed required check SHALL return to the implementer as findings. Only `merge` mode SHALL change the local default branch, and only by fast-forward when every checkout holding it is clean; otherwise the run SHALL stop and name the checkout. Before integrating in `merge` mode, the loop SHALL fast-forward a local default branch that is behind its remote, and SHALL stop the run when it is ahead or has diverged. Every action outside the run's worktree, such as updating or pushing a branch or opening a pull request, SHALL be reported as its own progress line. The configuration SHALL select one delivery mode: `local`, where the run stops with the archived change committed on its branch and pushes nothing; `pr`, where the loop pushes the change branch and opens a pull request on the repository's GitHub remote; or `merge`, where the loop fast-forwards the default branch to the change branch and pushes it. A failed fast-forward or a rejected push SHALL stop the run.
+The run SHALL work on the change's branch. When `loop run` is given on a branch other than the default branch, that branch is the change's branch and the run works in its worktree; when it is given on the default branch, the loop creates the change's branch from that commit in a worktree of its own. The run SHALL preserve unrelated work in every checkout. The base, which the loop integrates the change with and delivers it to, is the remote's default branch in `pr` mode and the local default branch in `local` and `merge` modes. Before archival, the loop SHALL integrate the change with the current base; a conflict, an integration that changes the change's patch, or a failed required check on the integrated result SHALL return to the implementer as findings. Only `merge` mode SHALL change the local default branch, and only by fast-forward when every checkout holding it is clean, meaning it has no uncommitted changes to tracked files; otherwise the run SHALL stop and name the checkout. Before integrating in `merge` mode, the loop SHALL fast-forward a local default branch that is behind its remote, and SHALL stop the run when it is ahead or has diverged. Every action outside the run's worktree, such as updating or pushing a branch or opening a pull request, SHALL be reported as its own progress line. The configuration SHALL select one delivery mode: `local`, where the run stops with the archived change committed on its branch and pushes nothing; `pr`, where the loop pushes the change branch and opens a pull request on the repository's GitHub remote; or `merge`, where the loop pushes the change branch's commit to the remote's default branch and then fast-forwards the local default branch to it. Before changing anything in `merge` delivery, the loop SHALL check that every checkout holding the default branch is clean and that the change's branch contains the default branch. A failed fast-forward or a rejected push SHALL stop the run, and a rejected push SHALL leave the local default branch unchanged.
 
 #### Scenario: Run on the default branch
 - **WHEN** the user runs `loop run` on the default branch
@@ -231,12 +231,24 @@ The run SHALL work on the change's branch. When `loop run` is given on a branch 
 - **THEN** the loop fast-forwards it before integrating and reports the fast-forward as a progress line
 
 #### Scenario: Dirty checkout
-- **WHEN** the loop needs to change the default branch and a checkout holding it has uncommitted changes
+- **WHEN** the loop needs to change the default branch and a checkout holding it has uncommitted changes to tracked files
 - **THEN** the run stops before changing anything and names the checkout
+
+#### Scenario: Untracked files in the checkout
+- **WHEN** the loop needs to change the default branch and a checkout holding it has only untracked files that the change does not touch
+- **THEN** the loop fast-forwards the default branch and leaves those files in place
 
 #### Scenario: Unpushed commits on the default branch
 - **WHEN** in `merge` mode the local default branch is ahead of its remote
 - **THEN** the run stops instead of publishing those commits
+
+#### Scenario: Diverged default branch
+- **WHEN** in `merge` mode the local default branch and its remote have diverged
+- **THEN** the run stops at integration, names both branches, and changes neither
+
+#### Scenario: Push rejected
+- **WHEN** in `merge` mode the remote's default branch moves after integration and the push is rejected
+- **THEN** the run stops at delivery with Git's message, and the local default branch is unchanged
 
 ### Requirement: Run control
 
@@ -245,6 +257,14 @@ The loop SHALL provide deterministic `run`, `status`, `stop` and `resume` comman
 #### Scenario: Resume after interrupted merge
 - **WHEN** a run was interrupted after its merge completed and the user resumes it
 - **THEN** the loop detects the completed merge and does not merge again
+
+#### Scenario: Resume after interrupted archival
+- **WHEN** a run was interrupted after OpenSpec archived the change but before the loop committed the result, and the user resumes it
+- **THEN** the loop commits the archived change without running OpenSpec's archive again
+
+#### Scenario: Resume after the pull request opened
+- **WHEN** a run was interrupted after its pull request opened and the user resumes it
+- **THEN** the loop reports the open pull request and does not open another
 
 #### Scenario: Plan edited while stopped
 - **WHEN** a person changes the plan while a run is stopped after implementation completed, and resumes it
@@ -373,3 +393,43 @@ After every earlier stage completes, the controller SHALL archive the change wit
 #### Scenario: Archive refused
 - **WHEN** OpenSpec refuses to archive the change, such as when its spec deltas fail validation
 - **THEN** the run stops at archival, the report names OpenSpec's output, and the change's branch gains no commit
+
+### Requirement: Integration method
+
+In `pr` mode the loop SHALL integrate by merging the base into the change's branch and SHALL NOT rewrite that branch's commits. In `local` and `merge` modes it SHALL rebase the change's branch onto the base, and when the rebase conflicts it SHALL abandon the rebase and merge instead. A conflicted merge SHALL stay in progress in the run's worktree for the implementer, and the loop SHALL conclude it with the implementer's resolution. Patches SHALL be compared without context lines or line numbers.
+
+#### Scenario: Clean rebase
+- **WHEN** in `local` or `merge` mode the base has moved and the change's branch rebases onto it without conflicts
+- **THEN** the change's commits sit on the base in a line, with no merge commit
+
+#### Scenario: Rebase conflicts
+- **WHEN** in `local` or `merge` mode the rebase onto the base conflicts
+- **THEN** the loop abandons the rebase, leaving the branch's commits as they were, and merges the base instead
+
+#### Scenario: Merge conflicts
+- **WHEN** the merge of the base into the change's branch conflicts
+- **THEN** the loop returns the conflicted files to the implementer as findings, and after the implementer's turn the merge commit holding the resolution is on the change's branch
+
+#### Scenario: Pull request integration
+- **WHEN** in `pr` mode the remote's default branch has moved
+- **THEN** the loop merges it into the change's branch, and every earlier commit of the branch stays as it was
+
+#### Scenario: Integration changes the patch
+- **WHEN** integration completes without conflicts but the change's patch differs from the one implementation completed with, such as when the base already holds part of the change
+- **THEN** the integrated result returns to the implementer as findings, and is checked and reviewed before archival
+
+### Requirement: Delivery remote
+
+In `pr` and `merge` modes, the remote SHALL be the remote of the default branch's upstream as Git records it, and the remote's default branch SHALL be that upstream branch. In `pr` mode the pull request SHALL target the upstream remote's repository and the upstream branch. `loop run` and `loop resume` SHALL refuse a `pr` or `merge` configuration when the default branch has no upstream, and SHALL name the branch. In `local` mode the loop SHALL contact no remote.
+
+#### Scenario: No upstream
+- **WHEN** the configuration selects `merge` or `pr` and the default branch has no upstream
+- **THEN** `loop run` refuses before creating a run and names the default branch
+
+#### Scenario: Several GitHub remotes
+- **WHEN** in `pr` mode the repository has several GitHub remotes and the default branch's upstream is on one of them
+- **THEN** the pull request opens on that remote's repository against the upstream branch
+
+#### Scenario: Local mode without a remote
+- **WHEN** the configuration selects `local` in a repository with no remote
+- **THEN** the run integrates, archives and completes without contacting a remote
