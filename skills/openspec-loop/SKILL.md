@@ -10,7 +10,7 @@ The loop runs a committed OpenSpec change unattended. You supervise it only thro
 - `loop run <change>` starts a run and advances it in the foreground. It prints a progress line, prefixed with the time, as each step starts and ends, then a report. It exits 0 when the run completes, 1 when it stops, and 2 when it refuses to start.
 - `loop status <change>` shows the run's state, branch, stages and locations.
 - `loop stop <change>` ends the current step at once; the running `loop run` then prints its stop report.
-- `loop resume <change>` continues a stopped or interrupted run with a fresh attempt budget; `loop resume <change> --attempts <n>` sets that budget, and `--implement` sends the run back to the implementer, which implements the plan as it stands without another plan review. It advances in the foreground like `loop run`, with the same output and exit statuses.
+- `loop resume <change>` continues a stopped or interrupted run with a fresh attempt budget; `loop resume <change> --attempts <n>` sets that budget, and `--implement` sends the run back to the implementer, which implements the plan as it stands; proposal review stays as it is, so an approved plan is not reviewed again. It advances in the foreground like `loop run`, with the same output and exit statuses.
 
 ## Rules
 
