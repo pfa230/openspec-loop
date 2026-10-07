@@ -4,7 +4,7 @@
 
 ## 2. Documentation
 
-- [ ] 2.1 Rewrite the README as design.md decision 3 describes, with the skill copy command of decision 2 and the release procedure of decision 5 with the version as a placeholder. Verify that the README has no relative link and no issue reference, and that it covers installation, project setup, roles, the three delivery modes, the usage report, recovery, supervision and releasing
+- [x] 2.1 Rewrite the README as design.md decision 3 describes, with the skill copy command of decision 2 and the release procedure of decision 5 with the version as a placeholder. Verify that the README has no relative link and no issue reference, and that it covers installation, project setup, roles, the three delivery modes, the usage report, recovery, supervision and releasing
 
 ## 3. Clean-project exercise
 
