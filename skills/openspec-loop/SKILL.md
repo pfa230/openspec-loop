@@ -10,7 +10,7 @@ The loop runs a committed OpenSpec change unattended. You supervise it only thro
 - `loop run <change>` starts a run and advances it in the foreground. It prints a progress line, prefixed with the time, as each step starts and ends, then a report. It exits 0 when the run completes, 1 when it stops, and 2 when it refuses to start.
 - `loop status <change>` shows the run's state, branch, stages and locations.
 - `loop stop <change>` ends the current step at once; the running `loop run` then prints its stop report.
-- `loop resume <change>` continues a stopped or interrupted run with a fresh attempt budget; `loop resume <change> --attempts <n>` sets that budget. It advances in the foreground like `loop run`, with the same output and exit statuses.
+- `loop resume <change>` continues a stopped or interrupted run with a fresh attempt budget; `loop resume <change> --attempts <n>` sets that budget, and `--implement` sends the run back to the implementer, which implements the plan as it stands without another plan review. It advances in the foreground like `loop run`, with the same output and exit statuses.
 
 ## Rules
 
@@ -49,7 +49,7 @@ The loop reports what it observed and investigates nothing; finding out why a ru
    - The same check failure repeats unchanged: it may fail on the base too, and the implementer must not repair what the change did not break. Suggest the user check the base.
 
    Then look at what each attempt changed. Each implementation review record names the `commit` it reviewed: `git diff` consecutive ones in the worktree. For proposal review, diff the plan between the `<change>: revise plan` commits that `git log` shows on the run's branch.
-4. **Present and wait.** Give the likely cause with the files and lines that support it, what the evidence leaves open, and the recoveries that fit: `loop resume <change>` after the user fixes the environment, `loop resume <change> --attempts <n>`, a decision or plan edit committed on the run's branch and then resumed, or discarding the run as the README describes. Do nothing more until the user chooses.
+4. **Present and wait.** Give the likely cause with the files and lines that support it, what the evidence leaves open, and the recoveries that fit: `loop resume <change>` after the user fixes the environment, `loop resume <change> --attempts <n>`, a decision or plan edit committed on the run's branch and then resumed, or discarding the run as the README describes. When the user has edited the plan of a run whose implementation is complete, offer `loop resume <change> --implement`, which has the implementer implement the edited plan; a plain resume would continue where the run stopped. It is refused once the change is archived. Do nothing more until the user chooses.
 
 ## Answering a decision stop
 

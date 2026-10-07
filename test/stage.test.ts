@@ -229,6 +229,34 @@ test("a plan edited by hand while the run is stopped resumes where it stopped", 
   assert.equal(repo.calls().length, calls);
 });
 
+test("resume --implement after a plan edit implements, checks and reviews again without a plan review", (t) => {
+  const repo = stoppedAtArchive(t);
+  writeFile(repo.top, "openspec/loop.local.yaml", "checks:\n  - \"true\"\n");
+  writeFile(repo.worktree, TASKS, "## 1. Work\n\n- [x] 1.1 Do the thing\n- [ ] 1.2 Do another thing\n");
+  repo.gitIn(repo.worktree, "commit", "--quiet", "-am", "add a task");
+  const calls = { reviewer: repo.calls("reviewer").length, implementer: repo.calls("implementer").length, verifier: repo.calls("verifier").length };
+  const resumed = runLoop(repo, ["resume", "add-thing", "--implement"]);
+  assert.equal(resumed.status, 0, resumed.stdout);
+  assert.equal(lines(resumed.stdout)[0], "implementation: attempt 1 of 3, implementer started (implementer)");
+  assert.ok(lines(resumed.stdout).includes("implementation: attempt 1 of 3, check `true` passed"), resumed.stdout);
+  assert.equal(repo.calls("reviewer").length, calls.reviewer);
+  assert.equal(repo.calls("implementer").length, calls.implementer + 1);
+  assert.equal(repo.calls("verifier").length, calls.verifier + 1);
+});
+
+test("resume --implement before the plan is approved reviews the plan first", (t) => {
+  const repo = makeRepo(t);
+  writeFile(repo.top, "openspec/loop.local.yaml", "attempts:\n  proposalReview: 1\n");
+  repo.queue("reviewer", { reply: { findings: [finding("blocking", "no design")] } });
+  repo.queue("reviser", { edits: { [DESIGN]: "x\n" } });
+  assert.equal(runLoop(repo, ["run", "add-thing"]).status, 1);
+  const before = repo.calls().length;
+  const resumed = runLoop(repo, ["resume", "add-thing", "--implement"]);
+  assert.equal(resumed.status, 0, resumed.stdout);
+  assert.equal(lines(resumed.stdout)[0], "proposal-review: review 1 of 1 started (reviewer)");
+  assert.deepEqual(repo.calls().slice(before, before + 2).map((call) => call.args[0]), ["reviewer", "implementer"]);
+});
+
 test("returning to proposal review within one advancement spends the same budget", (t) => {
   const repo = makeRepo(t);
   writeFile(repo.top, "openspec/loop.local.yaml", "attempts:\n  proposalReview: 1\n");

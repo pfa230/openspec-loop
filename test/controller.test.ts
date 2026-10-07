@@ -172,6 +172,16 @@ test("resume after an archive OpenSpec made but the loop did not commit commits 
   assert.equal(repo.git("log", "--format=%s", "main..loop/add-thing"), "add-thing: archive");
 });
 
+test("resume --implement refuses once OpenSpec moved the change, and leaves the run as it was", (t) => {
+  const repo = archivedByHand(t);
+  const before = readFileSync(join(repo.runDir(), "state.json"), "utf8");
+  const refused = runLoop(repo, ["resume", "add-thing", "--implement"]);
+  assert.equal(refused.status, 2, refused.stdout);
+  assert.match(refused.stderr, /add-thing is archived in worktree .*; `--implement` reopens implementation only before archival/);
+  assert.equal(readFileSync(join(repo.runDir(), "state.json"), "utf8"), before);
+  assert.equal(runLoop(repo, ["resume", "add-thing"]).status, 0);
+});
+
 test("resume after the archive commit completes the stage without another commit", (t) => {
   const repo = archivedByHand(t);
   repo.gitIn(repo.worktree, "commit", "--quiet", "-m", "add-thing: archive");
