@@ -1,0 +1,9 @@
+## 1. Take the report from the log in Claude Code
+
+- [ ] 1.1 In `skills/openspec-loop/SKILL.md`, under "Watching a run in Claude Code", replace the second sentence of step 2 ("Each new line arrives as a notification; relay it, and keep count of the lines relayed.") with: "Each new line arrives as a notification. Relay each progress line, which starts with the time, and keep count of the lines relayed. Do not relay the report's lines, which follow the last progress line: Monitor events drop each line's leading whitespace." Keep the rest of step 2. Verify with `rg -n "Monitor events drop each line's leading whitespace" skills/openspec-loop/SKILL.md`
+- [ ] 1.2 Replace step 3 with: "3. When Bash reports that the background command exited, stop the monitor, read the log with Bash from the first line not yet relayed to the end, and give the user the progress lines among them, the report as that read prints it, and the exit status." Verify with `rg -n "the report as that read prints it" skills/openspec-loop/SKILL.md`
+- [ ] 1.3 Verify in a real Claude Code session. In a scratch directory, put a stub `loop` on PATH that prints two lines of the form `[12:00:00] proposal-review: started` and sleeps 2 seconds after each, then prints the report `Run demo completed.`, `Usage by role:` and two lines indented by two spaces, such as `  implementer: 1 step; input_tokens=10, cost unavailable`, and exits 0. Copy this worktree's `skills/openspec-loop/SKILL.md` to `<scratch>/.claude/skills/openspec-loop/SKILL.md` and ask an interactive Claude Code session started there to run `demo` with the loop. Verify that the session's final code block in its transcript JSONL under `~/.claude/projects/` holds both usage lines with their two leading spaces. Report the Claude Code version and those transcript lines
+
+## 2. Final checks
+
+- [ ] 2.1 Run `openspec validate read-report-from-log --strict` and `npm test`, and verify both pass
