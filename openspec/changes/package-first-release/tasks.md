@@ -8,7 +8,7 @@
 
 ## 3. Clean-project exercise
 
-- [ ] 3.1 Run design.md decision 4 with a tarball packed from the branch's tip after 2.1. Verify that:
+- [x] 3.1 Run design.md decision 4 with a tarball packed from the branch's tip after 2.1. Verify that:
   - `loop` and each adapter resolve, through `realpath`, under `$(npm root -g)/openspec-loop/`, not into this repository;
   - setup changed only `openspec/loop.yaml`, `.gitignore`, `.claude/skills/openspec-loop/` and `.agents/skills/openspec-loop/`, and `.git/hooks` holds only Git's samples;
   - the Claude Code session proposed the change with `/opsx:propose`, loaded the copied skill, relayed each progress line as it arrived and showed the report unchanged;
