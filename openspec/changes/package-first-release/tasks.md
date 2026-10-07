@@ -9,9 +9,9 @@
 ## 3. Clean-project exercise
 
 - [ ] 3.1 Run design.md decision 4 with a tarball packed from the branch's tip after 2.1. Verify that:
-  - `command -v loop` and each adapter resolve into the global install from the tarball, not into this repository;
+  - `loop` and each adapter resolve, through `realpath`, under `$(npm root -g)/openspec-loop/`, not into this repository;
   - setup changed only `openspec/loop.yaml`, `.gitignore`, `.claude/skills/openspec-loop/` and `.agents/skills/openspec-loop/`, and `.git/hooks` holds only Git's samples;
-  - the Claude Code session loaded the copied skill, relayed each progress line as it arrived and showed the report unchanged;
+  - the Claude Code session proposed the change with `/opsx:propose`, loaded the copied skill, relayed each progress line as it arrived and showed the report unchanged;
   - the run completed in `local` delivery with the change archived on `loop/<change>` and `main` unchanged.
 
   Fix every README step that failed or misled, then repeat the exercise with a fresh tarball until it runs from the README alone. Post the comment on #10 that decision 4 describes.
