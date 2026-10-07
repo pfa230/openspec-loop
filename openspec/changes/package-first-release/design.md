@@ -59,7 +59,7 @@ Every README step that fails or misleads is fixed in the README, and the exercis
 5. `npm install -g openspec-loop@0.2.0`, replacing the tarball install, then check that `loop status x` refuses for a missing run and that the skill is under `$(npm root -g)/openspec-loop/skills/`.
 6. Comment on #10 with the registry URL and close it.
 
-The README's release section is these steps with the version as a placeholder; step 2 belongs only to this release, where the exercise ran before the merge.
+The README's release section is these steps with the version as a placeholder, preceded by the version bump that decision 1 makes for this release: `npm version <version> --no-git-tag-version` on the change's branch, committed with both manifests. Step 2 belongs only to this release, where the exercise ran before the merge.
 
 ## Risks / Trade-offs
 
