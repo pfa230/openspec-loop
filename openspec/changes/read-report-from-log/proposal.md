@@ -4,7 +4,7 @@ A supervising Claude Code session showed the run's report with the two leading s
 
 ## What Changes
 
-- **In Claude Code, the skill shows the report from a Bash read of the log.** Monitor events relay the progress lines, which start with the time and carry no leading whitespace. The report's lines come after the last progress line; the skill no longer relays them from Monitor events, and shows the report from the Bash read of the log it already makes when the command exits. This covers every indented report line, not only the usage block: the decision questions under a decision stop's cause, and any indented command output a cause quotes.
+- **In Claude Code, the skill shows the report from a Bash read of the log.** Monitor events relay the progress lines, which start with the time and carry no leading whitespace. The first line that does not start with the time ends that relay; the skill shows it and every later line from the Bash read of the log it already makes when the command exits. That covers the report and anything else after the progress, such as a refusal or the usage text, and every indented line in them, not only the usage block: the decision questions under a decision stop's cause, and any indented command output a cause quotes.
 
 Not in this change:
 
