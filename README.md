@@ -2,14 +2,43 @@
 
 openspec-loop takes an OpenSpec change you proposed and committed, and runs it unattended to a reviewed, implemented, tested, archived and delivered result. You attend the proposal; the loop handles everything after it.
 
-The loop is under construction. Its contract is [`openspec/specs/loop-workflow/spec.md`](openspec/specs/loop-workflow/spec.md), and the build steps are tracked as GitHub issues.
-
 ## Prerequisites
 
-- Node 24 or later, on Linux or macOS (Windows is tracked in #16)
+- Node 24 or later, on Linux or macOS
 - OpenSpec 1.14.0 or later, as the `openspec` command on PATH
 - Git
+- A repository initialized with `openspec init` for the tools you use, which installs OpenSpec's own skills and commands in the project
 - The CLI of each harness your agents use: `claude`, `codex`, `agy` or `opencode`
+
+## Installation
+
+```sh
+npm install -g openspec-loop
+```
+
+This installs the `loop` command and the four adapters described under Agents and adapters. To upgrade, run `npm update -g openspec-loop`, then copy the supervision skill into each project again, as Setting up a project describes.
+
+## Setting up a project
+
+In a repository set up for OpenSpec:
+
+1. Write `openspec/loop.yaml` as Configuration describes, and commit it.
+2. Add the worktrees directory and `openspec/loop.local.yaml` to `.gitignore`, for example:
+
+   ```
+   .worktrees/
+   openspec/loop.local.yaml
+   ```
+
+3. Copy the supervision skill into the project for Claude Code and Codex, and commit both copies:
+
+   ```sh
+   for dir in .claude/skills .agents/skills; do mkdir -p "$dir" && cp -R "$(npm root -g)/openspec-loop/skills/openspec-loop" "$dir/"; done
+   ```
+
+   Run the same command and commit again after every upgrade: the skill describes the commands and flags of the installed version, and nothing detects a stale copy.
+
+Setup changes nothing else in the project. The loop installs no Git hooks and needs no OpenSpec schema or configuration of its own.
 
 ## Configuration
 
@@ -86,7 +115,7 @@ The command may also write what its harness reported spending to the usage file,
 
 ## Running a change
 
-Propose the change with native `/opsx:propose` and commit it. The proposal must be committed on the branch the run works on, which you choose by where you give `loop run`:
+Propose the change with OpenSpec's own proposing, `/opsx:propose` in Claude Code or the `$openspec-propose` skill in Codex, and commit it. The proposal must be committed on the branch the run works on, which you choose by where you give `loop run`:
 
 - **On the default branch.** Commit the proposal on the default branch and run `loop run <change>` there. The loop creates branch `loop/<change>` from that commit in a worktree under `worktrees` and leaves your checkout's files and index untouched.
 - **On a branch of its own.** Create a worktree on a new branch, propose and commit there, and run `loop run <change>` in that worktree. The run works in that worktree, which must have no uncommitted changes.
@@ -186,9 +215,39 @@ When delivery stops, the report says what to fix:
 
 Resume after an interrupted delivery repeats its steps safely. Git does nothing for a push or a fast-forward whose commit is already there, and in `pr` mode the loop reports a pull request that is already open for the run's branch against the upstream branch instead of opening another.
 
+## Supervising from Claude Code or Codex
+
+The skill you copied in Setting up a project lets a Claude Code or Codex session drive the loop for you. Ask the session to run, stop or resume a change. It gives the same `loop` commands you would, relays each progress line as it is printed, and shows the report unchanged. When a run stops, it diagnoses the stop with you from the report, the transcripts, the agent's configured command and the findings, changes nothing while it does, and repairs or resumes only when you agree.
+
+`loop` writes the repository's Git directory and starts its own workers, so the session runs it outside its sandbox. In Codex, approve the escalated permissions the session requests for each `loop` command.
+
 ## Development
 
 ```sh
 npm ci      # install the pinned dev dependencies
 npm test    # build and run the tests; this is the project's only check
 ```
+
+The loop's contract is `openspec/specs/loop-workflow/spec.md`.
+
+### Releasing
+
+On the branch of the change that releases, set the version and commit `package.json` and `package-lock.json` with it:
+
+```sh
+npm version <version> --no-git-tag-version
+```
+
+After that change merges, release from a worktree detached at the default branch's tip:
+
+```sh
+npm ci
+npm test                                   # also builds dist/src, which the package ships
+npm pack
+npm publish openspec-loop-<version>.tgz
+git tag v<version>
+git push origin v<version>
+npm install -g openspec-loop@<version>
+```
+
+Then check that `loop status <any name>` refuses for a missing run and that the skill is under `$(npm root -g)/openspec-loop/skills/`.
