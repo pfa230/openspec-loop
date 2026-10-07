@@ -20,7 +20,7 @@ defaultBranch: main
 worktrees: .worktrees
 agents:
   gpt: [loop-codex, -m, gpt-5.5, -s, read-only]
-  opus: [loop-claude, --model, opus, --permission-mode, acceptEdits]
+  opus: [loop-claude, --model, opus, --permission-mode, auto]
 roles:
   proposalReviewer: gpt
   planReviser: opus
@@ -58,7 +58,7 @@ An agent's command is an adapter followed by arguments for its harness. The pack
 
 | Adapter | Harness | Read-only reviewer arguments | Editing plan reviser and implementer arguments |
 |---|---|---|---|
-| `loop-claude` | Claude Code 2.1.289 | `--permission-mode plan` | `--permission-mode acceptEdits` |
+| `loop-claude` | Claude Code 2.1.293 | `--permission-mode plan` | `--permission-mode auto` |
 | `loop-codex` | Codex 0.160.0 | `-s read-only` | `-s workspace-write` |
 | `loop-agy` | Antigravity 1.2.17 | none | `--dangerously-skip-permissions` |
 | `loop-opencode` | OpenCode 1.18.34 | `--agent plan` | none |
@@ -76,7 +76,7 @@ Counters keep the harness's own names, because the harnesses count differently: 
 
 Add the model flag of the harness (`--model`, `-m`) to choose a model. Without restriction arguments, a harness runs with its own defaults; headless Claude Code and Codex cannot edit files by default.
 
-Claude Code refuses to edit any path inside a `.git` directory without `bypassPermissions`, even with `--permission-mode acceptEdits`. A `worktrees` directory inside the repository's Git directory therefore needs `bypassPermissions` for an editing Claude agent. Run such an agent inside a sandbox if you want to limit what it can do: put the sandbox command first, for example `[ai-jail, --exec, ..., loop-claude, ...]`.
+Claude Code's auto mode needs a model and account that support it. Without it, Claude Code starts in its default mode and denies the commands an implementer needs to run, such as the checks. In auto mode, a classifier judges every edit inside a `.git` directory and may refuse one, so an editing Claude agent whose `worktrees` directory lies inside the repository's Git directory can be refused edits there. `--permission-mode bypassPermissions` approves them all. Run such an agent inside a sandbox if you want to limit what it can do: put the sandbox command first, for example `[ai-jail, --exec, ..., loop-claude, ...]`.
 
 OpenCode has no way to enforce a reply schema, so `loop-opencode` asks for bare JSON and fails the step when the final message is anything else. With `--agent plan`, OpenCode rejects reads outside the repository without asking and can end with no final message; the step then fails, and `loop resume` runs it again.
 
