@@ -41,5 +41,5 @@ Each task posts its run's comment on #9 with the content of design.md decision 2
 ## 4. Summary
 
 - [x] 4.1 Post the closing comment on #9 that design.md decision 2 describes. Include the operator step counts of decision 8 for `local`, `pr` and `merge`, and the implementer's per-attempt usage from runs A and E. Verify that every case in proposal.md appears once with pass, defect and its issue, or unsupported and the reason, and that every scope and acceptance item of #9 points to a case
-- [ ] 4.2 For each defect issue whose fix is merged, merge the default branch into this branch, rebuild, run the failed case again and post its result on #9. Verify that the closing comment's mapping has no case left as a defect
-- [ ] 4.3 Run `npm unlink -g openspec-loop`. Verify that `command -v loop` finds nothing
+- [x] 4.2 For each defect issue whose fix is merged, merge the default branch into this branch, rebuild, run the failed case again and post its result on #9. Verify that the closing comment's mapping has no case left as a defect
+- [x] 4.3 Run `npm unlink -g openspec-loop`. Verify that `command -v loop` finds nothing
