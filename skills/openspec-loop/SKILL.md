@@ -23,8 +23,8 @@ The loop runs a committed OpenSpec change unattended. You supervise it only thro
 ## Watching a run in Claude Code
 
 1. Start the command with Bash and `run_in_background: true`, redirecting its output to a log file: `loop run <change> > <log> 2>&1`. Use `loop resume <change>` the same way.
-2. Start a Monitor on `tail -n +1 -f <log>` with the longest timeout. Each new line arrives as a notification; relay it, and keep count of the lines relayed. If the monitor expires while the run continues, re-arm it with `tail -n +<count + 1> -f <log>`, so no line is skipped or repeated.
-3. When Bash reports that the background command exited, stop the monitor, read the log from the first line not yet relayed to the end, and give the user those lines, the report and the exit status.
+2. Start a Monitor on `tail -n +1 -f <log>` with the longest timeout. Each new line arrives as a notification. Relay each progress line, which starts with the time, and keep count of the lines relayed. The first line that does not start with the time ends the relay: relay neither it nor any line after it, because Monitor events drop each line's leading whitespace, and step 3 shows the rest from the log. If the monitor expires while the run continues, re-arm it with `tail -n +<count + 1> -f <log>`, so no line is skipped or repeated.
+3. When Bash reports that the background command exited, stop the monitor, read the log with Bash from the first line not yet relayed to the end, and show the user all of those lines unchanged, in a code block, with the exit status.
 
 ## Watching a run in Codex
 
