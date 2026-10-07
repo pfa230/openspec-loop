@@ -238,7 +238,9 @@ test("resume --implement after a plan edit implements, checks and reviews again 
   const resumed = runLoop(repo, ["resume", "add-thing", "--implement"]);
   assert.equal(resumed.status, 0, resumed.stdout);
   assert.equal(lines(resumed.stdout)[0], "implementation: attempt 1 of 3, implementer started (implementer)");
-  assert.ok(lines(resumed.stdout).includes("implementation: attempt 1 of 3, check `true` passed"), resumed.stdout);
+  for (const line of ["implementation: attempt 1 of 3, check `true` passed", "integration: started", "integration: check `true` passed"]) {
+    assert.ok(lines(resumed.stdout).includes(line), `${line}\n${resumed.stdout}`);
+  }
   assert.equal(repo.calls("reviewer").length, calls.reviewer);
   assert.equal(repo.calls("implementer").length, calls.implementer + 1);
   assert.equal(repo.calls("verifier").length, calls.verifier + 1);

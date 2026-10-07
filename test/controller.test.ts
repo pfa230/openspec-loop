@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdirSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 import { makeRepo, runLoop, writeFile } from "./helpers.js";
@@ -179,6 +179,7 @@ test("resume --implement refuses once OpenSpec moved the change, and leaves the 
   assert.equal(refused.status, 2, refused.stdout);
   assert.match(refused.stderr, /add-thing is archived in worktree .*; `--implement` reopens implementation only before archival/);
   assert.equal(readFileSync(join(repo.runDir(), "state.json"), "utf8"), before);
+  assert.ok(!existsSync(join(repo.runDir(), "lock")));
   assert.equal(runLoop(repo, ["resume", "add-thing"]).status, 0);
 });
 
