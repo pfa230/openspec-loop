@@ -16,7 +16,7 @@ openspec-loop takes an OpenSpec change you proposed and committed, and runs it u
 npm install -g openspec-loop
 ```
 
-This installs the `loop` command and the four adapters described under Agents and adapters. To upgrade, run `npm update -g openspec-loop`, then copy the supervision skill into each project again, as Setting up a project describes.
+This installs the `loop` command and the four adapters described under Agents and adapters. When npm's global prefix belongs to root, as with a system-wide Node, give npm a prefix you own, such as `npm config set prefix ~/.npm-global` with `~/.npm-global/bin` on PATH, rather than installing with `sudo`. To upgrade, run `npm update -g openspec-loop`, then copy the supervision skill into each project again, as Setting up a project describes.
 
 ## Setting up a project
 
