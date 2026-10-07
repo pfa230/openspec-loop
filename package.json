@@ -1,8 +1,8 @@
 {
   "name": "openspec-loop",
-  "version": "0.0.0",
-  "private": true,
+  "version": "0.2.0",
   "description": "Runs a proposed OpenSpec change to a reviewed, tested and delivered result",
+  "license": "MIT",
   "type": "module",
   "bin": {
     "loop": "dist/src/cli.js",
@@ -12,7 +12,8 @@
     "loop-opencode": "dist/src/adapters/opencode.js"
   },
   "files": [
-    "dist/src"
+    "dist/src",
+    "skills"
   ],
   "engines": {
     "node": ">=24"
