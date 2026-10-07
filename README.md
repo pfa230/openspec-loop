@@ -96,7 +96,7 @@ The commands work from any checkout of the repository:
 | Command | What it does | Exit status |
 |---|---|---|
 | `loop run <change>` | Starts a run and advances it in the foreground, printing a progress line as each step starts and ends, then a report. | 0 completed, 1 stopped, 2 refused |
-| `loop resume <change> [--attempts <n>]` | Continues a stopped or interrupted run from its first incomplete stage, with a fresh attempt budget: the configured one, or `<n>` when given. | 0 completed, 1 stopped, 2 refused |
+| `loop resume <change> [--attempts <n>] [--implement]` | Continues a stopped or interrupted run from its first incomplete stage, with a fresh attempt budget: the configured one, or `<n>` when given. `--implement` first makes implementation and every later stage incomplete, so the implementer implements the plan as it stands; it is refused once the change is archived. | 0 completed, 1 stopped, 2 refused |
 | `loop stop <change>` | Ends the current step at once; the run reports how to resume. Ctrl-C and closing the terminal do the same. | 0, 2 if there is no run |
 | `loop status <change>` | Shows the run's state, branch, stages and locations. | 0, 2 if there is no run |
 
@@ -130,7 +130,7 @@ The first stage reviews the plan: the change's proposal, design, spec deltas and
 - **The verdict.** It follows from the findings: any blocking finding is `REVISE`; otherwise the verdict is `APPROVE`. Each review's verdict and findings are kept as `NNN-proposal-review.verdict.json` in the transcripts.
 - **Revision.** On `REVISE`, the plan reviser revises the plan in a fresh context, the loop commits the change directory on the run's branch, and the plan is reviewed again.
 - **Minor fixes.** On `APPROVE` with minor findings, the plan reviser applies them, the loop commits them, and implementation starts without another review.
-- **Approval.** It covers the plan as it then stands. The loop does not check the plan again for edits you make: if you change it by hand while the run is stopped, the run resumes where it stopped, and verifying the edit is up to you.
+- **Approval.** It covers the plan as it then stands. The loop does not check the plan again for edits you make: if you change it by hand while the run is stopped, the run resumes where it stopped, and verifying the edit is up to you. To have the implementer implement an edited plan after implementation completed, commit the edit on the run's branch and run `loop resume <change> --implement`: the implementer works from what the branch already holds, the checks, implementation review, integration, archival and delivery follow, and the plan is not reviewed again. Once the change is archived, `--implement` is refused.
 - **Decisions.** When a finding needs a decision the plan does not record, the run stops with the reviewer's question before revising anything. Answer it by recording the decision in the design in the run's worktree, committing it on the run's branch, and running `loop resume <change>`. The report names the worktree and the branch.
 - **Attempts.** Each review uses one attempt. When the last allowed review is `REVISE`, the run stops after that review's revision. Every resume starts a fresh budget; `loop resume <change> --attempts 1` gives exactly one more review.
 

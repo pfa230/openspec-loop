@@ -18,7 +18,7 @@ test("status of a change with no run exits 2", (t) => {
   assert.match(result.stderr, /add-thing has no run; start one with `loop run add-thing`/);
 });
 
-test("--attempts is accepted only on resume, as a positive integer", (t) => {
+test("--attempts and --implement are accepted only on resume, each once, --attempts as a positive integer", (t) => {
   const repo = makeRepo(t);
   const malformed = [
     ["run", "add-thing", "--attempts", "1"],
@@ -28,15 +28,21 @@ test("--attempts is accepted only on resume, as a positive integer", (t) => {
     ["resume", "add-thing", "--attempts", "1.5"],
     ["resume", "add-thing", "--attempts", "two"],
     ["resume", "add-thing", "--attempts", "9".repeat(400)],
+    ["run", "add-thing", "--implement"],
+    ["status", "add-thing", "--implement"],
+    ["resume", "add-thing", "--implement", "--implement"],
+    ["resume", "add-thing", "--attempts", "1", "--attempts", "2"],
   ];
   for (const args of malformed) {
     const result = loop(args, { cwd: repo.top, env: repo.env });
     assert.equal(result.status, 2, args.join(" "));
     assert.match(result.stderr, /^Usage: loop /, args.join(" "));
   }
-  const accepted = runLoop(repo, ["resume", "add-thing", "--attempts", "2"]);
-  assert.equal(accepted.status, 2);
-  assert.match(accepted.stderr, /add-thing has no run/);
+  for (const extra of [["--attempts", "2"], ["--implement"], ["--implement", "--attempts", "2"], ["--attempts", "2", "--implement"]]) {
+    const accepted = runLoop(repo, ["resume", "add-thing", ...extra]);
+    assert.equal(accepted.status, 2, extra.join(" "));
+    assert.match(accepted.stderr, /add-thing has no run/, extra.join(" "));
+  }
 });
 
 test("run refuses a role whose agent cannot be found, naming the role and the alias", (t) => {

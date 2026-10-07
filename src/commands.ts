@@ -5,6 +5,7 @@ import { type Config, readConfig, resolveRoles } from "./config.js";
 import { advance, locations, progress, type Setup } from "./controller.js";
 import { deliveryBase, git, gitMessage, gitSucceeds, topLevel } from "./git.js";
 import { checkOpenSpec } from "./openspec.js";
+import { changeDir } from "./plan.js";
 import { Refusal } from "./refusal.js";
 import {
   acquireLock,
@@ -78,7 +79,7 @@ function enroll(top: string, dir: string, change: string, config: Config): RunSt
   return state;
 }
 
-export async function resume(change: string, attempts?: number): Promise<number> {
+export async function resume(change: string, attempts?: number, implement = false): Promise<number> {
   const top = topLevel(process.cwd());
   const setup = prepare(top, attempts);
   const dir = runDir(top, change);
@@ -87,12 +88,23 @@ export async function resume(change: string, attempts?: number): Promise<number>
   let state: RunState;
   try {
     state = existingState(dir, change);
+    if (implement) reimplement(state);
   } catch (error) {
     releaseLock(dir);
     throw error;
   }
   if (deadPid !== undefined) progress(`took over run ${change} from process ${deadPid}, which died`);
   return advance(dir, state, setup);
+}
+
+// Makes implementation and every later stage incomplete, so the implementer implements the plan as it stands;
+// advance() persists the change. Proposal review and owed records stay as they are.
+function reimplement(state: RunState): void {
+  // Once OpenSpec has moved the change, no plan is left to implement; archive() uses the same test.
+  if (!existsSync(join(state.worktree, changeDir(state.change)))) {
+    throw new Refusal(`${state.change} is archived in worktree ${state.worktree}; \`--implement\` reopens implementation only before archival`);
+  }
+  for (const stage of STAGES.slice(STAGES.indexOf("implementation"))) state.stages[stage] = "pending";
 }
 
 export async function stop(change: string): Promise<number> {
