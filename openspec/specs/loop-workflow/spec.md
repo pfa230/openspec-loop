@@ -64,7 +64,7 @@ After `loop run`, one deterministic controller SHALL decide every progression of
 
 ### Requirement: Supervision skill
 
-The loop SHALL ship a skill for Claude and Codex that supervises a run through the loop's commands. The skill SHALL start the run and forward each progress line to the user as it arrives. When the run stops, the skill SHALL diagnose the stop with the user from the report, the transcripts, the review and check findings and the changes between attempts: the likely cause, the evidence that is missing, why attempts did not converge when they ran out, and a recovery. The skill SHALL change nothing while diagnosing, and SHALL repair or resume only with the user's agreement.
+The loop SHALL ship a skill for Claude and Codex that supervises a run through the loop's commands. The skill SHALL start the run and forward each progress line to the user as it arrives. When the run stops, the skill SHALL diagnose the stop with the user from the report, the transcripts, the failing agent's configured command, the review and check findings and the changes between attempts: the likely cause, the evidence that is missing, why attempts did not converge when they ran out, and a recovery. The skill SHALL change nothing while diagnosing, and SHALL repair or resume only with the user's agreement.
 
 #### Scenario: Progress forwarded
 - **WHEN** a supervised run starts a step
