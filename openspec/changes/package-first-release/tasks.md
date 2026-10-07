@@ -1,6 +1,6 @@
 ## 1. Package
 
-- [ ] 1.1 Apply design.md decision 1 to `package.json` and `package-lock.json`, and add `LICENSE`. Verify that `npm test` passes, and that `npm pack --dry-run` after it lists exactly `LICENSE`, `README.md`, `package.json`, `skills/openspec-loop/SKILL.md` and the files under `dist/src`, with no `dist/test` file and version `0.2.0`
+- [x] 1.1 Apply design.md decision 1 to `package.json` and `package-lock.json`, and add `LICENSE`. Verify that `npm test` passes, and that `npm pack --dry-run` after it lists exactly `LICENSE`, `README.md`, `package.json`, `skills/openspec-loop/SKILL.md` and the files under `dist/src`, with no `dist/test` file and version `0.2.0`
 
 ## 2. Documentation
 
