@@ -3,7 +3,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { test } from "node:test";
-import { isAlive } from "../src/state.js";
+import { isAlive, readState } from "../src/state.js";
 import { configYaml, makeRepo, type Repo, runLoop, startLoop, writeFile } from "./helpers.js";
 
 // A killed process stays visible until its parent reaps it, so wait for it to go.
@@ -186,9 +186,17 @@ test("resume refuses while the step of a dead controller still runs, and takes o
   const running = startLoop(repo, ["run", "add-thing"]);
   await running.waitFor(/check .* started/);
   await step.started();
+  const deadline = Date.now() + 10_000;
+  while (readState(repo.runDir())?.stepGroup !== step.pid()) {
+    assert.ok(Date.now() < deadline, "the step's group was not recorded");
+    await sleep(25);
+  }
   const controller = running.child.pid!;
   running.child.kill("SIGKILL");
   await running.exited;
+  // With its leader gone, the group lives on in the leader's child, as a harness outlives its wrapper.
+  process.kill(step.pid(), "SIGKILL");
+  assert.ok(await gone(step.pid()));
 
   step.use(false);
   const refused = runLoop(repo, ["resume", "add-thing"]);
@@ -199,7 +207,6 @@ test("resume refuses while the step of a dead controller still runs, and takes o
   assert.match(status.stdout, new RegExp(`^Run add-thing: interrupted at implementation; process ${controller} died\n`));
 
   process.kill(-step.pid(), "SIGKILL");
-  assert.ok(await gone(step.pid()));
   assert.ok(await gone(step.child()));
   const resumed = runLoop(repo, ["resume", "add-thing"]);
   assert.equal(resumed.status, 0, resumed.stderr);
