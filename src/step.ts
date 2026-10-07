@@ -9,6 +9,8 @@ export interface StepResult {
 
 export interface Step {
   result: Promise<StepResult>;
+  // The step's process group ID, which is its leader's PID; undefined when the spawn failed.
+  group: number | undefined;
   kill(): void;
 }
 
@@ -33,6 +35,7 @@ export function runStep(command: string, args: string[], cwd: string, transcript
   });
   return {
     result,
+    group: child.pid,
     kill() {
       try {
         process.kill(-child.pid!, "SIGKILL");

@@ -64,7 +64,7 @@ After `loop run`, one deterministic controller SHALL decide every progression of
 
 ### Requirement: Supervision skill
 
-The loop SHALL ship a skill for Claude and Codex that supervises a run through the loop's commands. The skill SHALL start the run and forward each progress line to the user as it arrives. When the run stops, the skill SHALL diagnose the stop with the user from the report, the transcripts, the review and check findings and the changes between attempts: the likely cause, the evidence that is missing, why attempts did not converge when they ran out, and a recovery. The skill SHALL change nothing while diagnosing, and SHALL repair or resume only with the user's agreement.
+The loop SHALL ship a skill for Claude and Codex that supervises a run through the loop's commands. The skill SHALL start the run and forward each progress line to the user as it arrives. When the run stops, the skill SHALL diagnose the stop with the user from the report, the transcripts, the failing agent's configured command, the review and check findings and the changes between attempts: the likely cause, the evidence that is missing, why attempts did not converge when they ran out, and a recovery. The skill SHALL change nothing while diagnosing, and SHALL repair or resume only with the user's agreement.
 
 #### Scenario: Progress forwarded
 - **WHEN** a supervised run starts a step
@@ -260,7 +260,7 @@ The run SHALL work on the change's branch. When `loop run` is given on a branch 
 
 ### Requirement: Run control
 
-The loop SHALL provide deterministic `run`, `status`, `stop` and `resume` commands. `run` SHALL exit with a report when the run completes or stops; a stop report SHALL name the step that stopped, the observed cause such as the verdict, check output or exit status, and the recovery available. The loop SHALL NOT investigate failures itself. Stop SHALL end the current step at once. Anything that blocks progression SHALL stop the run and report why, and a stopped run SHALL advance only on an explicit resume. Resume SHALL continue from the first incomplete stage without repeating complete ones. After an interruption around archival, merge, push or pull request creation, resume SHALL inspect the effects that actually happened and SHALL NOT replay them blindly.
+The loop SHALL provide deterministic `run`, `status`, `stop` and `resume` commands. `run` SHALL exit with a report when the run completes or stops; a stop report SHALL name the step that stopped, the observed cause such as the verdict, check output or exit status, and the recovery available. The loop SHALL NOT investigate failures itself. Stop SHALL end the current step at once. Anything that blocks progression SHALL stop the run and report why, and a stopped run SHALL advance only on an explicit resume. Resume SHALL continue from the first incomplete stage without repeating complete ones. After an interruption around archival, merge, push or pull request creation, resume SHALL inspect the effects that actually happened and SHALL NOT replay them blindly. Resume SHALL NOT take over a run while the step its dead advancing process started is still running: it SHALL refuse, name that step's process group and the dead process, and leave the run as it was. Resume SHALL NOT end that step itself. The loop records each step's process group as the step starts, so a process that dies before recording it leaves that step unchecked.
 
 #### Scenario: Resume after interrupted merge
 - **WHEN** a run was interrupted after its merge completed and the user resumes it
@@ -287,8 +287,12 @@ The loop SHALL provide deterministic `run`, `status`, `stop` and `resume` comman
 - **THEN** the loop refuses and names `loop status` and `loop resume` for that run
 
 #### Scenario: Advancing process died
-- **WHEN** the process advancing a run dies without stopping the run, and the user resumes it
+- **WHEN** the process advancing a run dies without stopping the run, its step has ended, and the user resumes it
 - **THEN** the loop takes over the run and treats the step that was in progress as interrupted
+
+#### Scenario: Step outlives its advancing process
+- **WHEN** the process advancing a run is killed with SIGKILL during a step, the step keeps running, and the user resumes the run
+- **THEN** the loop refuses, names the step's process group and the dead process, and starts no step; once that group has exited, resume takes the run over
 
 ### Requirement: Progress and usage reporting
 

@@ -112,7 +112,7 @@ Usage by role:
 
 Each counter is summed by name. `without usage` counts the steps with no valid usage: a missing or empty usage file, such as after a turn stopped before its harness reported, or a malformed one, which also stopped the run. When only some of a role's steps reported a cost, the line says how many did not; when none did, the cost is unavailable.
 
-A run accepts one advancement at a time. If the process advancing it dies, `loop resume` takes the run over and redoes the step that was in progress.
+A run accepts one advancement at a time. If the process advancing it dies, `loop resume` takes the run over and redoes the step that was in progress. A process killed with SIGKILL, for example by `kill -9` or the OOM killer, can leave its step running; `loop resume` then refuses and names the step's process group. End it with `kill -- -<group>` or wait for it to exit, then resume. If the group it names is not the run's, because its ID was reused after the step ended, check it with `pgrep -l -g <group>` and set `stepGroup` to `null` in the run directory's `state.json`.
 
 Each run keeps its state in the repository's Git directory, at `.git/openspec-loop/<change>/` in a regular clone: `state.json` and the transcripts of every step under `transcripts/`. A run started on the default branch works in its worktree under `worktrees`. The report and `loop status` print the exact paths. To discard a run and start over, note the `Worktree` and `Run directory` lines of `loop status <change>`, then:
 
