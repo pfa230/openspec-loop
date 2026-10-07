@@ -264,7 +264,7 @@ The run SHALL work on the change's branch. When `loop run` is given on a branch 
 
 ### Requirement: Run control
 
-The loop SHALL provide deterministic `run`, `status`, `stop` and `resume` commands. `run` SHALL exit with a report when the run completes or stops; a stop report SHALL name the step that stopped, the observed cause such as the verdict, check output or exit status, and the recovery available. The loop SHALL NOT investigate failures itself. Stop SHALL end the current step at once. Anything that blocks progression SHALL stop the run and report why, and a stopped run SHALL advance only on an explicit resume. Resume SHALL continue from the first incomplete stage without repeating complete ones. After an interruption around archival, merge, push or pull request creation, resume SHALL inspect the effects that actually happened and SHALL NOT replay them blindly. Resume SHALL NOT take over a run while the step its dead advancing process started is still running: it SHALL refuse, name that step's process group and the dead process, and leave the run as it was. Resume SHALL NOT end that step itself. The loop records each step's process group as the step starts, so a process that dies before recording it leaves that step unchecked.
+The loop SHALL provide deterministic `run`, `status`, `stop` and `resume` commands. `run` SHALL exit with a report when the run completes or stops; a stop report SHALL name the step that stopped, the observed cause such as the verdict, check output or exit status, and the recovery available. The loop SHALL NOT investigate failures itself. Stop SHALL end the current step at once. Anything that blocks progression SHALL stop the run and report why, and a stopped run SHALL advance only on an explicit resume. Resume SHALL continue from the first incomplete stage without repeating complete ones. `loop resume <change> --implement` SHALL first make implementation and every later stage incomplete, so the implementer implements the plan as it stands on the run's branch, from the work already there; it SHALL leave proposal review as it is, and the loop SHALL NOT detect plan edits or reopen implementation for them itself. Once the change is archived, `--implement` SHALL refuse and leave the run as it was. After an interruption around archival, merge, push or pull request creation, resume SHALL inspect the effects that actually happened and SHALL NOT replay them blindly. Resume SHALL NOT take over a run while the step its dead advancing process started is still running: it SHALL refuse, name that step's process group and the dead process, and leave the run as it was. Resume SHALL NOT end that step itself. The loop records each step's process group as the step starts, so a process that dies before recording it leaves that step unchecked.
 
 #### Scenario: Resume after interrupted merge
 - **WHEN** a run was interrupted after its merge completed and the user resumes it
@@ -281,6 +281,18 @@ The loop SHALL provide deterministic `run`, `status`, `stop` and `resume` comman
 #### Scenario: Plan edited while stopped
 - **WHEN** a person changes the plan while a run is stopped after implementation completed, and resumes it
 - **THEN** the run resumes where it stopped without reviewing the plan again
+
+#### Scenario: Implementation reopened after a plan edit
+- **WHEN** a person commits a plan change on the run's branch while the run is stopped after implementation completed, and runs `loop resume <change> --implement`
+- **THEN** the implementer implements the edited plan from the work already on the branch, the required checks and implementation review run again, the run continues through integration, and the plan is not reviewed again
+
+#### Scenario: Implementation reopened before plan approval
+- **WHEN** a run stopped at proposal review is resumed with `--implement`
+- **THEN** the plan is reviewed before the implementer runs
+
+#### Scenario: Implementation reopened after archival
+- **WHEN** the user runs `loop resume <change> --implement` for a run whose change is archived
+- **THEN** the loop refuses, says the change is archived, and leaves the run as it was
 
 #### Scenario: Stop
 - **WHEN** the user stops a run during an implementer turn
