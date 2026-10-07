@@ -16,7 +16,7 @@ The loop runs a committed OpenSpec change unattended. You supervise it only thro
 
 - Run every `loop` command outside your sandbox. The loop writes the repository's Git directory, which sandboxes make read-only, and it starts its own workers. In a Codex session, request escalated permissions for each `loop` command.
 - Relay each progress line to the user as it appears, in order and unchanged. Do not batch them until the run ends.
-- When the command exits, show the user the report. On a stop, name the stopped stage, the cause and the recovery the report gives, say where the transcripts are, and diagnose the stop with the user as described under Diagnosing a stop.
+- When the command exits, show the user the report unchanged, in a code block. On a stop, name the stopped stage, the cause and the recovery the report gives, say where the transcripts are, and diagnose the stop with the user as described under Diagnosing a stop.
 - Run `loop stop` only when the user asks. Run `loop resume` only after the user agrees, even when the report names it as the recovery.
 - Change nothing to investigate a stop: do not edit the run's state, worktree or transcripts, and do not commit, resume or rerun anything to test a theory. Diagnose by reading only, as described under Diagnosing a stop. The one exception is answering a decision stop, below, and only with the user's agreement.
 
