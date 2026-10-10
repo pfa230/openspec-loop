@@ -1,9 +1,9 @@
 #!/usr/bin/env node
-import { resume, run, status, stop } from "./commands.js";
+import { resume, run, status, step, stop } from "./commands.js";
 import { Refusal } from "./refusal.js";
 
-const COMMANDS = { run, status, stop, resume };
-const USAGE = "Usage: loop <run|status|stop> <change>\n       loop resume <change> [--attempts <n>] [--implement]\n";
+const COMMANDS = { run, step, status, stop, resume };
+const USAGE = "Usage: loop <run|step|status|stop> <change>\n       loop resume <change> [--attempts <n>] [--implement]\n";
 
 interface Args {
   name: keyof typeof COMMANDS;

@@ -29,6 +29,12 @@ export function locations(dir: string, state: RunState): string {
   return `Worktree: ${state.worktree}\nRun directory: ${dir}\nTranscripts: ${join(dir, "transcripts")}\n`;
 }
 
+// Used only for an incomplete run at a successful stage boundary.
+export function continuation(state: RunState): string {
+  const next = STAGES.find((stage) => state.stages[stage] !== "complete");
+  return `Next stage: ${next}\nContinue: loop step ${state.change} or loop resume ${state.change}`;
+}
+
 // The role whose agent runs each worker step, by step name.
 const STEP_ROLES: Record<string, Role> = {
   "proposal-review": "proposalReviewer",
@@ -117,9 +123,9 @@ const CHECK_OUTPUT = 20_000;
 // A stage outcome that hands the run back to proposal review instead of completing or stopping.
 const REPLAN = "replan";
 
-// Advances the run from its first incomplete stage until every stage completes or one stops.
+// Advances from the first incomplete stage until completion, a stop, or one successful stage in single-stage mode.
 // The caller holds the run's lock; advance releases it. Returns the exit status.
-export async function advance(dir: string, state: RunState, setup: Setup): Promise<number> {
+export async function advance(dir: string, state: RunState, setup: Setup, singleStage = false): Promise<number> {
   let stopping = false;
   let current: Step | undefined;
   const onSignal = () => {
@@ -169,6 +175,10 @@ export async function advance(dir: string, state: RunState, setup: Setup): Promi
       state.current = null;
       writeState(dir, state);
       progress(`${stage}: complete`);
+      if (singleStage && STAGES.some((candidate) => state.stages[candidate] !== "complete")) {
+        process.stdout.write(`Run ${state.change} returned control between stages after ${stage}.\n${continuation(state)}\n${locations(dir, state)}${usageTotals(dir)}`);
+        return 0;
+      }
     }
     process.stdout.write(`Run ${state.change} completed.\n${locations(dir, state)}${usageTotals(dir)}`);
     return 0;
