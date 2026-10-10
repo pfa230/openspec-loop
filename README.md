@@ -63,12 +63,12 @@ checks:
 delivery: pr
 ```
 
-- `worktrees` is the directory where a run started on the default branch gets its worktree, at `<worktrees>/<change>`. A relative path is relative to the checkout where you give `loop run`; an absolute path is used as written. A run keeps the worktree it was created with, so changing `worktrees` affects only new runs. The loop never edits ignore rules: when the directory lies inside a checkout, add it to `.gitignore`, or to `.git/info/exclude` for one clone only, because an unignored worktree makes that checkout dirty.
+- `worktrees` is the directory where a run started on the default branch gets its worktree, at `<worktrees>/<change>`. A relative path is relative to the checkout where you enroll through `loop run` or `loop step`; an absolute path is used as written. A run keeps the worktree it was created with, so changing `worktrees` affects only new runs. The loop never edits ignore rules: when the directory lies inside a checkout, add it to `.gitignore`, or to `.git/info/exclude` for one clone only, because an unignored worktree makes that checkout dirty.
 - `agents` maps an alias of your choice to the command that runs that agent. Define one agent per harness and model you use, such as `opus` and `fable`, or `deepseek` and `mimo` on OpenCode. Progress lines name agents by alias.
 - `roles` assigns an agent to each role. The proposal reviewer judges the plan; the plan reviser revises it and applies minor plan fixes; the implementer implements the plan and applies minor implementation fixes; the implementation reviewer judges the patch. One agent may fill several roles: every turn runs in a fresh context.
 - `attempts.proposalReview` bounds how many proposal reviews one advancement runs, and `attempts.implementation` how many implementation attempts.
 - `checks` lists the required checks, each a shell command run with `sh -c` in the run's worktree. `checks: []` means the change has no required checks; leaving `checks` out refuses the run.
-- `delivery` is `local`, `pr` or `merge`, and has no default. `local` contacts no remote. `pr` and `merge` use the remote of the default branch's upstream, as Git records it, and its branch there; `loop run` and `loop resume` refuse them when the default branch has no upstream. Set one with `git branch --set-upstream-to=origin/main main`.
+- `delivery` is `local`, `pr` or `merge`, and has no default. `local` contacts no remote. `pr` and `merge` use the remote of the default branch's upstream, as Git records it, and its branch there; `loop run`, `loop resume` and `loop step` refuse them when the default branch has no upstream. Set one with `git branch --set-upstream-to=origin/main main`.
 
 Put settings you do not want to commit, such as your own agents, in `openspec/loop.local.yaml` beside it, and add that file to `.gitignore`. A value set there replaces the committed one: `defaultBranch`, `worktrees`, `checks` and `delivery` as a whole, and `agents`, `roles` and `attempts` entry by entry, so a local file can add one agent and point one role at it:
 
@@ -79,7 +79,7 @@ roles:
   proposalReviewer: deepseek
 ```
 
-The loop reads both files from the checkout where you give `loop run` or `loop resume`, every time you give either. A missing `openspec/loop.yaml`, invalid YAML, an unknown key or a wrong type in either file, or a required field missing from both, refuses the command. So does a role whose alias is undefined or whose agent's command cannot be found: a command without `/` is looked up on PATH, and one with `/` is taken relative to the checkout.
+The loop reads both files from the checkout where you give `loop run`, `loop resume` or `loop step`, every time you give any of them. A missing `openspec/loop.yaml`, invalid YAML, an unknown key or a wrong type in either file, or a required field missing from both, refuses the command. So does a role whose alias is undefined or whose agent's command cannot be found: a command without `/` is looked up on PATH, and one with `/` is taken relative to the checkout.
 
 ### Agents and adapters
 
@@ -115,7 +115,7 @@ The command may also write what its harness reported spending to the usage file,
 
 ## Running a change
 
-Propose the change with OpenSpec's own proposing, `/opsx:propose` in Claude Code or the `$openspec-propose` skill in Codex, and commit it. The proposal must be committed on the branch the run works on, which you choose by where you give `loop run`:
+Propose the change with OpenSpec's own proposing, `/opsx:propose` in Claude Code or the `$openspec-propose` skill in Codex, and commit it. The proposal must be committed on the branch the run works on, which you choose by where you enroll through `loop run` or `loop step`:
 
 - **On the default branch.** Commit the proposal on the default branch and run `loop run <change>` there. The loop creates branch `loop/<change>` from that commit in a worktree under `worktrees` and leaves your checkout's files and index untouched.
 - **On a branch of its own.** Create a worktree on a new branch, propose and commit there, and run `loop run <change>` in that worktree. The run works in that worktree, which must have no uncommitted changes.
@@ -125,13 +125,27 @@ The commands work from any checkout of the repository:
 | Command | What it does | Exit status |
 |---|---|---|
 | `loop run <change>` | Starts a run and advances it in the foreground, printing a progress line as each step starts and ends, then a report. | 0 completed, 1 stopped, 2 refused |
-| `loop resume <change> [--attempts <n>] [--implement]` | Continues a stopped or interrupted run from its first incomplete stage, with a fresh attempt budget: the configured one, or `<n>` when given. `--implement` first makes implementation and every later stage incomplete, so the implementer implements the plan as it stands; it is refused once the change is archived. | 0 completed, 1 stopped, 2 refused |
+| `loop step <change>` | Enrolls a new run or continues an existing one, returning after the first pending stage succeeds with its normal review/revision cycle. Reports the next stage and how to continue. | 0 boundary or completed, 1 stopped, 2 refused |
+| `loop resume <change> [--attempts <n>] [--implement]` | Continues a run that is between stages, stopped or interrupted, from its first incomplete stage, with a fresh attempt budget: the configured one, or `<n>` when given. `--implement` first makes implementation and every later stage incomplete, so the implementer implements the plan as it stands; it is refused once the change is archived. | 0 completed, 1 stopped, 2 refused |
 | `loop stop <change>` | Ends the current step at once; the run reports how to resume. Ctrl-C and closing the terminal do the same. | 0, 2 if there is no run |
 | `loop status <change>` | Shows the run's state, branch, stages and locations. | 0, 2 if there is no run |
 
+To inspect an approved plan and then a reviewed implementation, use the same committed change with:
+
+```sh
+loop step <change>     # proposal review, including revisions and minor fixes
+loop status <change>   # between stages; implementation is next
+loop step <change>     # implementation, including checks, review and revisions
+loop resume <change>   # continue through integration, archive and delivery
+```
+
+You can keep using `step` for integration, archive and delivery instead. Each successful boundary returns control with exit status 0 while the run remains incomplete; its report and `status` name the next stage and continuation commands. Delivery reports the whole run complete. `run` still refuses an already-enrolled change. Attempt overrides and reopening implementation remain options of `resume` only.
+
+Each `step` call receives fresh configured attempt budgets. If implementation returns the plan for revision or integration returns findings to implementation, the same call follows that handoff and returns when the first stage succeeds; the next stage can therefore be an earlier one. Failures and decision questions stop with the usual cause and recovery. After resolving the stop, use `step` or `resume` explicitly to continue.
+
 When a worker step ends, its progress line names the agent and what the harness reported it spent, such as `(gpt; input_tokens=16641, cached_input_tokens=0, output_tokens=59, reasoning_output_tokens=21, cost unavailable)`. The counters and cost are exactly what the harness reported. A value it did not report reads `unavailable`, never zero, and `usage unavailable` means it reported nothing.
 
-The report at the end of `loop run` and `loop resume`, whether the run completed or stopped, totals the usage by role over every worker step the run has had, across every resume:
+The report at the end of `loop run`, `loop resume` and `loop step`, whether the run completed, stopped or returned control between stages, totals the usage by role over every worker step the run has had, across every advancement:
 
 ```
 Usage by role:
@@ -141,7 +155,7 @@ Usage by role:
 
 Each counter is summed by name. `without usage` counts the steps with no valid usage: a missing or empty usage file, such as after a turn stopped before its harness reported, or a malformed one, which also stopped the run. When only some of a role's steps reported a cost, the line says how many did not; when none did, the cost is unavailable.
 
-A run accepts one advancement at a time. If the process advancing it dies, `loop resume` takes the run over and redoes the step that was in progress. A process killed with SIGKILL, for example by `kill -9` or the OOM killer, can leave its step running; `loop resume` then refuses and names the step's process group. End it with `kill -- -<group>` or wait for it to exit, then resume. If the group it names is not the run's, because its ID was reused after the step ended, check it with `pgrep -l -g <group>` and set `stepGroup` to `null` in the run directory's `state.json`.
+A run accepts one advancement at a time, shared by `run`, `resume` and `step`. If the process advancing it dies, `loop resume` takes the run over and redoes the step that was in progress. A process killed with SIGKILL, for example by `kill -9` or the OOM killer, can leave its step running; `loop resume` then refuses and names the step's process group. End it with `kill -- -<group>` or wait for it to exit, then resume. If the group it names is not the run's, because its ID was reused after the step ended, check it with `pgrep -l -g <group>` and set `stepGroup` to `null` in the run directory's `state.json`.
 
 Each run keeps its state in the repository's Git directory, at `.git/openspec-loop/<change>/` in a regular clone: `state.json` and the transcripts of every step under `transcripts/`. A run started on the default branch works in its worktree under `worktrees`. The report and `loop status` print the exact paths. To discard a run and start over, note the `Worktree` and `Run directory` lines of `loop status <change>`, then:
 
@@ -158,7 +172,7 @@ The first stage reviews the plan: the change's proposal, design, spec deltas and
 - **The review.** The proposal reviewer judges whether the whole plan can be implemented and verified as one change without asking you, and whether it keeps the decisions recorded in its design. It reports each problem as blocking or minor. A minor finding is a local fix, such as a typo or a wrong path, that cannot change behavior or a recorded decision.
 - **The verdict.** It follows from the findings: any blocking finding is `REVISE`; otherwise the verdict is `APPROVE`. Each review's verdict and findings are kept as `NNN-proposal-review.verdict.json` in the transcripts.
 - **Revision.** On `REVISE`, the plan reviser revises the plan in a fresh context, the loop commits the change directory on the run's branch, and the plan is reviewed again.
-- **Minor fixes.** On `APPROVE` with minor findings, the plan reviser applies them, the loop commits them, and implementation starts without another review.
+- **Minor fixes.** On `APPROVE` with minor findings, the plan reviser applies them, the loop commits them, and ordinary advancement starts implementation without another review; `step` returns at the proposal-review boundary.
 - **Approval.** It covers the plan as it then stands. The loop does not check the plan again for edits you make: if you change it by hand while the run is stopped, the run resumes where it stopped, and verifying the edit is up to you. To have the implementer implement an edited plan after implementation completed, commit the edit on the run's branch and run `loop resume <change> --implement`: the implementer works from what the branch already holds, the checks, implementation review, integration, archival and delivery follow, and the plan is not reviewed again. Once the change is archived, `--implement` is refused.
 - **Decisions.** When a finding needs a decision the plan does not record, the run stops with the reviewer's question before revising anything. Answer it by recording the decision in the design in the run's worktree, committing it on the run's branch, and running `loop resume <change>`. The report names the worktree and the branch.
 - **Attempts.** Each review uses one attempt. When the last allowed review is `REVISE`, the run stops after that review's revision. Every resume starts a fresh budget; `loop resume <change> --attempts 1` gives exactly one more review.
@@ -167,7 +181,7 @@ A worker that exits nonzero, is killed, or writes a missing or malformed reply s
 
 ### Implementation
 
-Once the plan is approved, the implementation stage runs without you, in attempts. Each attempt is one round:
+During ordinary advancement, once the plan is approved, the implementation stage runs without you, in attempts. With `step`, it starts on the next invocation. Each attempt is one round:
 
 - **The implementer turn.** The implementer works in a fresh context from OpenSpec's own apply instructions for the change, including any `operations.apply.guidance` in `openspec/config.yaml`, and from the findings of the last attempt. It ticks task boxes as it goes. The loop then commits everything in the run's worktree on the run's branch as `<change>: implement`, `<change>: revise implementation` or `<change>: apply minor implementation fixes`.
 - **The checks.** Every required check runs, in order, even after one fails. A failed check is not a failure of the run: its exit status and the end of its output become a finding for the next attempt, kept as `NNN-checks.findings.json` in the transcripts, and review waits until the checks pass. The implementer fixes only failures the change caused, so a check that already fails on the base fails until attempts run out.

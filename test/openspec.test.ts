@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { makeRepo, runLoop } from "./helpers.js";
 
-for (const command of ["run", "resume"]) {
+for (const command of ["run", "resume", "step"]) {
   test(`${command} refuses openspec 1.9.0 and names the minimum`, (t) => {
     const repo = makeRepo(t, { openspec: "1.9.0" });
     const result = runLoop(repo, [command, "add-thing"]);

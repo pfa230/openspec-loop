@@ -1,28 +1,29 @@
 ---
 name: openspec-loop
-description: Supervise an openspec-loop run of a committed OpenSpec change. Use when the user asks to run, watch, stop or resume a change with the loop, or asks what a loop run is doing.
+description: Supervise an openspec-loop run of a committed OpenSpec change. Use when the user asks to run, step, watch, stop or resume a change with the loop, or asks what a loop run is doing.
 ---
 
 # Supervise an openspec-loop run
 
-The loop runs a committed OpenSpec change unattended. You supervise it only through its four commands, exactly as a person at a terminal would:
+The loop runs a committed OpenSpec change unattended. You supervise it only through its five commands, exactly as a person at a terminal would:
 
 - `loop run <change>` starts a run and advances it in the foreground. It prints a progress line, prefixed with the time, as each step starts and ends, then a report. It exits 0 when the run completes, 1 when it stops, and 2 when it refuses to start.
+- `loop step <change>` enrolls a new run or continues an existing one through the first successful pending-stage completion, including its internal cycles and recovery handoffs. It exits 0 when it returns control between stages or completes the whole run, 1 when it stops and 2 when it refuses. It shares the existing state, preparation, lock, transcripts and configured attempt budgets; it accepts no options.
 - `loop status <change>` shows the run's state, branch, stages and locations.
-- `loop stop <change>` ends the current step at once; the running `loop run` then prints its stop report.
-- `loop resume <change>` continues a stopped or interrupted run with a fresh attempt budget; `loop resume <change> --attempts <n>` sets that budget, and `--implement` sends the run back to the implementer, which implements the plan as it stands; proposal review stays as it is, so an approved plan is not reviewed again. It advances in the foreground like `loop run`, with the same output and exit statuses.
+- `loop stop <change>` ends the current step at once; the active advancement then prints its stop report.
+- `loop resume <change>` continues a run that is between stages, stopped or interrupted, with a fresh attempt budget; `loop resume <change> --attempts <n>` sets that budget, and `--implement` sends the run back to the implementer, which implements the plan as it stands; proposal review stays as it is, so an approved plan is not reviewed again. It advances in the foreground like `loop run`, with the same output and exit statuses.
 
 ## Rules
 
 - Run every `loop` command outside your sandbox. The loop writes the repository's Git directory, which sandboxes make read-only, and it starts its own workers. In a Codex session, request escalated permissions for each `loop` command.
 - Relay each progress line to the user as it appears, in order and unchanged. Do not batch them until the run ends.
 - When the command exits, show the user the report unchanged, in a code block. On a stop, name the stopped stage, the cause and the recovery the report gives, say where the transcripts are, and diagnose the stop with the user as described under Diagnosing a stop.
-- Run `loop stop` only when the user asks. Run `loop resume` only after the user agrees, even when the report names it as the recovery.
+- Run `loop stop` only when the user asks. Run `loop resume` or another `loop step` only after the user agrees, even when the report names it as the continuation or recovery. A successful stage boundary is an inspection point: show its report unchanged, identify what can run next and wait for the user without diagnosing a failure or automatically advancing.
 - Change nothing to investigate a stop: do not edit the run's state, worktree or transcripts, and do not commit, resume or rerun anything to test a theory. Diagnose by reading only, as described under Diagnosing a stop. The one exception is answering a decision stop, below, and only with the user's agreement.
 
 ## Watching a run in Claude Code
 
-1. Start the command with Bash and `run_in_background: true`, redirecting its output to a log file: `loop run <change> > <log> 2>&1`. Use `loop resume <change>` the same way.
+1. Start the command with Bash and `run_in_background: true`, redirecting its output to a log file: `loop run <change> > <log> 2>&1`. Use `loop resume <change>` or `loop step <change>` the same way.
 2. Start a Monitor on `tail -n +1 -f <log>` with the longest timeout. Each new line arrives as a notification. Relay each progress line, which starts with the time, and keep count of the lines relayed. The first line that does not start with the time ends the relay: relay neither it nor any line after it, because Monitor events drop each line's leading whitespace, and step 3 shows the rest from the log. If the monitor expires while the run continues, re-arm it with `tail -n +<count + 1> -f <log>`, so no line is skipped or repeated.
 3. When Bash reports that the background command exited, stop the monitor, read the log with Bash from the first line not yet relayed to the end, and show the user all of those lines unchanged, in a code block, with the exit status.
 
@@ -32,7 +33,7 @@ Verified with Codex CLI 0.160.0. Start the command with `exec_command` and a sho
 
 ## Stopping and resuming
 
-To stop, run `loop stop <change>` from any checkout of the repository; the watched `loop run` prints the stop report and exits 1. To continue after the user agrees, start `loop resume <change>` and watch it the same way. If `loop status` shows the run as interrupted, the process advancing it died; `loop resume` takes the run over and redoes the interrupted step.
+To stop, run `loop stop <change>` from any checkout of the repository; the watched advancement prints the stop report and exits 1. To continue after the user agrees, start `loop resume <change>` and watch it the same way. For one successful stage at a time, use `loop step <change>` and watch it the same way; the report names the stage completed and what can run next. Returning between stages is different from a stopped run and from whole-run completion. After resolving a stop, `step` follows the same recovery as `resume`, within its single-stage limit. If `loop status` shows the run as interrupted, the process advancing it died; `loop resume` takes the run over and redoes the interrupted step.
 
 ## Diagnosing a stop
 

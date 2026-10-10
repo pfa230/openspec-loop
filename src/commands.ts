@@ -2,7 +2,7 @@ import { existsSync, mkdirSync } from "node:fs";
 import { setTimeout as sleep } from "node:timers/promises";
 import { join, resolve } from "node:path";
 import { type Config, readConfig, resolveRoles } from "./config.js";
-import { advance, locations, progress, type Setup } from "./controller.js";
+import { advance, continuation, locations, progress, type Setup } from "./controller.js";
 import { deliveryBase, git, gitMessage, gitSucceeds, topLevel } from "./git.js";
 import { checkOpenSpec } from "./openspec.js";
 import { changeDir } from "./plan.js";
@@ -20,13 +20,32 @@ import {
 } from "./state.js";
 
 export async function run(change: string): Promise<number> {
+  return start(change, "run");
+}
+
+export async function step(change: string): Promise<number> {
+  return start(change, "step");
+}
+
+export async function resume(change: string, attempts?: number, implement = false): Promise<number> {
+  return start(change, "resume", attempts, implement);
+}
+
+// Every advancement prepares and takes the same lock before enrolling or loading the run.
+async function start(change: string, command: "run" | "step" | "resume", attempts?: number, implement = false): Promise<number> {
   const top = topLevel(process.cwd());
-  const setup = prepare(top, undefined);
+  const setup = prepare(top, attempts);
   const dir = runDir(top, change);
+  if (command === "resume" && !existsSync(dir)) throw noRun(change);
   mkdirSync(dir, { recursive: true });
-  acquireLock(dir, change);
+  const deadPid = acquireLock(dir, change);
   try {
-    return await advance(dir, enroll(top, dir, change, setup.config), setup);
+    const state = command === "run" ? enroll(top, dir, change, setup.config)
+      : command === "step" ? readState(dir) ?? enroll(top, dir, change, setup.config)
+      : existingState(dir, change);
+    if (implement) reimplement(state);
+    if (deadPid !== undefined) progress(`took over run ${change} from process ${deadPid}, which died`);
+    return await advance(dir, state, setup, command === "step");
   } catch (error) {
     releaseLock(dir);
     throw error;
@@ -79,24 +98,6 @@ function enroll(top: string, dir: string, change: string, config: Config): RunSt
   return state;
 }
 
-export async function resume(change: string, attempts?: number, implement = false): Promise<number> {
-  const top = topLevel(process.cwd());
-  const setup = prepare(top, attempts);
-  const dir = runDir(top, change);
-  if (!existsSync(dir)) throw noRun(change);
-  const deadPid = acquireLock(dir, change);
-  let state: RunState;
-  try {
-    state = existingState(dir, change);
-    if (implement) reimplement(state);
-  } catch (error) {
-    releaseLock(dir);
-    throw error;
-  }
-  if (deadPid !== undefined) progress(`took over run ${change} from process ${deadPid}, which died`);
-  return advance(dir, state, setup);
-}
-
 // Makes implementation and every later stage incomplete, so the implementer implements the plan as it stands;
 // advance() persists the change. Proposal review and owed records stay as they are.
 function reimplement(state: RunState): void {
@@ -132,6 +133,8 @@ export async function status(change: string): Promise<number> {
     summary = `stopped at ${state.stop.stage}\nCause: ${state.stop.cause}\nRecovery: ${state.stop.recovery}`;
   } else if (STAGES.every((stage) => state.stages[stage] === "complete")) {
     summary = "complete";
+  } else if (!holder && state.current === null && state.stop === null) {
+    summary = `between stages\n${continuation(state)}`;
   } else {
     const at = state.current ? ` at ${state.current}` : "";
     const died = holder ? `; process ${holder.pid} died` : "";

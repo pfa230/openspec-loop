@@ -4,21 +4,23 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { configYaml, makeRepo, runLoop, writeFile } from "./helpers.js";
 
-test("a proposal missing from the invoking branch is refused", (t) => {
-  const repo = makeRepo(t, { branch: "add-thing" });
-  repo.git("switch", "--quiet", "main");
-  const result = runLoop(repo, ["run", "add-thing"]);
-  assert.equal(result.status, 2);
-  assert.match(result.stderr, /openspec\/changes\/add-thing\/proposal\.md is not committed on main/);
-});
+for (const command of ["run", "step"]) {
+  test(`${command}: a proposal missing from the invoking branch is refused`, (t) => {
+    const repo = makeRepo(t, { branch: "add-thing" });
+    repo.git("switch", "--quiet", "main");
+    const result = runLoop(repo, [command, "add-thing"]);
+    assert.equal(result.status, 2);
+    assert.match(result.stderr, /openspec\/changes\/add-thing\/proposal\.md is not committed on main/);
+  });
 
-test("an uncommitted proposal is refused", (t) => {
-  const repo = makeRepo(t);
-  writeFile(repo.top, "openspec/changes/other/proposal.md", "## Why\n");
-  const result = runLoop(repo, ["run", "other"]);
-  assert.equal(result.status, 2);
-  assert.match(result.stderr, /openspec\/changes\/other\/proposal\.md is not committed on main/);
-});
+  test(`${command}: an uncommitted proposal is refused`, (t) => {
+    const repo = makeRepo(t);
+    writeFile(repo.top, "openspec/changes/other/proposal.md", "## Why\n");
+    const result = runLoop(repo, [command, "other"]);
+    assert.equal(result.status, 2);
+    assert.match(result.stderr, /openspec\/changes\/other\/proposal\.md is not committed on main/);
+  });
+}
 
 const dirtyStates: Record<string, (repo: ReturnType<typeof makeRepo>) => void> = {
   "an untracked file": (repo) => writeFile(repo.top, "notes.txt", "draft\n"),
@@ -34,14 +36,16 @@ const dirtyStates: Record<string, (repo: ReturnType<typeof makeRepo>) => void> =
   },
 };
 
-for (const [name, dirty] of Object.entries(dirtyStates)) {
-  test(`a change-branch worktree with ${name} is refused`, (t) => {
-    const repo = makeRepo(t, { branch: "add-thing" });
-    dirty(repo);
-    const result = runLoop(repo, ["run", "add-thing"]);
-    assert.equal(result.status, 2);
-    assert.match(result.stderr, new RegExp(`worktree ${repo.top} has uncommitted changes`));
-  });
+for (const command of ["run", "step"]) {
+  for (const [name, dirty] of Object.entries(dirtyStates)) {
+    test(`${command}: a change-branch worktree with ${name} is refused`, (t) => {
+      const repo = makeRepo(t, { branch: "add-thing" });
+      dirty(repo);
+      const result = runLoop(repo, [command, "add-thing"]);
+      assert.equal(result.status, 2);
+      assert.match(result.stderr, new RegExp(`worktree ${repo.top} has uncommitted changes`));
+    });
+  }
 }
 
 test("a detached HEAD is refused", (t) => {
