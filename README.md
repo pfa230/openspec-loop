@@ -30,6 +30,8 @@ In a repository set up for OpenSpec:
    openspec/loop.local.yaml
    ```
 
+   Put your personal overrides in the main checkout's `openspec/loop.local.yaml`. Fresh issue worktrees inherit them automatically; no copy is needed.
+
 3. Copy the supervision skill into the project for Claude Code and Codex, and commit both copies:
 
    ```sh
@@ -70,7 +72,7 @@ delivery: pr
 - `checks` lists the required checks, each a shell command run with `sh -c` in the run's worktree. `checks: []` means the change has no required checks; leaving `checks` out refuses the run.
 - `delivery` is `local`, `pr` or `merge`, and has no default. `local` contacts no remote. `pr` and `merge` use the remote of the default branch's upstream, as Git records it, and its branch there; `loop run`, `loop resume` and `loop step` refuse them when the default branch has no upstream. Set one with `git branch --set-upstream-to=origin/main main`.
 
-Put settings you do not want to commit, such as your own agents, in `openspec/loop.local.yaml` beside it, and add that file to `.gitignore`. A value set there replaces the committed one: `defaultBranch`, `worktrees`, `checks` and `delivery` as a whole, and `agents`, `roles` and `attempts` entry by entry, so a local file can add one agent and point one role at it:
+Put settings you do not want to commit, such as your own agents, in the main checkout's `openspec/loop.local.yaml`, and add that file to `.gitignore`. They apply across that clone's worktrees. A worktree can also have its own `openspec/loop.local.yaml` to override them. At each layer, `defaultBranch`, `worktrees`, `checks` and `delivery` replace the preceding value as a whole, and `agents`, `roles` and `attempts` replace entries individually, so a local file can add one agent and point one role at it:
 
 ```yaml
 agents:
@@ -79,7 +81,11 @@ roles:
   proposalReviewer: deepseek
 ```
 
-The loop reads both files from the checkout where you give `loop run`, `loop resume` or `loop step`, every time you give any of them. A missing `openspec/loop.yaml`, invalid YAML, an unknown key or a wrong type in either file, or a required field missing from both, refuses the command. So does a role whose alias is undefined or whose agent's command cannot be found: a command without `/` is looked up on PATH, and one with `/` is taken relative to the checkout.
+Every `loop run`, `loop resume` or `loop step` reads settings again in this order: the invoking checkout's committed `openspec/loop.yaml`, the main checkout's optional `openspec/loop.local.yaml`, then the invoking checkout's optional local file when it is a different checkout. The main checkout is the clone's primary working tree, regardless of its current branch. A bare clone has no main checkout, so only the invoking files apply.
+
+The loop uses Git's directory and worktree records to locate the main checkout. If those records do not identify an accessible working tree of this clone, it refuses. With a separated Git directory, invocation directly from the main checkout works; invocation from a linked worktree refuses when Git reports the metadata directory instead of the main checkout.
+
+A missing committed file, an unreadable present file, invalid YAML, an unknown key or a wrong type in any file, or a required field missing after merging, refuses the command. An invalid main local file cannot be hidden by a worktree override. So does a role whose alias is undefined or whose agent's command cannot be found: a command without `/` is looked up on PATH, and one with `/` is taken relative to the invoking checkout, even when defined in the main local file. Relative `worktrees` paths also remain relative to the invoking checkout.
 
 ### Agents and adapters
 

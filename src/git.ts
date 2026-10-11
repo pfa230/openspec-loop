@@ -38,6 +38,24 @@ export function topLevel(cwd: string): string {
   }
 }
 
+// The clone's primary checkout, independently of its branch; bare clones have none.
+export function primaryCheckout(top: string): string | null {
+  const common = git(top, "rev-parse", "--path-format=absolute", "--git-common-dir");
+  if (git(top, "rev-parse", "--absolute-git-dir") === common) return top;
+
+  const primary = git(top, "worktree", "list", "--porcelain", "-z").split("\0\0")[0].split("\0");
+  if (primary.includes("bare")) return null;
+  const path = primary[0].slice("worktree ".length);
+  try {
+    if (topLevel(path) === path && git(path, "rev-parse", "--path-format=absolute", "--git-common-dir") === common) {
+      return path;
+    }
+  } catch {
+    // A missing checkout or separated metadata must not silently discard local overrides.
+  }
+  throw new Refusal(`cannot locate or access main checkout at ${path}; Git did not identify a working tree of this clone`);
+}
+
 // Where the default branch is published, as Git records it: the remote, the branch there,
 // and the remote-tracking ref Git maps it to.
 export interface Upstream {
