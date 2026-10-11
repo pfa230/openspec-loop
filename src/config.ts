@@ -1,6 +1,7 @@
 import { accessSync, constants, readFileSync, statSync } from "node:fs";
 import { delimiter, join, resolve } from "node:path";
 import { parse } from "yaml";
+import { primaryCheckout } from "./git.js";
 import { Refusal } from "./refusal.js";
 
 export const ROLES = ["proposalReviewer", "planReviser", "implementer", "implementationReviewer"] as const;
@@ -41,26 +42,30 @@ type Settings = {
   delivery?: Delivery;
 };
 
-// Reads the committed configuration and, when it exists, the local one, whose entries replace the committed ones.
+// Invoking committed settings, primary local overrides, then distinct invoking local overrides.
 export function readConfig(top: string): Config {
   const committedPath = join(top, CONFIG_PATH);
   const committedText = readText(committedPath);
   if (committedText === undefined) {
     throw new Refusal(`${committedPath} not found; it must name the default branch, the worktrees directory, agents, roles, attempts, checks and delivery`);
   }
-  const committed = parseFile(committedPath, committedText);
-  const localPath = join(top, LOCAL_CONFIG_PATH);
-  const localText = readText(localPath);
-  const local = localText === undefined ? undefined : parseFile(localPath, localText);
-  const merged: Settings = {
-    defaultBranch: local?.defaultBranch ?? committed.defaultBranch,
-    worktrees: local?.worktrees ?? committed.worktrees,
-    agents: { ...committed.agents, ...local?.agents },
-    roles: { ...committed.roles, ...local?.roles },
-    attempts: { ...committed.attempts, ...local?.attempts },
-    checks: local?.checks ?? committed.checks,
-    delivery: local?.delivery ?? committed.delivery,
-  };
+  let merged = parseFile(committedPath, committedText);
+  const primary = primaryCheckout(top);
+  for (const checkout of primary === null || primary === top ? [top] : [primary, top]) {
+    const localPath = join(checkout, LOCAL_CONFIG_PATH);
+    const localText = readText(localPath);
+    if (localText === undefined) continue;
+    const local = parseFile(localPath, localText);
+    merged = {
+      defaultBranch: local.defaultBranch ?? merged.defaultBranch,
+      worktrees: local.worktrees ?? merged.worktrees,
+      agents: { ...merged.agents, ...local.agents },
+      roles: { ...merged.roles, ...local.roles },
+      attempts: { ...merged.attempts, ...local.attempts },
+      checks: local.checks ?? merged.checks,
+      delivery: local.delivery ?? merged.delivery,
+    };
+  }
   const missing = [
     merged.defaultBranch === undefined ? "defaultBranch" : undefined,
     merged.worktrees === undefined ? "worktrees" : undefined,

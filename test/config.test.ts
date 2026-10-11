@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { type Config, readConfig, resolveRoles } from "../src/config.js";
+import { git } from "../src/git.js";
 import { Refusal } from "../src/refusal.js";
 
 type After = { after: (fn: () => void) => void };
@@ -29,10 +30,19 @@ delivery: merge
 function checkout(t: After, yaml?: string, local?: string): string {
   const top = realpathSync(mkdtempSync(join(tmpdir(), "loop-config-")));
   t.after(() => rmSync(top, { recursive: true, force: true }));
+  git(top, "init", "--quiet", "-b", "trunk");
   mkdirSync(join(top, "openspec"));
   if (yaml !== undefined) writeFileSync(join(top, "openspec/loop.yaml"), yaml);
   if (local !== undefined) writeFileSync(join(top, "openspec/loop.local.yaml"), local);
   return top;
+}
+
+function linkedCheckout(top: string): string {
+  git(top, "add", "openspec/loop.yaml");
+  git(top, "-c", "user.name=Test", "-c", "user.email=test@example.com", "-c", "commit.gpgsign=false", "commit", "--quiet", "-m", "config");
+  const issue = join(top, ".worktrees", "issue");
+  git(top, "worktree", "add", "--quiet", "-b", "issue", issue);
+  return issue;
 }
 
 function refuses(fn: () => unknown, message: RegExp): void {
@@ -137,6 +147,103 @@ test("an empty committed file is refused even when the local file has every fiel
 test("a required field may come from the local file alone", (t) => {
   const committed = VALID.replace("  proposalReview: 3\n", "");
   assert.equal(readConfig(checkout(t, committed, "attempts:\n  proposalReview: 1\n")).attempts.proposalReview, 1);
+});
+
+const SHARED = `defaultBranch: personal
+worktrees: ../personal-worktrees
+agents:
+  shared: [personal-adapter]
+roles:
+  proposalReviewer: shared
+attempts:
+  proposalReview: 7
+checks:
+  - shared-check
+delivery: local
+`;
+
+test("a fresh linked checkout inherits shared settings and keeps its own committed base", (t) => {
+  const top = checkout(t, VALID.replace("  proposalReview: 3\n", ""), SHARED);
+  const issue = linkedCheckout(top);
+  writeFileSync(join(issue, "openspec/loop.yaml"), VALID.replace("  proposalReview: 3\n", "").replace("implementation: 2", "implementation: 4"));
+  // The primary's committed file must not be read or validated for this invocation.
+  writeFileSync(join(top, "openspec/loop.yaml"), "unknown-primary-key: true\n");
+  const config = readConfig(issue);
+  assert.equal(config.defaultBranch, "personal");
+  assert.equal(config.worktrees, "../personal-worktrees");
+  assert.deepEqual(config.agents.shared, ["personal-adapter"]);
+  assert.equal(config.roles.proposalReviewer, "shared");
+  assert.equal(config.roles.planReviser, "opus");
+  assert.deepEqual(config.attempts, { proposalReview: 7, implementation: 4 });
+  assert.deepEqual(config.checks, ["shared-check"]);
+  assert.equal(config.delivery, "local");
+});
+
+test("partial worktree overrides replace their entries and retain other shared settings", (t) => {
+  const top = checkout(t, VALID, SHARED);
+  const issue = linkedCheckout(top);
+  writeFileSync(join(issue, "openspec/loop.local.yaml"), `agents:
+  shared: [issue-adapter]
+roles:
+  implementer: shared
+attempts:
+  implementation: 1
+checks: []
+delivery: pr
+`);
+  const config = readConfig(issue);
+  assert.deepEqual(config.agents.shared, ["issue-adapter"]);
+  assert.deepEqual(config.agents.opus, ["loop-claude", "--model", "opus"]);
+  assert.equal(config.roles.proposalReviewer, "shared");
+  assert.equal(config.roles.implementer, "shared");
+  assert.equal(config.roles.planReviser, "opus");
+  assert.deepEqual(config.attempts, { proposalReview: 7, implementation: 1 });
+  assert.deepEqual(config.checks, []);
+  assert.equal(config.delivery, "pr");
+  assert.equal(config.defaultBranch, "personal");
+  assert.equal(config.worktrees, "../personal-worktrees");
+});
+
+test("a linked checkout accepts missing shared settings and its own optional overrides", (t) => {
+  const top = checkout(t, VALID);
+  const issue = linkedCheckout(top);
+  assert.deepEqual(readConfig(issue), readConfig(top));
+  writeFileSync(join(issue, "openspec/loop.local.yaml"), "checks: []\n");
+  assert.deepEqual(readConfig(issue).checks, []);
+});
+
+test("invalid or unreadable shared files cannot be masked by worktree overrides", (t) => {
+  const top = checkout(t, VALID);
+  const issue = linkedCheckout(top);
+  const sharedPath = join(top, "openspec/loop.local.yaml");
+  writeFileSync(join(issue, "openspec/loop.local.yaml"), "checks: []\n");
+  for (const [text, problem] of [
+    ["checks: [\n", "is not valid YAML"],
+    ["rolse: {}\n", 'unknown key "rolse"'],
+    ["checks: null\n", '"checks" must be a list'],
+  ]) {
+    writeFileSync(sharedPath, text);
+    assert.throws(() => readConfig(issue), (error: unknown) =>
+      error instanceof Refusal && error.message.includes(sharedPath) && error.message.includes(problem));
+  }
+  rmSync(sharedPath);
+  mkdirSync(sharedPath);
+  assert.throws(() => readConfig(issue), (error: unknown) =>
+    error instanceof Refusal && error.message.includes(`cannot read ${sharedPath}`));
+});
+
+test("a bare clone combines only invoking committed and local settings", (t) => {
+  const top = checkout(t, VALID, SHARED);
+  linkedCheckout(top);
+  const bare = join(top, "bare.git");
+  const issue = join(top, ".worktrees", "bare-issue");
+  git(top, "clone", "--quiet", "--bare", top, bare);
+  git(bare, "worktree", "add", "--quiet", "-b", "bare-issue", issue, "trunk");
+  writeFileSync(join(issue, "openspec/loop.local.yaml"), "checks: []\n");
+  const config = readConfig(issue);
+  assert.equal(config.defaultBranch, "trunk");
+  assert.equal(config.roles.proposalReviewer, "gpt");
+  assert.deepEqual(config.checks, []);
 });
 
 // Roles resolve against a PATH holding only the directory the test controls.
