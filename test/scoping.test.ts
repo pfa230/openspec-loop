@@ -65,6 +65,11 @@ test("scope start reads local overrides, accepts Git-valid names, and preserves 
   assert.ok(result.stdout.includes(repo.top));
   assert.equal(repo.git("status", "--porcelain"), before);
   assert.equal(repo.git("diff", "--cached"), index);
+  proposal(repo, worktree);
+  const delivered = finish(repo, "Feature.Part");
+  assert.equal(delivered.status, 0, delivered.stdout + delivered.stderr);
+  assert.equal(repo.git("status", "--porcelain"), before);
+  assert.equal(repo.git("diff", "--cached"), index);
   assert.deepEqual(repo.calls(), []);
 });
 
