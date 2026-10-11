@@ -16,7 +16,7 @@ Every mechanism, configuration option and guarantee in the loop SHALL serve a co
 
 ### Requirement: Explicit enrollment
 
-A run SHALL act only on the change named in `loop run`, and its responsibility SHALL cover only that change and the result it delivers. The loop SHALL refuse a run whose proposal is not committed on the change's branch, as defined in Integration and delivery, and a run that would use the invoking worktree while it has uncommitted changes. OpenSpec artifacts, commits and native OpenSpec commands outside a run SHALL NOT enroll work, and the loop SHALL NOT enforce rules on them. The loop SHALL install no git hooks and SHALL NOT police repository-wide OpenSpec edits or archives.
+A run SHALL act only on the change named in `loop run` or an enrolling `loop step`, and its responsibility SHALL cover only that change and the result it delivers. The loop SHALL refuse a run whose proposal is not committed on the change's branch, as defined in Integration and delivery, and a run that would use the invoking worktree while it has uncommitted changes. OpenSpec artifacts, commits and native OpenSpec commands outside a run SHALL NOT enroll work, and the loop SHALL NOT enforce rules on them. The loop SHALL install no git hooks and SHALL NOT police repository-wide OpenSpec edits or archives.
 
 #### Scenario: Run enrolls one change
 - **WHEN** the user runs `loop run` with a change whose proposal is committed on the change's branch
@@ -52,7 +52,7 @@ Proposals SHALL be native OpenSpec artifacts authored with the user through nati
 
 ### Requirement: Controller ownership
 
-After `loop run`, one deterministic controller SHALL decide every progression of the run: proposal review and revision, implementation, required checks, implementation review, integration, archival and delivery. Agents SHALL NOT decide progression. At most one advancement of a run SHALL be active at a time, and runs of different changes SHALL NOT share state. The loop's commands SHALL be its only interface: a supervising Claude or Codex session SHALL use the same commands as a person at a terminal, and the loop SHALL NOT depend on any session.
+After enrollment through `loop run` or `loop step`, one deterministic controller SHALL decide every progression of the run: proposal review and revision, implementation, required checks, implementation review, integration, archival and delivery. Agents SHALL NOT decide progression. At most one advancement of a run SHALL be active at a time, and runs of different changes SHALL NOT share state. The loop's commands SHALL be its only interface: a supervising Claude or Codex session SHALL use the same commands as a person at a terminal, and the loop SHALL NOT depend on any session.
 
 #### Scenario: Concurrent advancement refused
 - **WHEN** a second advancement of a run starts while one is active
@@ -64,7 +64,7 @@ After `loop run`, one deterministic controller SHALL decide every progression of
 
 ### Requirement: Supervision skill
 
-The loop SHALL ship a skill for Claude and Codex that supervises a run through the loop's commands. The skill SHALL start the run and forward each progress line to the user as it arrives. When the run completes or stops, the skill SHALL show the user its report unchanged. When the run stops, the skill SHALL diagnose the stop with the user from the report, the transcripts, the failing agent's configured command, the review and check findings and the changes between attempts: the likely cause, the evidence that is missing, why attempts did not converge when they ran out, and a recovery. The skill SHALL change nothing while diagnosing, and SHALL repair or resume only with the user's agreement.
+The loop SHALL ship a skill for Claude and Codex that supervises a run through the loop's commands, including `step`. The skill SHALL start the run and forward each progress line to the user as it arrives. When the run completes, stops or returns control between stages, the skill SHALL show the user its report unchanged. When the run stops, the skill SHALL diagnose the stop with the user from the report, the transcripts, the failing agent's configured command, the review and check findings and the changes between attempts: the likely cause, the evidence that is missing, why attempts did not converge when they ran out, and a recovery. The skill SHALL change nothing while diagnosing, and SHALL repair or continue only with the user's agreement. A successful stage boundary SHALL be presented for inspection without failure diagnosis or automatic continuation.
 
 #### Scenario: Progress forwarded
 - **WHEN** a supervised run starts a step
@@ -100,10 +100,10 @@ The configuration SHALL define agents, each an alias for a command that implemen
 
 ### Requirement: Reviews and verdicts
 
-Each review SHALL end in a recorded `APPROVE` or `REVISE` verdict, and each finding SHALL be classified as blocking or minor. The reviewer SHALL classify the findings, and the loop SHALL derive the verdict from them. A blocking finding means the work fails the review's criteria; a minor finding has a local fix that cannot change behavior or a decision recorded in the design. A review with any blocking finding SHALL be `REVISE`, which requires revision followed by another review. A review with only minor findings SHALL be `APPROVE`: the plan reviser applies minor plan fixes and the implementer applies minor implementation fixes, the required checks run again for implementation, and the approval covers the result. Reviewers SHALL NOT modify the candidate they review. The plan is the change's OpenSpec planning artifacts (proposal, design, spec deltas, tasks) excluding task completion marks. Proposal review SHALL judge whether the whole plan can be implemented and verified as one change without asking the user, and whether it keeps the decisions recorded in the design. The change's patch is its difference from the commit it branches from on the base, outside the change's directory `openspec/changes/<change>/`, so it holds no part of the plan or its task completion marks. An implementation approval covers the change's patch, not the base it applies to. Proposal approval SHALL start implementation automatically, after any minor plan fixes.
+Each review SHALL end in a recorded `APPROVE` or `REVISE` verdict, and each finding SHALL be classified as blocking or minor. The reviewer SHALL classify the findings, and the loop SHALL derive the verdict from them. A blocking finding means the work fails the review's criteria; a minor finding has a local fix that cannot change behavior or a decision recorded in the design. A review with any blocking finding SHALL be `REVISE`, which requires revision followed by another review. A review with only minor findings SHALL be `APPROVE`: the plan reviser applies minor plan fixes and the implementer applies minor implementation fixes, the required checks run again for implementation, and the approval covers the result. Reviewers SHALL NOT modify the candidate they review. The plan is the change's OpenSpec planning artifacts (proposal, design, spec deltas, tasks) excluding task completion marks. Proposal review SHALL judge whether the whole plan can be implemented and verified as one change without asking the user, and whether it keeps the decisions recorded in the design. The change's patch is its difference from the commit it branches from on the base, outside the change's directory `openspec/changes/<change>/`, so it holds no part of the plan or its task completion marks. An implementation approval covers the change's patch, not the base it applies to. Proposal approval SHALL start implementation automatically, after any minor plan fixes, during ordinary advancement; `loop step` SHALL instead return control after proposal review completes.
 
 #### Scenario: Plan approved
-- **WHEN** the proposal reviewer returns `APPROVE`
+- **WHEN** the proposal reviewer returns `APPROVE` during ordinary advancement
 - **THEN** the controller starts implementation without further user action
 
 #### Scenario: Verdict follows the findings
@@ -111,7 +111,7 @@ Each review SHALL end in a recorded `APPROVE` or `REVISE` verdict, and each find
 - **THEN** the recorded verdict is `REVISE`
 
 #### Scenario: Only minor plan findings
-- **WHEN** the proposal reviewer finds only minor issues
+- **WHEN** the proposal reviewer finds only minor issues during ordinary advancement
 - **THEN** the verdict is `APPROVE`, the plan reviser applies the fixes, and implementation starts without another proposal review
 
 #### Scenario: Only minor findings
@@ -139,7 +139,7 @@ Once a proposal is committed, revising its plan SHALL need no user. When proposa
 - **THEN** the plan reviser revises the plan and the plan is reviewed again, without the user
 
 #### Scenario: Plan cannot be implemented as written
-- **WHEN** the implementer finds that the approved plan needs a change
+- **WHEN** during ordinary advancement the implementer finds that the approved plan needs a change
 - **THEN** the plan reviser revises the plan, proposal review runs again, and implementation continues after approval
 
 #### Scenario: Decision needed
@@ -176,7 +176,7 @@ The controller SHALL run implementation as a cycle: implement, run the required 
 
 ### Requirement: Bounded attempts and execution failures
 
-Proposal review and implementation SHALL each be bounded by a configured number of attempts. Each proposal review SHALL consume one proposal attempt. Each implementation round, meaning an implementer turn on the code with the checks and review that follow it and any approved minor fixes, SHALL consume one implementation attempt, whether it succeeds or ends in an execution failure. Reaching a bound with a standing `REVISE` or failing checks SHALL stop progression; a bound never approves work. Every resume SHALL grant each bounded stage it runs a fresh budget, whatever stopped the run; `loop resume` SHALL accept an attempt count that replaces the configured budgets for that resume. An execution failure of a worker or the loop itself, such as a nonzero worker exit, a signal, a timeout or a missing or malformed reply, SHALL be reported as a failure distinct from review findings and check results, SHALL stop progression and SHALL NOT be retried automatically.
+Proposal review and implementation SHALL each be bounded by a configured number of attempts. Each proposal review SHALL consume one proposal attempt. Each implementation round, meaning an implementer turn on the code with the checks and review that follow it and any approved minor fixes, SHALL consume one implementation attempt, whether it succeeds or ends in an execution failure. Reaching a bound with a standing `REVISE` or failing checks SHALL stop progression; a bound never approves work. Every resume or `loop step` invocation SHALL grant each bounded stage it runs a fresh budget, whatever stopped the run; `loop resume` SHALL accept an attempt count that replaces the configured budgets for that resume. An execution failure of a worker or the loop itself, such as a nonzero worker exit, a signal, a timeout or a missing or malformed reply, SHALL be reported as a failure distinct from review findings and check results, SHALL stop progression and SHALL NOT be retried automatically.
 
 #### Scenario: Attempts exhausted
 - **WHEN** the last allowed implementation attempt ends in `REVISE`
@@ -208,7 +208,7 @@ Each external role SHALL run under the execution restrictions configured for it,
 
 ### Requirement: Integration and delivery
 
-The run SHALL work on the change's branch. When `loop run` is given on a branch other than the default branch, that branch is the change's branch and the run works in its worktree; when it is given on the default branch, the loop creates the change's branch from that commit in a worktree of its own. The run SHALL preserve unrelated work in every checkout. The base, which the loop integrates the change with and delivers it to, is the remote's default branch in `pr` mode and the local default branch in `local` and `merge` modes. Before archival, the loop SHALL integrate the change with the current base; a conflict, an integration that changes the change's patch, or a failed required check on the integrated result SHALL return to the implementer as findings. Only `merge` mode SHALL change the local default branch, and only by fast-forward when every checkout holding it is clean, meaning it has no uncommitted changes to tracked files; otherwise the run SHALL stop and name the checkout. Before integrating in `merge` mode, the loop SHALL fast-forward a local default branch that is behind its remote, and SHALL stop the run when it is ahead or has diverged. Every action outside the run's worktree, such as updating or pushing a branch or opening a pull request, SHALL be reported as its own progress line. The configuration SHALL select one delivery mode: `local`, where the run stops with the archived change committed on its branch and pushes nothing; `pr`, where the loop pushes the change branch and opens a pull request on the repository's GitHub remote; or `merge`, where the loop pushes the change branch's commit to the remote's default branch and then fast-forwards the local default branch to it. Before changing anything in `merge` delivery, the loop SHALL check that every checkout holding the default branch is clean and that the change's branch contains the default branch. A failed fast-forward or a rejected push SHALL stop the run, and a rejected push SHALL leave the local default branch unchanged.
+The run SHALL work on the change's branch. When enrollment through `loop run` or `loop step` occurs on a branch other than the default branch, that branch is the change's branch and the run works in its worktree; when enrollment occurs on the default branch, the loop creates the change's branch from that commit in a worktree of its own. The run SHALL preserve unrelated work in every checkout. The base, which the loop integrates the change with and delivers it to, is the remote's default branch in `pr` mode and the local default branch in `local` and `merge` modes. Before archival, the loop SHALL integrate the change with the current base; a conflict, an integration that changes the change's patch, or a failed required check on the integrated result SHALL return to the implementer as findings. Only `merge` mode SHALL change the local default branch, and only by fast-forward when every checkout holding it is clean, meaning it has no uncommitted changes to tracked files; otherwise the run SHALL stop and name the checkout. Before integrating in `merge` mode, the loop SHALL fast-forward a local default branch that is behind its remote, and SHALL stop the run when it is ahead or has diverged. Every action outside the run's worktree, such as updating or pushing a branch or opening a pull request, SHALL be reported as its own progress line. The configuration SHALL select one delivery mode: `local`, where the run stops with the archived change committed on its branch and pushes nothing; `pr`, where the loop pushes the change branch and opens a pull request on the repository's GitHub remote; or `merge`, where the loop pushes the change branch's commit to the remote's default branch and then fast-forwards the local default branch to it. Before changing anything in `merge` delivery, the loop SHALL check that every checkout holding the default branch is clean and that the change's branch contains the default branch. A failed fast-forward or a rejected push SHALL stop the run, and a rejected push SHALL leave the local default branch unchanged.
 
 #### Scenario: Run on the default branch
 - **WHEN** the user runs `loop run` on the default branch
@@ -231,7 +231,7 @@ The run SHALL work on the change's branch. When `loop run` is given on a branch 
 - **THEN** the default branch is fast-forwarded to the change branch and pushed
 
 #### Scenario: Clean integration
-- **WHEN** the change integrates with a moved default branch without conflicts, its patch is unchanged and the required checks pass
+- **WHEN** during ordinary advancement the change integrates with a moved default branch without conflicts, its patch is unchanged and the required checks pass
 - **THEN** the run continues to archival without another review
 
 #### Scenario: Integration fails
@@ -264,7 +264,7 @@ The run SHALL work on the change's branch. When `loop run` is given on a branch 
 
 ### Requirement: Run control
 
-The loop SHALL provide deterministic `run`, `status`, `stop` and `resume` commands. `run` SHALL exit with a report when the run completes or stops; a stop report SHALL name the step that stopped, the observed cause such as the verdict, check output or exit status, and the recovery available. The loop SHALL NOT investigate failures itself. Stop SHALL end the current step at once. Anything that blocks progression SHALL stop the run and report why, and a stopped run SHALL advance only on an explicit resume. Resume SHALL continue from the first incomplete stage without repeating complete ones. `loop resume <change> --implement` SHALL first make implementation and every later stage incomplete, so the implementer implements the plan as it stands on the run's branch, from the work already there; it SHALL leave proposal review as it is, and the loop SHALL NOT detect plan edits or reopen implementation for them itself. Once the change is archived, `--implement` SHALL refuse and leave the run as it was. After an interruption around archival, merge, push or pull request creation, resume SHALL inspect the effects that actually happened and SHALL NOT replay them blindly. Resume SHALL NOT take over a run while the step its dead advancing process started is still running: it SHALL refuse, name that step's process group and the dead process, and leave the run as it was. Resume SHALL NOT end that step itself. The loop records each step's process group as the step starts, so a process that dies before recording it leaves that step unchecked.
+The loop SHALL provide deterministic `run`, `step`, `status`, `stop` and `resume` commands. `run` SHALL exit with a report when the run completes or stops; a stop report SHALL name the step that stopped, the observed cause such as the verdict, check output or exit status, and the recovery available. The loop SHALL NOT investigate failures itself. Stop SHALL end the current step at once. Anything that blocks progression SHALL stop the run and report why, and a stopped run SHALL advance only on an explicit `resume` or `step`. Resume and `loop step` SHALL continue from the first incomplete stage without repeating complete ones. Ordinary run and resume SHALL continue until completion or a stop. `loop step` SHALL use the same interruption recovery and takeover rules as resume. `loop resume <change> --implement` SHALL first make implementation and every later stage incomplete, so the implementer implements the plan as it stands on the run's branch, from the work already there; it SHALL leave proposal review as it is, and the loop SHALL NOT detect plan edits or reopen implementation for them itself. Once the change is archived, `--implement` SHALL refuse and leave the run as it was. After an interruption around archival, merge, push or pull request creation, resume SHALL inspect the effects that actually happened and SHALL NOT replay them blindly. Resume SHALL NOT take over a run while the step its dead advancing process started is still running: it SHALL refuse, name that step's process group and the dead process, and leave the run as it was. Resume SHALL NOT end that step itself. The loop records each step's process group as the step starts, so a process that dies before recording it leaves that step unchecked.
 
 #### Scenario: Resume after interrupted merge
 - **WHEN** a run was interrupted after its merge completed and the user resumes it
@@ -312,7 +312,7 @@ The loop SHALL provide deterministic `run`, `status`, `stop` and `resume` comman
 
 ### Requirement: Progress and usage reporting
 
-As the run proceeds, the loop SHALL print each step when it starts and when it ends, naming the stage and, for a worker step, the alias of the agent that runs it. The end line SHALL add the outcome, such as the verdict with finding counts by severity, the check results or the failure, and, for a worker step, its usage and cost, including a worker step that ends in an execution failure. Usage and cost SHALL be shown as the harness reports them, without estimation or conversion; a value the harness does not report SHALL be shown as unavailable, not as zero. The completed and stopped reports SHALL total usage and cost by role over every worker step of the run, across every advancement, and SHALL say how many of a role's steps reported no usage. When some of a role's steps reported a cost, the report SHALL say how many reported none; when none did, the role's cost SHALL be shown as unavailable. A stop for a worker's execution failure SHALL name the step, the agent and its transcript. The loop SHALL keep every worker's transcript and SHALL name where it is in the report.
+As the run proceeds, the loop SHALL print each step when it starts and when it ends, naming the stage and, for a worker step, the alias of the agent that runs it. The end line SHALL add the outcome, such as the verdict with finding counts by severity, the check results or the failure, and, for a worker step, its usage and cost, including a worker step that ends in an execution failure. Usage and cost SHALL be shown as the harness reports them, without estimation or conversion; a value the harness does not report SHALL be shown as unavailable, not as zero. The completed, stopped and successful stage-boundary reports SHALL total usage and cost by role over every worker step of the run, across every advancement, and SHALL say how many of a role's steps reported no usage. When some of a role's steps reported a cost, the report SHALL say how many reported none; when none did, the role's cost SHALL be shown as unavailable. A stop for a worker's execution failure SHALL name the step, the agent and its transcript. The loop SHALL keep every worker's transcript and SHALL name where it is in the report.
 
 #### Scenario: Review step reported
 - **WHEN** a proposal review ends in `REVISE`
@@ -336,7 +336,7 @@ As the run proceeds, the loop SHALL print each step when it starts and when it e
 
 ### Requirement: OpenSpec CLI
 
-The loop SHALL run OpenSpec through the `openspec` command on PATH, the same CLI the user runs by hand, and SHALL work with the repository's native OpenSpec setup without installing a custom schema. When `loop run` or `loop resume` starts, the loop SHALL refuse if `openspec` is missing or older than 1.14.0, naming the version found and the minimum. The loop SHALL set no upper version bound.
+The loop SHALL run OpenSpec through the `openspec` command on PATH, the same CLI the user runs by hand, and SHALL work with the repository's native OpenSpec setup without installing a custom schema. When `loop run`, `loop resume` or `loop step` starts, the loop SHALL refuse if `openspec` is missing or older than 1.14.0, naming the version found and the minimum. The loop SHALL set no upper version bound.
 
 #### Scenario: OpenSpec too old
 - **WHEN** the `openspec` on PATH reports version 1.9.0 and the user runs `loop run`
@@ -356,7 +356,7 @@ The loop SHALL run OpenSpec through the `openspec` command on PATH, the same CLI
 
 ### Requirement: Loop configuration
 
-The loop SHALL read its configuration from `openspec/loop.yaml` in the checkout where `loop run` or `loop resume` is given, each time either is given, and from `openspec/loop.local.yaml` beside it when that file exists. A value the local file sets SHALL replace the committed value: a top-level setting as a whole, and `agents`, `roles` and `attempts` entry by entry. The configuration SHALL name the default branch, and the loop SHALL take it from the configuration and SHALL NOT detect it. The configuration SHALL name the worktrees directory, under which `loop run` on the default branch creates the change's worktree at `<directory>/<change>`. A relative worktrees directory SHALL resolve against the checkout where `loop run` is given, and an absolute one SHALL be used as given. A run SHALL keep the worktree it was created with. The loop SHALL NOT change Git's ignore files or configuration. A missing `openspec/loop.yaml`, unparseable YAML, an unknown key or a value of the wrong type in either file SHALL refuse the command and name the problem and the file. A required field missing after the files are combined SHALL refuse the command and name the field.
+The loop SHALL read its configuration from `openspec/loop.yaml` in the checkout where `loop run`, `loop resume` or `loop step` is given, each time any is given, and from `openspec/loop.local.yaml` beside it when that file exists. A value the local file sets SHALL replace the committed value: a top-level setting as a whole, and `agents`, `roles` and `attempts` entry by entry. The configuration SHALL name the default branch, and the loop SHALL take it from the configuration and SHALL NOT detect it. The configuration SHALL name the worktrees directory, under which enrollment through `loop run` or `loop step` on the default branch creates the change's worktree at `<directory>/<change>`. A relative worktrees directory SHALL resolve against the checkout where enrollment through `loop run` or `loop step` is requested, and an absolute one SHALL be used as given. A run SHALL keep the worktree it was created with. The loop SHALL NOT change Git's ignore files or configuration. A missing `openspec/loop.yaml`, unparseable YAML, an unknown key or a value of the wrong type in either file SHALL refuse the command and name the problem and the file. A required field missing after the files are combined SHALL refuse the command and name the field.
 
 #### Scenario: Configuration missing
 - **WHEN** the user runs `loop run` in a checkout without `openspec/loop.yaml`
@@ -472,7 +472,7 @@ In `pr` mode the loop SHALL integrate by merging the base into the change's bran
 
 ### Requirement: Delivery remote
 
-In `pr` and `merge` modes, the remote SHALL be the remote of the default branch's upstream as Git records it, and the remote's default branch SHALL be that upstream branch. In `pr` mode the pull request SHALL target the upstream remote's repository and the upstream branch. `loop run` and `loop resume` SHALL refuse a `pr` or `merge` configuration when the default branch has no upstream, and SHALL name the branch. In `local` mode the loop SHALL contact no remote.
+In `pr` and `merge` modes, the remote SHALL be the remote of the default branch's upstream as Git records it, and the remote's default branch SHALL be that upstream branch. In `pr` mode the pull request SHALL target the upstream remote's repository and the upstream branch. `loop run`, `loop resume` and `loop step` SHALL refuse a `pr` or `merge` configuration when the default branch has no upstream, and SHALL name the branch. In `local` mode the loop SHALL contact no remote.
 
 #### Scenario: No upstream
 - **WHEN** the configuration selects `merge` or `pr` and the default branch has no upstream
@@ -485,3 +485,75 @@ In `pr` and `merge` modes, the remote SHALL be the remote of the default branch'
 #### Scenario: Local mode without a remote
 - **WHEN** the configuration selects `local` in a repository with no remote
 - **THEN** the run integrates, archives and completes without contacting a remote
+
+### Requirement: Stage-bounded advancement
+
+`loop step <change>` SHALL enroll a new run or advance an existing run with the same prerequisites, locking and controller as run/resume. It SHALL return after the first successful pending-stage completion, preserving internal cycles, budgets and handoffs. It SHALL exit 0 at a boundary or whole-run completion, 1 on a stop and 2 on a refusal. A boundary report and status SHALL distinguish the incomplete run from completion or interruption and name the next stage and step/resume commands.
+
+#### Scenario: First step approves the proposal
+- **WHEN** the user steps a new eligible change and its proposal review approves
+- **THEN** proposal review completes, the command returns control and releases its lock, implementation remains pending, and no implementation worker starts
+
+#### Scenario: Proposal cycle stays within one step
+- **WHEN** proposal review requests a revision before approval, or approves with minor plan fixes
+- **THEN** step runs the existing revision/review cycle or minor fixes within the configured budget before returning at the successful proposal-review boundary
+
+#### Scenario: Subsequent step completes implementation
+- **WHEN** proposal review is complete and the user steps the run again
+- **THEN** implementation runs its existing implement/check/review cycle and any minor fixes, returns after success with integration next, and does not repeat proposal review
+
+#### Scenario: Every stage has its own boundary
+- **WHEN** an eligible run is stepped successively without handoffs or failures
+- **THEN** each invocation completes the next stage in order: proposal-review, implementation, integration, archive and delivery; later stages do not start in that invocation, and delivery reports whole-run completion
+
+#### Scenario: Ordinary continuation after stepping
+- **WHEN** the user runs resume after a successful step
+- **THEN** ordinary progression continues from the same persisted run through the remaining stages, preserves its branch, worktree, findings and transcripts, and does not repeat completed work
+
+#### Scenario: Run after step does not reenroll
+- **WHEN** the user runs run for a change already enrolled through step
+- **THEN** run retains its existing already-enrolled refusal and names status and resume
+
+#### Scenario: Boundary report and status
+- **WHEN** step successfully completes a stage while another remains pending
+- **THEN** its report identifies the completed stage, says control returned between stages, names the next pending stage and step/resume commands, includes the usual locations and cumulative usage, and status shows the boundary rather than an interruption or whole-run completion
+
+#### Scenario: Step after completion
+- **WHEN** the user steps a run with every stage complete
+- **THEN** the command reports the run complete and exits 0 without repeating a stage or enrolling again
+
+#### Scenario: Prerequisites still apply
+- **WHEN** the user steps a new change whose proposal is not committed, whose invoking non-default worktree is dirty, or whose configuration or advancement prerequisites fail
+- **THEN** the loop refuses as ordinary enrollment would before any stage advances
+
+#### Scenario: Prerequisites reread on continuation
+- **WHEN** configuration in the invoking checkout changes between steps or a required advancement prerequisite becomes unavailable
+- **THEN** the next step reads that configuration and applies the ordinary preparation refusals while retaining the existing run's worktree
+
+#### Scenario: Shared lock refuses concurrent commands
+- **WHEN** any run, resume or step advancement is active and another advancement is requested for that change
+- **THEN** the second command is refused and the active advancement continues unaffected
+
+#### Scenario: Execution failure or exhausted attempts
+- **WHEN** a stepped stage has an execution failure or exhausts its normal attempts
+- **THEN** it stops with the existing cause, recovery, transcript and usage reporting, exits 1, and a later explicit step or resume uses the same recovery data with a fresh configured budget
+
+#### Scenario: Decision question during a step
+- **WHEN** a review finding needs a decision the design does not record
+- **THEN** step stops with the existing question before revising, and after the user records and commits the decision an explicit step or resume follows existing proposal-review recovery
+
+#### Scenario: Implementation hands the plan back
+- **WHEN** stepped implementation reports a plan problem and the existing plan-revision handoff succeeds
+- **THEN** step follows that handoff within the same budgets and returns when proposal review completes, with implementation next and no resumed implementer turn in that invocation
+
+#### Scenario: Integration hands findings back
+- **WHEN** stepped integration returns a conflict, changed patch or failed integrated checks to implementation
+- **THEN** step follows the existing handoff and returns when implementation succeeds, with integration next and no retry of integration in that invocation
+
+#### Scenario: Interrupted step and surviving worker
+- **WHEN** a stepped advancement is interrupted or its controller dies
+- **THEN** status retains stopped or interrupted semantics, and step/resume uses existing takeover rules, refusing while the dead controller's worker group survives and redoing incomplete work once takeover is permitted
+
+#### Scenario: Step options remain minimal
+- **WHEN** step is invoked with extra arguments, including attempts or implement options
+- **THEN** the CLI refuses the syntax with usage and exit status 2; those options remain exclusive to resume
