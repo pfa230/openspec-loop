@@ -1,7 +1,7 @@
 import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { type Agent, type Config, type Role, ROLES } from "./config.js";
-import { type Base, checkoutsHolding, conflicted, git, gitMessage, gitSucceeds, merging, patchId } from "./git.js";
+import { type Base, checkoutsHolding, conflicted, defaultSynchronization, dirtyDefaultCheckout, fastForwardDefault, git, gitMessage, gitSucceeds, merging, patchId } from "./git.js";
 import { applyInstructions } from "./openspec.js";
 import { changeDir, outsideChange, planDigest, planFiles } from "./plan.js";
 import {
@@ -288,25 +288,22 @@ function syncDefaultBranch(run: Run): Halt | undefined {
   const { worktree } = run.state;
   const branch = run.setup.config.defaultBranch;
   const upstream = run.setup.base.upstream!;
-  const remote = shortRef(upstream.ref);
-  const local = git(worktree, "rev-parse", branch);
-  const published = git(worktree, "rev-parse", upstream.ref);
-  if (local === published) return undefined;
-  const resume = `loop resume ${run.state.change}`;
-  if (gitSucceeds(worktree, "merge-base", "--is-ancestor", published, local)) {
-    const ahead = git(worktree, "rev-list", "--count", `${published}..${local}`);
-    return { cause: `${branch} is ${ahead} commit${ahead === "1" ? "" : "s"} ahead of ${remote}`, recovery: `push or remove those commits, then run \`${resume}\`` };
+  let tips;
+  try {
+    tips = defaultSynchronization(worktree, branch, upstream);
+  } catch (error) {
+    const cause = (error as Error).message;
+    const action = cause.includes("have diverged") ? "reconcile them" : "push or remove those commits";
+    return { cause, recovery: `${action}, then run \`loop resume ${run.state.change}\`` };
   }
-  if (!gitSucceeds(worktree, "merge-base", "--is-ancestor", local, published)) {
-    return { cause: `${branch} and ${remote} have diverged`, recovery: `reconcile them, then run \`${resume}\`` };
-  }
-  return dirtyHolder(run) ?? fastForward(run, "integration", published);
+  if (tips === undefined) return undefined;
+  return dirtyHolder(run) ?? fastForward(run, "integration", tips.published, tips.local);
 }
 
 // The stop for a checkout that holds the default branch with uncommitted changes to tracked files, if any.
 function dirtyHolder(run: Run): Halt | undefined {
   const branch = run.setup.config.defaultBranch;
-  const dirty = checkoutsHolding(run.state.worktree, branch).find((checkout) => git(checkout, "status", "--porcelain", "--untracked-files=no") !== "");
+  const dirty = dirtyDefaultCheckout(run.state.worktree, branch);
   if (dirty === undefined) return undefined;
   return {
     cause: `checkout ${dirty} holds ${branch} with uncommitted changes`,
@@ -316,25 +313,22 @@ function dirtyHolder(run: Run): Halt | undefined {
 
 // Fast-forwards the local default branch to commit, which callers have checked contains it, moving the files
 // of the checkout that holds it.
-function fastForward(run: Run, stage: Stage, commit: string): Halt | undefined {
+function fastForward(run: Run, stage: Stage, commit: string, expectedOld: string): Halt | undefined {
   const { worktree } = run.state;
   const branch = run.setup.config.defaultBranch;
   const short = git(worktree, "rev-parse", "--short=7", commit);
-  const [checkout] = checkoutsHolding(worktree, branch);
-  if (checkout === undefined) {
-    git(worktree, "update-ref", `refs/heads/${branch}`, commit, git(worktree, "rev-parse", branch));
-    progress(`${stage}: fast-forwarded ${branch} to ${short}`);
-    return undefined;
-  }
   try {
-    // --no-overwrite-ignore: Git otherwise overwrites ignored files in the fast-forward's way.
-    git(checkout, "merge", "--quiet", "--ff-only", "--no-overwrite-ignore", commit);
+    const checkout = fastForwardDefault(worktree, branch, commit, expectedOld);
+    progress(`${stage}: fast-forwarded ${branch} to ${short}${checkout ? ` in checkout ${checkout}` : ""}`);
+    return undefined;
   } catch (error) {
+    const [checkout] = checkoutsHolding(worktree, branch);
     progress(`${stage}: fast-forward of ${branch} failed`);
-    return { cause: `fast-forwarding ${branch} to ${short} in checkout ${checkout} failed: ${gitMessage(error)}`, recovery: `clear what Git names in ${checkout}, then run \`loop resume ${run.state.change}\`` };
+    return {
+      cause: `fast-forwarding ${branch} to ${short}${checkout ? ` in checkout ${checkout}` : ""} failed: ${gitMessage(error)}`,
+      recovery: `clear what Git names${checkout ? ` in ${checkout}` : ` or reconcile ${branch}`}, then run \`loop resume ${run.state.change}\``,
+    };
   }
-  progress(`${stage}: fast-forwarded ${branch} to ${short} in checkout ${checkout}`);
-  return undefined;
 }
 
 // Runs a command that acts beyond the run's worktree files through the step runner, keeping its output as a transcript.
@@ -390,7 +384,8 @@ async function delivery(run: Run): Promise<Halt | undefined> {
   const defaultBranch = setup.config.defaultBranch;
   const dirty = dirtyHolder(run);
   if (dirty) return dirty;
-  if (!gitSucceeds(worktree, "merge-base", "--is-ancestor", defaultBranch, "HEAD")) {
+  const checkedDefault = git(worktree, "rev-parse", defaultBranch);
+  if (!gitSucceeds(worktree, "merge-base", "--is-ancestor", checkedDefault, "HEAD")) {
     return {
       cause: `${defaultBranch} has commits that branch ${branch} lacks`,
       recovery: `bring ${defaultBranch} into branch ${branch} in worktree ${worktree}, then run \`${resume}\``,
@@ -403,7 +398,7 @@ async function delivery(run: Run): Promise<Halt | undefined> {
     return { ...pushed, recovery: `bring ${remoteBranch} from ${remote} into branch ${branch} in worktree ${worktree}, then run \`${resume}\`` };
   }
   progress(`delivery: pushed ${head} to ${remoteBranch} on ${remote}`);
-  return fastForward(run, "delivery", git(worktree, "rev-parse", "HEAD"));
+  return fastForward(run, "delivery", git(worktree, "rev-parse", "HEAD"), checkedDefault);
 }
 
 // The URLs a gh command printed, in order.

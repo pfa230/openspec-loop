@@ -88,11 +88,44 @@ export function deliveryBase(top: string, config: Config): Base {
 
 // The checkouts that have branch checked out.
 export function checkoutsHolding(cwd: string, branch: string): string[] {
-  return git(cwd, "worktree", "list", "--porcelain")
-    .split("\n\n")
-    .map((entry) => entry.split("\n"))
+  return git(cwd, "worktree", "list", "--porcelain", "-z")
+    .split("\0\0")
+    .map((entry) => entry.split("\0"))
     .filter((lines) => lines.includes(`branch refs/heads/${branch}`))
     .map((lines) => lines[0].slice("worktree ".length));
+}
+
+// A dirty tracked checkout prevents changing the branch; unrelated untracked files are Git's responsibility.
+export function dirtyDefaultCheckout(cwd: string, branch: string): string | undefined {
+  return checkoutsHolding(cwd, branch).find((checkout) => git(checkout, "status", "--porcelain", "--untracked-files=no") !== "");
+}
+
+// The two tips checked for a possible upstream fast-forward. Keep local as the update's expected old value.
+export function defaultSynchronization(cwd: string, branch: string, upstream: Upstream): { local: string; published: string } | undefined {
+  const local = git(cwd, "rev-parse", branch);
+  const published = git(cwd, "rev-parse", upstream.ref);
+  if (local === published) return undefined;
+  const remote = upstream.ref.replace(/^refs\/remotes\//, "");
+  if (gitSucceeds(cwd, "merge-base", "--is-ancestor", published, local)) {
+    const ahead = git(cwd, "rev-list", "--count", `${published}..${local}`);
+    throw new Error(`${branch} is ${ahead} commit${ahead === "1" ? "" : "s"} ahead of ${remote}`);
+  }
+  if (!gitSucceeds(cwd, "merge-base", "--is-ancestor", local, published)) {
+    throw new Error(`${branch} and ${remote} have diverged`);
+  }
+  return { local, published };
+}
+
+// The caller checked commit contains expectedOld. Never refresh that tip before updating an unchecked-out ref.
+export function fastForwardDefault(cwd: string, branch: string, commit: string, expectedOld: string): string | undefined {
+  const [checkout] = checkoutsHolding(cwd, branch);
+  if (checkout === undefined) {
+    git(cwd, "update-ref", `refs/heads/${branch}`, commit, expectedOld);
+  } else {
+    // Git otherwise overwrites ignored files in the fast-forward's way.
+    git(checkout, "merge", "--quiet", "--ff-only", "--no-overwrite-ignore", commit);
+  }
+  return checkout;
 }
 
 // Files with unresolved conflicts in the worktree.

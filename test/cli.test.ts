@@ -4,7 +4,8 @@ import { loop, makeRepo, runLoop, writeFile } from "./helpers.js";
 
 test("loop prints usage and exits 2", (t) => {
   const repo = makeRepo(t);
-  for (const args of [[], ["run"], ["step"], ["unknown", "add-thing"], ["run", "add-thing", "extra"], ["step", "add-thing", "extra"]]) {
+  for (const args of [[], ["run"], ["step"], ["unknown", "add-thing"], ["run", "add-thing", "extra"], ["step", "add-thing", "extra"],
+    ["scope"], ["scope", "start"], ["scope", "finish"], ["scope", "other", "session"], ["scope", "start", "session", "extra"], ["scope", "finish", "session", "--force"]]) {
     const result = loop(args, { cwd: repo.top, env: repo.env });
     assert.equal(result.status, 2, args.join(" "));
     assert.match(result.stderr, /^Usage: loop /);
