@@ -64,6 +64,68 @@ test("pr mode pushes the branch without an upstream and opens a pull request des
   assert.equal(repo.git("rev-parse", "main"), main);
 });
 
+test("pr mode publishes nothing through archival and pushes only at delivery", (t) => {
+  const repo = makeRepo(t, { delivery: "pr" });
+  repo.addOrigin();
+  const main = remoteTip(repo, "main");
+  for (const stage of ["proposal-review", "implementation", "integration", "archive"]) {
+    const result = runLoop(repo, ["step", "add-thing"]);
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.ok(result.stdout.includes(`] ${stage}: complete\n`), result.stdout);
+    assert.equal(remoteTip(repo, "loop/add-thing"), "");
+    assert.equal(remoteTip(repo, "main"), main);
+    assert.deepEqual(repo.ghCalls(), []);
+  }
+  assert.equal(repo.gitIn(repo.worktree, "log", "-1", "--format=%s"), "add-thing: archive");
+  const result = runLoop(repo, ["step", "add-thing"]);
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.equal(remoteTip(repo, "loop/add-thing"), repo.gitIn(repo.worktree, "rev-parse", "HEAD"));
+  assert.ok(result.stdout.includes("] delivery: opened pull request https://github.com/test/repo/pull/1\n"), result.stdout);
+  assert.deepEqual(repo.ghCalls().map((args) => args[1]), ["list", "create"]);
+});
+
+test("pr mode stops when rebasing an already-pushed user branch rejects delivery, and resumes after reconciliation", (t) => {
+  const repo = makeRepo(t, { delivery: "pr", branch: "feature" });
+  const origin = repo.addOrigin();
+  repo.git("push", "--quiet", "origin", "feature");
+  const published = remoteTip(repo, "feature");
+  const main = repo.git("rev-parse", "main");
+  const other = join(repo.root, "other");
+  repo.gitIn(repo.root, "clone", "--quiet", origin, other);
+  writeFile(other, "base.txt", "moved\n");
+  repo.gitIn(other, "add", "base.txt");
+  repo.gitIn(other, "commit", "--quiet", "-m", "move the remote base");
+  repo.gitIn(other, "push", "--quiet", "origin", "main");
+  const base = remoteTip(repo, "main");
+  repo.queue("implementer", { edits: { "a.txt": "a\n" } });
+
+  const result = runLoop(repo, ["run", "add-thing"]);
+  assert.equal(result.status, 1, result.stdout + result.stderr);
+  assert.ok(result.stdout.includes(`] integration: rebased onto origin/main at ${base.slice(0, 7)}\n`), result.stdout);
+  assert.throws(() => repo.git("merge-base", "--is-ancestor", published, "feature"));
+  assert.match(result.stdout, /Run add-thing stopped at delivery\.\nCause: `git push --quiet origin feature:refs\/heads\/feature` failed with exit status 1:\n(.*\n)*.*\[rejected\]/);
+  assert.match(result.stdout, /Recovery: loop resume add-thing\n/);
+  const transcript = /Transcript: (.+)/.exec(result.stdout)![1];
+  assert.match(readFileSync(transcript, "utf8"), /\[rejected\]/);
+  assert.equal(remoteTip(repo, "feature"), published);
+  assert.equal(remoteTip(repo, "main"), base);
+  assert.equal(repo.git("rev-parse", "main"), main);
+  assert.deepEqual(repo.ghCalls(), []);
+
+  // The published branch holds only the superseded plan: keep the archived tree while restoring its ancestry.
+  repo.git("fetch", "--quiet", "origin", "feature");
+  repo.git("merge", "--quiet", "--no-edit", "-s", "ours", "origin/feature");
+  const calls = repo.calls().length;
+  const resumed = runLoop(repo, ["resume", "add-thing"]);
+  assert.equal(resumed.status, 0, resumed.stdout + resumed.stderr);
+  assert.doesNotMatch(resumed.stdout, /\] (proposal-review|implementation|integration|archive): started/);
+  assert.equal(repo.calls().length, calls);
+  assert.equal(remoteTip(repo, "feature"), repo.git("rev-parse", "feature"));
+  assert.equal(repo.git("merge-base", "--is-ancestor", published, "feature"), "");
+  assert.equal(repo.git("rev-parse", "main"), main);
+  assert.deepEqual(repo.ghCalls().map((args) => args[1]), ["list", "create"]);
+});
+
 test("merge mode pushes the change to the remote's default branch and fast-forwards the local one", (t) => {
   const repo = makeRepo(t, { delivery: "merge" });
   repo.addOrigin();
