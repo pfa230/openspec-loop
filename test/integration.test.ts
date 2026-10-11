@@ -64,29 +64,33 @@ test("a clean rebase leaves a linear branch, other branches alone, and the appro
   assert.equal(repo.gitIn(repo.worktree, "show", "HEAD~1:f.txt"), f({ 5: "five", 7: "seven", 9: "nine" }).trimEnd());
 });
 
-test("a conflict falls back to a merge the implementer resolves, and the result is checked and reviewed", (t) => {
-  const repo = withFile(makeRepo(t));
-  writeFile(repo.top, "openspec/loop.local.yaml", "checks:\n  - test -f f.txt\n");
-  repo.git("add", "openspec/loop.local.yaml");
-  repo.git("commit", "--quiet", "-m", "checks");
-  // The second turn keeps the branch's version, which leaves the tree equal to HEAD's; the merge must still be committed.
-  repo.queue("implementer", { edits: { "f.txt": f({ 5: "five" }) } }, { edits: { "f.txt": f({ 5: "five" }) } });
-  repo.queue("verifier", { sh: moveMain(repo, f({ 5: "FIVE" })) });
-  const result = runLoop(repo, ["run", "add-thing"]);
-  assert.equal(result.status, 0, result.stdout);
-  const all = lines(result.stdout);
-  const conflict = all.indexOf("integration: rebase onto main conflicts; merging instead");
-  assert.ok(conflict > 0, result.stdout);
-  assert.equal(all[conflict + 1], "integration: merge of main conflicts in 1 file");
-  assert.equal(all[conflict + 2], "implementation: attempt 2 of 3, implementer started (implementer)");
-  assert.ok(all.slice(conflict).includes("implementation: attempt 2 of 3, check `test -f f.txt` passed"));
-  assert.equal(repo.calls("verifier").length, 2);
-  assert.match(implementerPrompts(repo)[1], /Merging main \([0-9a-f]{7}\) into the change conflicts in: f\.txt\. The merge is in progress/);
-  const merge = repo.git("log", "-1", "--merges", "--format=%H %s", "loop/add-thing");
-  assert.match(merge, / Merge branch 'main' into loop\/add-thing$/);
-  assert.equal(repo.git("rev-list", "--parents", "-n1", merge.slice(0, 40)).split(" ").length, 3);
-  assert.equal(repo.gitIn(repo.worktree, "show", "HEAD~1:f.txt"), f({ 5: "five" }).trimEnd());
-});
+for (const delivery of ["local", "pr"]) {
+  test(`${delivery}: a conflict falls back to a merge the implementer resolves, and the result is checked and reviewed`, (t) => {
+    const repo = withFile(makeRepo(t, { delivery }));
+    writeFile(repo.top, "openspec/loop.local.yaml", "checks:\n  - test -f f.txt\n");
+    repo.git("add", "openspec/loop.local.yaml");
+    repo.git("commit", "--quiet", "-m", "checks");
+    if (delivery === "pr") repo.addOrigin();
+    const base = delivery === "pr" ? "origin/main" : "main";
+    // The second turn keeps the branch's version, which leaves the tree equal to HEAD's; the merge must still be committed.
+    repo.queue("implementer", { edits: { "f.txt": f({ 5: "five" }) } }, { edits: { "f.txt": f({ 5: "five" }) } });
+    repo.queue("verifier", { sh: moveMain(repo, f({ 5: "FIVE" })) + (delivery === "pr" ? " && git push --quiet origin main" : "") });
+    const result = runLoop(repo, ["run", "add-thing"]);
+    assert.equal(result.status, 0, result.stdout);
+    const all = lines(result.stdout);
+    const conflict = all.indexOf(`integration: rebase onto ${base} conflicts; merging instead`);
+    assert.ok(conflict > 0, result.stdout);
+    assert.equal(all[conflict + 1], `integration: merge of ${base} conflicts in 1 file`);
+    assert.equal(all[conflict + 2], "implementation: attempt 2 of 3, implementer started (implementer)");
+    assert.ok(all.slice(conflict).includes("implementation: attempt 2 of 3, check `test -f f.txt` passed"));
+    assert.equal(repo.calls("verifier").length, 2);
+    assert.match(implementerPrompts(repo)[1], /Merging (?:origin\/)?main \([0-9a-f]{7}\) into the change conflicts in: f\.txt\. The merge is in progress/);
+    const merge = repo.git("log", "-1", "--merges", "--format=%H %s", "loop/add-thing");
+    assert.match(merge, / Merge (?:remote-tracking )?branch '(?:refs\/remotes\/origin\/)?main' into loop\/add-thing$/);
+    assert.equal(repo.git("rev-list", "--parents", "-n1", merge.slice(0, 40)).split(" ").length, 3);
+    assert.equal(repo.gitIn(repo.worktree, "show", "HEAD~1:f.txt"), f({ 5: "five" }).trimEnd());
+  });
+}
 
 test("an integration that changes the patch returns to the implementer", (t) => {
   const repo = makeRepo(t);
@@ -115,7 +119,7 @@ test("a check that fails only on the integrated result returns to the implemente
   assert.match(implementerPrompts(repo)[1], /The check failed with exit status 1/);
 });
 
-test("pr mode fetches the upstream through its fetch mapping and merges it, rewriting no commit", (t) => {
+test("pr mode rebases onto the mapped upstream and delivers a linear branch", (t) => {
   const repo = withFile(makeRepo(t, { delivery: "pr" }));
   repo.git("config", "merge.ff", "only");
   const origin = join(repo.root, "origin.git");
@@ -135,9 +139,13 @@ test("pr mode fetches the upstream through its fetch mapping and merges it, rewr
   const implemented = /implementer committed ([0-9a-f]{7})/.exec(result.stdout)![1];
   const moved = repo.git("rev-parse", "--short=7", "refs/remotes/published/trunk");
   assert.ok(all.includes(`integration: fetched published/trunk at ${moved}`), result.stdout);
-  assert.ok(all.includes(`integration: merged published/trunk at ${moved}`), result.stdout);
+  assert.ok(all.includes(`integration: rebased onto published/trunk at ${moved}`), result.stdout);
   assert.equal(repo.git("log", "-1", "--format=%s", implemented), "add-thing: implement");
-  assert.equal(repo.git("merge-base", "--is-ancestor", implemented, "loop/add-thing"), "");
+  assert.throws(() => repo.git("merge-base", "--is-ancestor", implemented, "loop/add-thing"));
+  const base = repo.git("rev-parse", "refs/remotes/published/trunk");
+  assert.equal(repo.git("merge-base", base, "loop/add-thing"), base);
+  assert.equal(repo.gitIn(origin, "rev-parse", "refs/heads/loop/add-thing"), repo.git("rev-parse", "loop/add-thing"));
+  assert.equal(repo.gitIn(origin, "rev-list", "--merges", `${base}..refs/heads/loop/add-thing`), "");
   assert.equal(repo.git("rev-parse", "main"), repo.git("rev-parse", "main@{upstream}~1"));
 });
 

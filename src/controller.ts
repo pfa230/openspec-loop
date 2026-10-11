@@ -232,20 +232,14 @@ async function integration(run: Run): Promise<Halt | typeof REPLAN | undefined> 
 
   if (!gitSucceeds(worktree, "merge-base", "--is-ancestor", base.ref, "HEAD")) {
     const at = git(worktree, "rev-parse", "--short=7", base.ref);
-    let merge = setup.config.delivery === "pr";
-    if (!merge) {
-      try {
-        git(worktree, "rebase", "--quiet", "--no-update-refs", base.ref);
-        progress(`integration: rebased onto ${name} at ${at}`);
-      } catch (error) {
-        const files = conflicted(worktree);
-        if (files.length === 0) throw new Error(`\`git rebase ${name}\` failed: ${gitMessage(error)}`);
-        git(worktree, "rebase", "--abort");
-        progress(`integration: rebase onto ${name} conflicts; merging instead`);
-        merge = true;
-      }
-    }
-    if (merge) {
+    try {
+      git(worktree, "rebase", "--quiet", "--no-update-refs", base.ref);
+      progress(`integration: rebased onto ${name} at ${at}`);
+    } catch (error) {
+      const files = conflicted(worktree);
+      if (files.length === 0) throw new Error(`\`git rebase ${name}\` failed: ${gitMessage(error)}`);
+      git(worktree, "rebase", "--abort");
+      progress(`integration: rebase onto ${name} conflicts; merging instead`);
       try {
         git(worktree, "merge", "--quiet", "--ff", "--no-edit", base.ref);
         progress(`integration: merged ${name} at ${at}`);
