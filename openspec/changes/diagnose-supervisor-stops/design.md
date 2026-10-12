@@ -79,6 +79,7 @@ Each item below serves the amended Supervision skill requirement or the explicit
 | Git status alongside existing log/diff reads | Supervision skill: work survives a rejected final reply | Commit history alone hides surviving uncommitted edits. |
 | Existing run-record reads | Supervision skill: completed versus pending validation | Worker test output alone cannot establish loop checks/review completion. |
 | Explicit remaining uncertainty | Supervision skill: evidence does not establish the underlying cause | Guessing why the model ignored its instruction invents a cause. |
+| Strict reply-contract recovery reminder | Existing Worker interface and Shipped adapters; #55's separation from #54 | Without the reminder, the initial Claude rehearsal suggested weakening validation as run recovery. |
 | Existing wait for agreement | Supervision skill: repair/continue only with agreement | Automatic recovery advances a run before the user chooses. |
 | Existing read-only diagnosis | Supervision skill: diagnosis changes nothing | Testing a theory modifies the run being investigated. |
 | README supervision clarification | #55's supervision behavior in user guidance | The old paragraph omits causal tracing and work-state reporting. |
@@ -94,6 +95,7 @@ Each item below serves the amended Supervision skill requirement or the explicit
 | Claude rehearsal | Supervision skill: shipped skill for Claude | A Codex-only observation does not establish Claude supervision. |
 | Codex rehearsal | Supervision skill: shipped skill for Codex | A Claude-only observation does not establish Codex supervision. |
 | Native session JSONL captures | #55 regression acceptance: investigation with evidence | A plain final answer cannot show which files the supervisor inspected. |
+| Claude diagnosis-only system instruction | Supervision skill: diagnosis changes nothing; #55 regression acceptance | Default CLI plan authoring attempted an unrelated scratch-plan write; the instruction lets the rehearsal test diagnosis alone. |
 | Before/after Git status/history/diff | Supervision skill: diagnosis changes nothing | Reading the explanation alone cannot establish preservation of Git state. |
 | Before/after run/worktree file lists and checksums | Supervision skill: diagnosis changes nothing | Git status alone misses changed contents of an already modified or untracked file. |
 | One issue evidence comment with reproducible setup/results | #55 regression acceptance; existing #9 evidence convention | Unrecorded temporary captures cannot support or repeat the acceptance result. |
@@ -107,3 +109,5 @@ Each item below serves the amended Supervision skill requirement or the explicit
 | `tasks.md` record | Explicit native proposal workflow | Design prose alone has no apply checklist. |
 
 Removed during revision: the `test/recordings/` recipe/evidence file, `test/helpers.ts` reuse and its extra driver/lifecycle plumbing, the handwritten parser wrapper, the implied full report in run state, and the reporting duty beyond execution failures. Use the pinned real adapter/helper, explicit shell setup, captured stdout and one issue comment instead. Also keep new diagnosis engines, structured runtime records, gates, adapter parsing changes, broad environment inspection, a tmux requirement and an automated evaluator out of scope: existing guidance, records and native captures serve the requested behavior. No option or persisted state field is added.
+
+Implementation cut pass: all retained items above still serve the named clauses. Reused the existing Rules, execution-failure and presentation sections and the existing README paragraph; added no runtime code, settings or state. The successful-child parsing example and strict-reply recovery reminder address the observed incident and rehearsal advice. The CLI diagnosis-only instruction is confined to the temporary rehearsal, not shipped as product configuration. Removed the initial loose-validation recovery suggestion from the accepted outcome and used final sessions that performed only reads. Reproducible setup, earlier observations, final diagnoses and preservation comparisons are recorded in the [#55 evidence comment](https://github.com/pfa230/openspec-loop/issues/55#issuecomment-6128688896); no transcript or evidence file is committed here.
