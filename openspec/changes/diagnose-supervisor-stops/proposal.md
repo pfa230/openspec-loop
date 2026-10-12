@@ -10,9 +10,9 @@ Source issue: https://github.com/pfa230/openspec-loop/issues/55
 
 - Strengthen the existing supervision skill's execution-failure diagnosis: identify the failed operation and distinguish a harness exit from an adapter's rejection of its reply before proposing recovery.
 - Permit targeted read-only inspection of the invoked adapter and its relevant helper when the transcript and configured command cannot establish that distinction.
-- Describe committed and uncommitted work, validation completed and still pending, and remaining uncertainty from the run's existing files and Git history.
+- For execution failures, describe committed and uncommitted work, validation completed and still pending, and remaining uncertainty from the run's existing files and Git history.
 - Preserve unchanged report relay and the requirement to wait for the user's agreement before repairs or continuation.
-- Add a reusable supervision regression scenario for a successful child whose prose-plus-JSON final reply is rejected by its wrapper; exercise the shipped skill in both Claude and Codex and record observed behavior.
+- Exercise a successful child's rejected prose-plus-JSON reply in both Claude and Codex supervision sessions, using the pinned real adapter/helper pair. Record reproducible setup and observed behavior in one evidence comment on #55.
 
 ## Capabilities
 
@@ -26,4 +26,4 @@ None.
 
 ## Impact
 
-Implementation is limited to `skills/openspec-loop/SKILL.md`, its README supervision guidance and a regression scenario under `test/recordings/`. This change does not alter the controller, adapters, reply validation, report format, configuration, persisted state or dependencies. The adapter/output-contract repair remains separate in #54; this change needs no dependency on that repair.
+Repository implementation is limited to `skills/openspec-loop/SKILL.md` and its existing README supervision guidance. Rehearsal setup and results live on #55; disposable fixture files and session captures remain outside the repository. This change does not alter the controller, adapters, reply validation, report format, configuration, persisted state or dependencies. The adapter/output-contract repair remains separate in #54; this change needs no dependency on that repair.
