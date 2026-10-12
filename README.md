@@ -287,7 +287,7 @@ Resume after an interrupted delivery repeats its steps safely. Git does nothing 
 
 ## Supervising from Claude Code or Codex
 
-The skill you copied in Setting up a project lets a Claude Code or Codex session drive the loop for you. Ask the session to run, stop or resume a change. It gives the same `loop` commands you would, relays each progress line as it is printed, and shows the report unchanged. When a run stops, it diagnoses the stop with you from the report, the transcripts, the agent's configured command and the findings, changes nothing while it does, and repairs or resumes only when you agree.
+The skill you copied in Setting up a project lets a Claude Code or Codex session drive the loop for you. Ask the session to run, stop or resume a change. It gives the same `loop` commands you would, relays each progress line as it is printed, and shows the report unchanged. When a run stops, it diagnoses the stop with you from the report, the transcripts, the agent's configured command and the findings. For an execution failure, it traces the specific failed operation, inspecting the invoked adapter and relevant helper when needed to distinguish a harness failure from reply rejection. It explains the committed and uncommitted work, completed and pending validation, and remaining uncertainty before proposing recovery. Diagnosis changes nothing; repairs or continuation wait for your agreement.
 
 `loop` writes the repository's Git directory and starts its own workers, so the session runs it outside its sandbox. In Codex, approve the escalated permissions the session requests for each `loop` command.
 
