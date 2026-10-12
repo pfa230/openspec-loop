@@ -2,7 +2,7 @@
 
 ### Requirement: Shipped adapters
 
-The loop SHALL ship worker commands for Claude Code, Codex, Antigravity and OpenCode. Each SHALL run its harness headless in the run's worktree with the agent's remaining arguments passed to the harness, and SHALL write the harness's final answer as the reply. An adapter SHALL use its harness's own schema enforcement when the harness has one; otherwise it SHALL accept only a final message that parses as one JSON object. The OpenCode adapter SHALL request native structured output with the supplied worker schema and SHALL write only the successful native structured result as its reply, without parsing text messages for a reply. Enabling that format SHALL be scoped to the worker process, preserve existing configuration and restrictions, and require no persistent configuration edits. Settings that disable or bypass this enablement SHALL fail explicitly rather than be discarded or weaken restrictions. Missing or failed native structured output SHALL be an execution failure even when text contains a schema-conforming object; the adapter SHALL NOT repair text or launch another worker turn. Each adapter SHALL write every numeric consumption counter from its harness's reported usage or token object and any explicitly reported USD cost to the usage file, under the harness's own names and nested paths, before it judges the harness's exit, and SHALL write no value the harness does not report. Counter collection SHALL NOT be restricted to a fixed list of names. An adapter SHALL preserve its harness's final-summary or per-step accounting boundary, without adding repeated cumulative snapshots together. Usage collection SHALL use the existing worker invocation's output and SHALL NOT add an auxiliary command, API lookup, pricing calculation or inference run. Unrelated event fields and nonnumeric metadata SHALL remain in the transcript rather than being treated as summable consumption counters.
+The loop SHALL ship worker commands for Claude Code, Codex, Antigravity and OpenCode. Each SHALL run its harness headless in the run's worktree with the agent's remaining arguments passed to the harness, and SHALL write the harness's final answer as the reply. Each adapter SHALL use its harness's own schema enforcement. The OpenCode adapter SHALL request native structured output with the supplied worker schema and SHALL write only the successful native structured result as its reply, without parsing text messages for a reply. Enabling that format SHALL be scoped to the worker process, preserve existing configuration and restrictions, and require no persistent configuration edits. Settings that disable or bypass this enablement SHALL fail explicitly rather than be discarded or weaken restrictions. An absent successful native result after a zero child exit SHALL be reported as missing native output even when text contains a schema-conforming object. A nonzero child exit SHALL retain the existing harness-exit failure reporting. The adapter SHALL NOT repair text or launch another worker turn. Each adapter SHALL write every numeric consumption counter from its harness's reported usage or token object and any explicitly reported USD cost to the usage file, under the harness's own names and nested paths, before it judges the harness's exit, and SHALL write no value the harness does not report. Counter collection SHALL NOT be restricted to a fixed list of names. An adapter SHALL preserve its harness's final-summary or per-step accounting boundary, without adding repeated cumulative snapshots together. Usage collection SHALL use the existing worker invocation's output and SHALL NOT add an auxiliary command, API lookup, pricing calculation or inference run. Unrelated event fields and nonnumeric metadata SHALL remain in the transcript rather than being treated as summable consumption counters.
 
 #### Scenario: Harness arguments pass through
 - **WHEN** the proposal reviewer's agent is `loop-codex` with a model and a sandbox argument
@@ -14,13 +14,9 @@ The loop SHALL ship worker commands for Claude Code, Codex, Antigravity and Open
 - **AND** the loop can continue its existing commit, required-check and review sequence
 
 #### Scenario: Harness without schema enforcement
-- **WHEN** OpenCode exits successfully with prose followed by JSON, a fenced JSON block, or bare JSON in text, but no successful native structured result
+- **WHEN** OpenCode supplies no successful schema-enforced result and exits zero, with optional text such as prose followed by JSON, a fenced JSON block or bare JSON
 - **THEN** the adapter reports missing native structured output, writes no reply and the run stops with an execution failure
 - **AND** the transcript distinguishes the successful OpenCode process from the adapter's failure and the worker's implementation edits remain available for resume
-
-#### Scenario: Native output failure cannot be hidden by text
-- **WHEN** OpenCode reports failed native structured output and also emits text containing a valid object
-- **THEN** the adapter reports the native failure and does not use the text as a reply or start another worker turn
 
 #### Scenario: Per-worker schema and inherited settings
 - **WHEN** an OpenCode worker starts with a supplied schema and existing user or project configuration, including inline configuration
@@ -28,7 +24,7 @@ The loop SHALL ship worker commands for Claude Code, Codex, Antigravity and Open
 - **AND** delegated sessions are not assigned the root worker's reply schema
 
 #### Scenario: Settings prevent native enforcement
-- **WHEN** the configured OpenCode command disables or bypasses the adapter's process-scoped schema enablement
+- **WHEN** pure mode is enabled through argv or the environment, or `--attach` targets a server including localhost
 - **THEN** the adapter names the incompatible setting and fails without stripping it or accepting a text reply
 
 #### Scenario: Harness without cost
