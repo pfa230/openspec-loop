@@ -2,108 +2,137 @@
 
 ## Context
 
-See `proposal.md` and issue #54 for the failure. `src/adapters/opencode.ts` invokes `opencode run --format json`, sums `step_finish` usage and parses the last `text` event. `runHarness()` already forwards the complete stdout to the transcript and preserves reported usage before judging the child's exit. `readReply()` already validates the role's reply shape. These components are reused.
+See `proposal.md` and issue #54 for the failure. The shipped OpenCode adapter requests bare JSON through `opencode run --format json`; the unfinished implementation instead injects a native format through a file plugin and consumes completed tool input. The controller already validates role replies and preserves failed-worker edits. Reuse those boundaries.
 
-[Verified source behavior] OpenCode 1.18.34's CLI has no schema argument, but its prompt engine enables `StructuredOutput` when the user message's `format` is `json_schema`. The CLI emits a successful call as a completed `tool_use` part containing the object input, and filters out parts from other sessions. Its `chat.message` hook can mutate the message before it is saved. Plugin configuration accepts `[specifier, options]` tuples. A turn that ends without native output can save a `StructuredOutputError` internally without emitting a session error; a genuine session error does cause the local CLI to exit nonzero.
+[Verified live behavior, OpenCode 1.18.34] The compiled message hook loaded, but saving its plain `{ type: "json_schema", schema }` format failed with `SchemaError(Expected OutputFormatJsonSchema, got ...)` at `Session.updateMessage`, before inference. OpenCode represents the format as a runtime schema class; its defining package is private. Adding a retry field does not construct that instance. Do not use internal imports, prototype tricks or an installation patch.
 
-Sources: [prompt engine](https://github.com/anomalyco/opencode/blob/v1.18.34/packages/opencode/src/session/prompt.ts), [CLI event stream](https://github.com/anomalyco/opencode/blob/v1.18.34/packages/opencode/src/cli/cmd/run.ts), [plugin loader](https://github.com/anomalyco/opencode/blob/v1.18.34/packages/opencode/src/plugin/index.ts), [plugin configuration type](https://github.com/anomalyco/opencode/blob/v1.18.34/packages/core/src/v1/config/plugin.ts), [configuration](https://github.com/anomalyco/opencode/blob/v1.18.34/packages/opencode/src/config/config.ts), [runtime flags](https://github.com/anomalyco/opencode/blob/v1.18.34/packages/opencode/src/effect/runtime-flags.ts).
+A separate disposable API proof submitted that serialized format to `POST /session/{sessionID}/message` with `openrouter/xiaomi/mimo-v2.6-flash`. OpenCode returned `info.structured: {"planProblem":null}`, a completed `StructuredOutput` part and reported tokens/cost. This establishes the API enablement path, not the compiled adapter's delivery behavior. The no-work proof did not emit its requested assistant cut report, and aborting its event subscription immediately on the HTTP response did not drain all completion events; apply must verify presentation and stream completion with the actual adapter.
+
+Primary references: [versioned prompt API types](https://github.com/anomalyco/opencode/blob/v1.18.34/packages/sdk/js/src/v2/gen/types.gen.ts), [runtime format definition](https://github.com/anomalyco/opencode/blob/v1.18.34/packages/schema/src/v1/session.ts), [prompt engine](https://github.com/anomalyco/opencode/blob/v1.18.34/packages/opencode/src/session/prompt.ts), [headless CLI permission behavior](https://github.com/anomalyco/opencode/blob/v1.18.34/packages/opencode/src/cli/cmd/run.ts), [server command](https://github.com/anomalyco/opencode/blob/v1.18.34/packages/opencode/src/cli/cmd/serve.ts), [server lifecycle](https://github.com/anomalyco/opencode/blob/v1.18.34/packages/opencode/src/server/server.ts), [SDK server helper](https://github.com/anomalyco/opencode/blob/v1.18.34/packages/sdk/js/src/server.ts), [server authentication](https://github.com/anomalyco/opencode/blob/v1.18.34/packages/opencode/src/server/auth.ts).
 
 ## Goals / Non-Goals
 
-The worker reply comes from native schema output, with the repository's cut report retained as transcript text. Enablement requires no action from the user after upgrading the package.
+Submit the schema at OpenCode's supported decoding boundary and deliver its native object separately from presentation text. Keep one worker prompt, existing restrictions, native usage names and controller progression. Require no persistent installation or configuration change.
 
-This change does not diagnose or repair the labeler implementation, remove its presentation requirements, add retries, or change controller progression. A native output failure remains a failure; this design does not promise that a model can never fail to call the required tool.
+This does not repair the labeler implementation, its plan-mode claim or checklist, resume its stopped run, add retries, or guarantee that a model always emits presentation text or completes native output.
 
 ## Decisions
 
-### Keep one CLI invocation and enable its native format through a bundled hook
+### Own one server and submit one API prompt
 
-Add `src/adapters/opencode-schema.ts`, shipped as compiled JavaScript by the existing `dist/src` package inclusion. Export only its plugin factory as the default export, with no adapter entrypoint import or startup side effects. The factory receives the schema in plugin options. Its `chat.message` hook sets the root worker message's `format` to `{ type: "json_schema", schema }`. Remember the first session id in that process and apply the schema only to that session, so delegated sessions keep their own instructions and formats.
+Replace this adapter's `opencode run` invocation with one `opencode serve --hostname 127.0.0.1 --port 0 --mdns=false` child in the current worktree. Read the actual listening URL from that child rather than assume a port: 1.18.34 tries 4096 before selecting a free port. Keep the child in the worker's process group. Inherit environment and configuration unchanged, including `OPENCODE_CONFIG_CONTENT` and `OPENCODE_PURE`. Supply the worktree directory on API requests. Preserve configured server authentication by deriving the Basic header from the inherited password and username, without printing credentials.
 
-The adapter appends this fixed file plugin, with an absolute file URL and schema options, to a worker-scoped `OPENCODE_CONFIG_CONTENT` overlay. Preserve all inherited inline settings and existing plugin entries. Use `jsonc-parser` to parse inherited content with the same comments/trailing-comma support as OpenCode; fail with a configuration error when parsing fails rather than replace it with defaults. OpenCode continues loading the user's existing file configuration normally. Do not edit any `opencode.json` or `.opencode/` file.
+Use built-in Node fetch/stream facilities for the small API surface. Create a fresh session, subscribe to its directory's event stream before submitting the prompt, and call the synchronous prompt endpoint once with the supplied schema as `format: { type: "json_schema", schema }`. Do not set `retryCount`, submit a repair prompt, or look up usage afterward. The API creates the native runtime instance. Delegated sessions receive no root schema injection.
 
-Assign the overlay to `process.env.OPENCODE_CONFIG_CONTENT` inside `opencode.ts` before its existing `runHarness()` call. Each adapter is already a separate process started by `startWorker()` and spawns one harness, so this environment change is scoped to that worker. It cannot modify the loop's or another worker's environment. Leave `src/adapters/common.ts` unchanged.
+Wait for the owned child's ready line, refusing startup errors, early exits or a five-second readiness timeout, matching the SDK's startup default without adding a configuration knob. During execution, an unexpected child exit or premature event-stream closure fails the worker. Finish a successful HTTP prompt only after its root-session idle event has drained the stream; an HTTP failure cancels the subscription instead of waiting for an idle event that may never arrive. Always close the subscription and terminate/reap the child on success, failure and interruption, with bounded termination if graceful shutdown does not finish. Persist observed usage before reporting failure. A deliberate cleanup exit is not an unexpected harness exit.
 
-Alternatives: repeating the prompt cannot enforce the output; extracting JSON violates #54's strict boundary. A separate SDK/server runner would need new server lifecycle, permission handling and CLI argument translation despite the existing CLI already providing the events needed here. The fixed hook avoids those mechanisms and adds no loop plugin configuration surface.
+This lifecycle is now necessary: the tested CLI has no schema option, and the smaller hook route failed in the installed harness. The official SDK server helper overwrites `OPENCODE_CONFIG_CONTENT` even when no config is supplied; using it would require parsing and reconstructing inherited configuration. A direct child plus fetch avoids that overlay and a new dependency. Keep `src/adapters/common.ts` unchanged; use its existing counter, usage, reply and failure helpers after cleanup, while other adapters retain `runHarness()`.
 
-### Consume a completed native result and remove text parsing
+### Select the response's native object and collect stream usage
 
-Accept the last `tool_use` event for `StructuredOutput` with `state.status: "completed"`, and write its object input through the existing `writeReply()`. The CLI already filters parts to the active session, and completed native execution already implies the success marker; add neither a session filter nor a metadata-marker check in the adapter. The controller still runs `readReply()` with the existing role validator; do not implement another schema validator.
+Write only the completed prompt response's `info.structured` through `writeReply()`, provided the response and root session have no error. The prompt engine sets this field on native tool success, so a second completed-tool or metadata-marker gate duplicates the native boundary. Missing structured output is an explicit adapter failure even if response text is valid JSON. API errors, `info.error` and root `session.error` are execution failures; a failed tool attempt can still precede a successful native result. Unexpected nonzero server exits preserve their status.
 
-Prose and text-only JSON cannot supply a reply. Reuse `runHarness()` to preserve a nonzero child's exit status and reported usage before reply selection; the local CLI already converts emitted session errors into a nonzero exit. If the child exits zero but no native completion succeeds, report missing native output. Do not add native-error or session-error parsing branches: the internal no-output error is not exposed by this CLI, and failed tool attempts can precede a later successful completion within the same harness turn. The adapter launches no retry.
+Keep parsed native event payloads as JSON lines in the transcript, alongside child diagnostics and the final prompt response. Do not translate them into a second CLI event format. Never parse text for a reply. Retain the worker's semantic prompt and a short instruction to finish with `StructuredOutput` after the work and any required presentation.
 
-Keep the worker prompt's semantic instructions, and replace the adapter's bare-JSON appendix with a short instruction to finish through OpenCode's native structured-output tool after completing the work and any required presentation. No separate presentation event or file is needed.
+Collect root-session `step-finish` parts from `message.part.updated` events, replacing earlier reports for the same part id in a map; sum each final record's numeric token leaves and reported cost once. This preserves the old adapter's root-session per-step accounting and avoids counting event updates or final-message totals twice. Ignore delegated-session usage as the old CLI did. No additional usage API lookup, cumulative session summary or pricing calculation is used.
 
-### Preserve arguments, but reject modes that cannot load the local hook
+### Define supported arguments and preserve headless permissions
 
-Forward the existing compatible CLI arguments unchanged, including model, agent, variant and permission options. Refuse enabled pure mode (`--pure`, its enabled equals form, or `OPENCODE_PURE` enabled under OpenCode's boolean semantics) and every `--attach`/`--attach=` before starting a model turn, including localhost: pure mode disables the hook and attaching handles the prompt in another process that cannot receive this local overlay. Name the incompatible setting. Do not strip it, alter permissions or silently use a text protocol. These are explicit compatibility limits of this proposal.
+Support `-m`/`--model`, `--agent`, `--variant` and `--auto`, with value/equals forms and explicit boolean false where applicable; translate their meaning to the API. Support `--pure` selections by forwarding them to the owned server, and preserve enabled pure mode from the environment. Native enforcement no longer depends on plugins. Unspecified model/agent/variant selections remain unspecified so OpenCode uses its existing configuration defaults. Shell restriction wrappers still encompass the adapter and its child.
 
-No OpenCode version probe, extra model call or retry is added. The minimum working behavior is tested against the installed OpenCode 1.18.34; native output being unavailable is reported by the existing failure path.
+Reject all other arguments before spawning, naming the offending option. This includes `--attach` (even localhost), `--session`, `--continue`, `--fork`, `--command`, `--dir`, file attachments, interactive modes and presentation/server-tuning options. Do not emulate the whole run CLI, ignore unknown flags, change directory, or add compatibility settings. This explicit breaking limit replaces the old passthrough promise only for OpenCode; normal documented worker commands keep their model/agent/variant behavior.
 
-### Verify the boundary through existing tests and one real native invocation
+Create the root session with the same headless deny rules for `question`, `plan_enter` and `plan_exit` as the CLI. Track the root id and child sessions announced under it. Reply `reject` to their `permission.asked` events by default; with explicit `--auto`, reply `once`. These replies only answer requests that OpenCode allows to reach the ask state and do not replace its configured deny rules. Do not apply a blanket allow configuration or add an interactive prompt. Unknown sessions do not receive permission replies.
 
-Extend the adapter harness stub to exercise the worker overlay and load the compiled hook, then emit native tool events alongside text. Clear inherited `OPENCODE_CONFIG_CONTENT` and `OPENCODE_PURE` in the test helper by default; configuration tests set them deliberately. Keep tests at the worker boundary: supplied schema reaches the hook, inherited configuration survives, compatible arguments pass through, and only native output becomes the reply. Include #54's cut-report-plus-JSON text and the real native-no-output shape as failures: optional text, no completed native tool, child exit zero. Include a session-error event with child exit one to prove the existing child-exit path wins, and a successful variant with a separate native result. Assert one child invocation and preserved usage on errors.
+### Verify the API boundary, lifecycle and loop integration
 
-Use an implementation-cycle test to show that a native-reply success continues through commit/check/review and that an adapter failure preserves edits without committing or advancing that attempt. Reuse the existing repository fixtures and validators.
+Replace the plugin-loading stub with a small fake OpenCode server in the existing adapter helper. It records startup arguments and API requests, serves the actual session/prompt/event protocol and can apply worker edits. Clear inherited pure/config/auth environment by default in tests; set values explicitly in the tests that need them. Verify the exact schema reaches the prompt API, inherited JSONC and settings reach OpenCode unchanged, supported selections retain meaning, native output works in pure mode and unsupported flags fail before launch.
 
-During apply, capture one real OpenCode 1.18.34 run in a disposable directory using the configured MiMo model, asking for a cut report and a small schema reply. Inspect the structured tool completion, reply object and usage. Keep a small redacted recording under `test/recordings/`, not the whole private implementation transcript. This checks that the compiled hook loads in the actual harness; stub tests alone cannot establish that.
+Exercise streamed cut text separately from the native response, missing native output, native/session/API failures, an unsuccessful tool attempt before a successful result, repeated step reports, other-session events and usage on failure. Verify default and explicit-auto permission replies for root and child sessions, plus unchanged configured denies. Check readiness failure, unexpected exit, premature stream closure, response-before-idle ordering and child/subscription cleanup after success, failure and interruption. Use the existing harness helper for other adapters.
+
+Rewire the existing #54 implementation-cycle regression to the API fixture: failure retains worker edits without commit/check/review, native success follows their normal sequence, and a wrong-role object still fails controller validation. Demonstrate the regression fails when native response selection is replaced with final-text parsing.
+
+During apply, run the compiled adapter against installed OpenCode 1.18.34 with the configured MiMo model in a disposable directory. Ask for a cut report and a small schema reply and inspect emitted presentation, native object, drained step records, usage and server cleanup. Retain a small redacted API recording and replay it in adapter tests. The preliminary API proof cannot complete this task because it did not exercise the adapter or presentation/stream draining.
 
 ## Risks / Trade-offs
 
-- The CLI has no schema flag, so the hook depends on the documented message-hook shape and versioned native tool events. Verify both in the real smoke run and keep the adapter failure explicit if a later version changes them.
-- Native auto-compaction can create follow-up messages without inheriting the original format in OpenCode 1.18.34. A turn that then produces no native result still fails explicitly; this proposal adds no compaction workaround or text fallback. That limitation is separate from accepting wrapped prose as a reply.
-- Existing plugins can interfere with message format or tool output. Preserve them and use completed native execution plus the controller's reply validator; a missing native result does not imply success.
-- `--pure` and `--attach` cannot be retained as successful modes with this approach. Document the named refusals; ordinary `-m`/`--model`, `--agent`, and restriction wrappers continue working.
+- More lifecycle code than the rejected hook: cover early exits, cancellation and cleanup through the fake server and actual compiled-adapter smoke; add no reusable server framework or lifecycle options.
+- Argument translation replaces arbitrary passthrough: document the supported set and fail unsupported options by name before starting a model turn.
+- Native auto-compaction can lose the format in 1.18.34: missing output still fails; add no compaction workaround or text fallback.
+- Models or existing plugins can omit presentation or native output: preserve their transcript and report the native failure; do not manufacture a report or treat a text object as success.
+- Event updates and HTTP completion can race: deduplicate usage by part id and drain through root idle, without a reconnect/replay or auxiliary usage query.
 
 ## Migration Plan
 
-Upgrade the package after implementation and archive. Existing normal OpenCode agent commands need no edits or plugin installation. Update README's unsupported-schema claim and the compatibility limits. Keep existing stopped runs intact; resume them only when their user chooses. Rollback restores the previous package and its strict final-text protocol.
+Replace the unfinished hook implementation during apply, including removing `opencode-schema.ts`, the overlay, its JSONC dependency and hook-specific tests/documentation. Existing documented model/agent commands need no installation or config change; commands with other run flags must use the documented supported set or receive the explicit compatibility error. Verify, sync specs and archive before integration. Keep the stopped labeler run intact. Rollback restores the previous package and its strict text protocol.
 
 ## Cut Pass
 
-Every item below serves amended **Shipped adapters**, existing **Worker interface**, or the explicit #54 proposal request.
+Every retained item serves amended **Shipped adapters**, existing **Worker interface**, **Run control**, or the explicit #54 revision request. This list describes the revised plan; the unfinished implementation has not yet been reconciled.
 
 | Item kept | Clause/request served | Simpler version and concrete failure |
 |---|---|---|
-| Native `json_schema` format | Shipped adapters: enable native enforcement | Prompt-only JSON repeats #54. |
-| Fixed bundled message hook | Shipped adapters: enforce while preserving CLI arguments | CLI-only cannot set the format; server rewrite adds lifecycle and argument translation. |
-| Worker-scoped inline overlay | Shipped adapters: no persistent edits, preserve settings | Replacing configuration discards user restrictions/plugins. |
-| JSONC parser dependency | Shipped adapters: preserve inherited inline settings | `JSON.parse` rejects comments and trailing commas accepted by OpenCode. |
-| Schema plugin option | Worker interface: supplied schema | Hardcoding one role's schema breaks the other roles. |
-| Root session id in hook closure | Shipped adapters: delegated sessions keep their formats | Applying to every session forces the root protocol on delegated work. |
-| Adapter-local environment assignment | Shipped adapters: process-scoped enablement | Use this simpler version: the adapter process already isolates its environment. |
-| Completed native tool input | Shipped adapters: native result only | Parsing `text` recreates the contamination boundary. |
-| Native completed-status check | Shipped adapters: successful native result | Accepting attempted tool input returns work that never completed. |
-| Missing-result check | Shipped adapters: native result only | A zero child exit alone falsely claims a usable worker reply. |
-| Inline-configuration parse-error check | Shipped adapters: preserve inherited settings | Replacing malformed input with defaults silently discards settings. |
-| Pure-mode refusal for argv/environment | Shipped adapters: incompatible settings fail explicitly | Checking argv alone misses `OPENCODE_PURE`, which also disables the hook. |
-| Every `--attach` refusal | Shipped adapters: incompatible settings fail explicitly | Localhost also handles the prompt in a separate process without the overlay. |
-| Existing usage collector | Shipped adapters: native accounting | Removing it loses costs; a second lookup duplicates the pipeline. |
-| Existing reply validator | Worker interface: role shape | Trusting an object alone accepts the wrong role reply; a new validator duplicates it. |
-| Adapter regression fixture/checks | #54 acceptance and Shipped adapters | A happy-path JSON fixture misses the reported boundary failure. |
-| Controlled test configuration environment | #54 regression evidence | Inheriting the developer's overlay/pure settings changes test outcomes. |
-| Implementation-cycle check | #54 acceptance | Adapter-only tests cannot establish commit/check/review progression or preserved edits. |
-| Real native smoke recording | Shipped adapters: actual enablement | Stubs cannot reveal a hook that the installed OpenCode refuses to load. |
-| README update | #54 fix usability | Leaving it unchanged says native enforcement is impossible. |
-| Proposal record | Explicit proposing request | Tasks alone omit scope and motivation. |
-| Delta spec record | Repository contract rule | Code-only work leaves the prose-failure contract unchanged. |
-| Design record | Explicit proposing request; required decisions | Omitting it leaves the hook and compatibility choices undecided. |
-| Task checklist record | Explicit proposing request | Prose alone is not a native apply checklist. |
-| `.openspec.yaml` record | Explicit native proposing request | Omitting native metadata loses the selected schema and change identity. |
-| Task 1.1: hook/overlay/adapter environment | Shipped adapters: enable native output without losing settings | Consumption alone still leaves the harness in text mode. |
-| Task 1.2: native reply, refusals and docs | Shipped adapters and #54 acceptance | Hook-only work leaves the final-text parser rejecting successful native turns. |
-| Task 1.3: real harness smoke/recording | Shipped adapters: actual enablement | A stub can accept a plugin that the installed harness cannot load. |
-| Task 2.1: implementation-cycle regression | #54 acceptance | Adapter tests do not cover commit/check/review progression or preservation of edits. |
-| Task 2.2: integrated checks and cut pass | Repository-required check and explicit proposing workflow | An isolated adapter test misses integration regressions. |
+| One owned local server | Shipped adapters: native enforcement, owned lifecycle | CLI-only has no schema option; the hook fails runtime validation. |
+| Fixed loopback binding | Shipped adapters: worker-scoped local harness | A configured external binding exposes the worker's server beyond its local process. |
+| Port-zero startup and actual listening port | Shipped adapters: owned harness | A fixed or assumed port can collide with another server. |
+| Disabled mDNS | Shipped adapters: worker-scoped local harness | Inherited discovery advertises a temporary worker server that no external client needs. |
+| Listening URL and readiness/error check | Shipped adapters: startup failure | Sending before readiness fails; silence otherwise leaves startup unbounded. |
+| Five-second readiness bound | Shipped adapters: startup failure | Waiting only for exit hangs on a live child that never becomes ready; use the SDK's existing default, no knob. |
+| Cleanup and bounded child termination | Shipped adapters: no surviving harness | Stopping only the HTTP request leaves the owned server running. |
+| Inherited environment without overlay | Shipped adapters: preserve configuration | Use this simpler version; rebuilding JSONC discards accepted syntax or settings. |
+| Directory on API requests | Shipped adapters: worktree execution | Server startup alone does not select the request's project instance. |
+| Existing-auth Basic header | Shipped adapters: preserve settings | A password-configured server otherwise rejects the owned client. |
+| Fresh root session id | Shipped adapters: one worker prompt | Reusing a previous session introduces unrelated history and reply state. |
+| API schema format | Shipped adapters: native enforcement | Text instructions repeat #54; hook injection bypasses runtime decoding. |
+| One prompt with native instruction | Shipped adapters: one native worker reply | A follow-up repair prompt violates the one-turn/no-retry boundary. |
+| Native `info.structured` selection | Shipped adapters: native result only | Parsing response text repeats #54; an extra tool gate duplicates native success. |
+| API error check | Shipped adapters: execution failures | A failed HTTP request cannot supply a successful native result. |
+| Final response error check | Shipped adapters: execution failures | HTTP 200 can carry a saved native-output error. |
+| Root session error check | Shipped adapters: execution failures | Judging only transport status loses a streamed root-session failure. |
+| Missing-native-result check | Shipped adapters: native result only | Successful transport can still return no usable object. |
+| Stream subscription before prompt | Shipped adapters: transcript/accounting | Subscribing afterward loses earlier worker steps and permission requests. |
+| Root idle completion check | Shipped adapters: accounting boundary | Cancelling on HTTP completion alone loses queued completion events, as the proof showed. |
+| Premature stream closure check | Shipped adapters: execution failures | A closed stream otherwise drops permissions or accounting while a model continues. |
+| Native JSON-line transcript and final response | Worker interface: kept output; #54 evidence | Reply-only output hides the work and presentation needed to diagnose failure. |
+| Latest step reports keyed by part id | Shipped adapters: per-step accounting | Summing event updates counts the same step twice; final-message totals miss earlier steps. |
+| Root-session accounting filter | Shipped adapters: preserved accounting | Including child events changes the old CLI's accounting boundary. |
+| Existing counter/usage helpers | Shipped adapters: native numeric leaves | Fixed token fields drop additional/nested counters; new helpers duplicate existing ones. |
+| Existing reply/controller validators | Worker interface: JSON object and role shape | Trusting native transport accepts a wrong-role object; another validator duplicates the controller. |
+| Model argument mapping | Shipped adapters: supported selections | Ignoring it runs a different model than the worker command selects. |
+| Agent argument mapping | Shipped adapters: preserved restrictions | Ignoring plan selection enables work the review command meant to prohibit. |
+| Variant argument mapping | Shipped adapters: supported selections | Ignoring it silently changes the requested model variant. |
+| Pure forwarding/environment inheritance | Shipped adapters: preserved pure selection | Refusal is unnecessary now; stripping pure loads plugins the command disabled. |
+| Explicit auto-approval option | Shipped adapters: headless permission semantics | Ignoring explicit auto denies requested work; enabling it by default weakens restrictions. |
+| Headless question/plan-transition denies | Shipped adapters: preserved restrictions | General permission handling alone allows workflow questions or plan switching. |
+| Permission reply handler | Shipped adapters: unattended root/child permissions | Leaving ask requests unanswered hangs; blanket allow overrides configured denies. |
+| Known descendant session ids | Shipped adapters: delegated permissions | Root-only handling hangs delegated work; answering every session affects unrelated sessions. |
+| Unsupported argument check | Shipped adapters: explicit compatibility failures | Silently discarding run flags changes their intended session or restrictions. |
+| Fake API server and request log | #54 and revised API acceptance | A plugin stub cannot verify HTTP schema decoding or lifecycle. |
+| Controlled test environment | Revised API acceptance | Inherited config/pure/auth settings change fixture outcomes. |
+| Native reply regression | Shipped adapters: native result | A transport-only test cannot establish object selection. |
+| Cut-report and text-only regression | Shipped adapters and #54 | A happy-path object misses the reported prose boundary. |
+| Native/API/session failure regression | Shipped adapters: error reporting | A success-only test cannot establish failure usage and missing replies. |
+| Repeated-step accounting regression | Shipped adapters: per-step boundary | One usage record cannot reveal double-counting of an update. |
+| Unrelated-session regression | Shipped adapters: worker-scoped output/restrictions | Root-only input cannot reveal unrelated-session pollution. |
+| Default and explicit-auto permission regression | Shipped adapters: preserved permission behavior | Reply-only tests miss blocked requests or unintended approval. |
+| Configured-deny regression | Shipped adapters: preserved restrictions | Testing ask replies alone cannot establish that denies remain intact. |
+| Readiness and unexpected-exit regression | Shipped adapters: lifecycle failures | Success-only tests cannot establish a failed server stops the worker. |
+| Response-before-idle and stream-close regression | Shipped adapters: accounting and execution failure | An ordered stream misses lost completion events or premature closure. |
+| Success/failure/interruption cleanup regression | Shipped adapters and Run control | Reply-only tests miss surviving servers or subscriptions. |
+| Implementation-cycle fixture and parser mutation | #54 acceptance | Adapter-only checks cannot establish commit/check/review progression or preserved edits. |
+| Redacted compiled-adapter live recording | Shipped adapters: actual native enablement | The prior stubs passed despite a real runtime rejection. |
+| README revision | #54 usability and argument migration | Hook documentation becomes false and unsupported flags otherwise surprise users. |
+| Proposal record | Explicit proposal/revision request | Tasks alone omit motivation and breaking compatibility. |
+| Delta spec record | Repository contract rule | Code-only edits leave the old passthrough and reply contract unchanged. |
+| Design record | Explicit revision request | The API introduces lifecycle/permission decisions that tasks cannot leave implicit. |
+| Task checklist record | Explicit OpenSpec workflow | Prose alone cannot track the remaining native apply work. |
+| Existing `.openspec.yaml` | Explicit OpenSpec workflow | Dropping it loses the change's native schema identity. |
+| Task 1.1: owned API harness | Shipped adapters: native enablement/configuration | Native consumption alone still leaves no supported format submission. |
+| Task 1.2: reply/events/permissions/docs | Shipped adapters: native reply/accounting/restrictions | A server-only task cannot deliver replies or complete headless work. |
+| Task 1.3: live compiled adapter | Shipped adapters: actual enforcement | A fake server cannot expose installed-harness incompatibility. |
+| Task 2.1: loop regressions | #54 acceptance | Protocol tests cannot establish preserved edits and normal progression. |
+| Task 2.2: integrated checks/cut pass | Repository check and cut-pass rules | Isolated protocol checks miss integration and artifact drift. |
 
-Removed after review:
+Removed in this revision: bundled format hook; root-schema closure; plugin options/config overlay; JSONC dependency and configuration reconstruction; pure-mode refusal; completed-tool-input selector/status/metadata gates; CLI JSON-event translation; arbitrary run-argument passthrough; SDK server helper/dependency; common-harness environment changes. The live hook failure and direct prompt response make these unnecessary or incorrect.
 
-- Optional `runHarness()` environment parameter: the adapter process already scopes its own environment.
-- Native-error parsing branch: the CLI does not expose its internal no-output error; missing completion is sufficient.
-- Adapter session-error branch: the CLI exit status and existing `runHarness()` failure path already handle it.
-- Root-session filter on tool events: the CLI already filters them.
-- Native `valid: true` metadata check: completed `StructuredOutput` execution already supplies it.
-- Text fallback clause: every shipped adapter now uses native enforcement.
-- Separate OpenCode session-error scenario: the existing harness-exit failure scenario already covers it; keep the realistic fixture in the adapter tests.
-
-Previously cut: prose extraction, a separate server runner, repair retries/retry overrides, another controller validator, presentation sidecars, persistent plugin installation, version probes and compaction workarounds. These conflict with #54's boundary or add mechanisms unnecessary to the chosen route.
+Still cut: text extraction/fallback, repair turns/retry overrides, internal runtime-class tricks, persistent plugin/config edits, a generic server abstraction, lifecycle configuration knobs, version probes, usage lookups or price calculation, cumulative usage summaries, and compaction workarounds. They duplicate existing boundaries or serve no delivery clause.
