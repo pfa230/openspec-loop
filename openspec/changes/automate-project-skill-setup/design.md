@@ -42,7 +42,7 @@ Create missing directories and perform the replacements after that check. Report
 
 Extend CLI coverage for setup syntax and add filesystem tests using disposable Git/OpenSpec checkouts. Verify the actual installed contents, refresh of stale copies, addition of a missing skill, removal of obsolete bundled files, preservation of unrelated content and unchanged configuration/Git state. Check subdirectory and linked-worktree targeting and the absence of a loop-configuration requirement.
 
-Use file/symlink collisions to prove that preflight leaves all destinations untouched. Use a relocated package fixture with a missing skill source to prove exit 1 and path reporting without adding a fault-injection option or relying on platform-specific permissions. Run the compiled command from a relocated package layout with distinct bundled contents to establish that source discovery ignores the invoking repository and npm prefix.
+Use file/symlink collisions to prove that preflight leaves all destinations untouched. Use a relocated package fixture that omits the package's entire `skills/` directory. Assert exit 1 naming that directory before any destination is written. Restore the packaged `skills/` directory, rerun `loop setup`, and assert exit 0 with every bundled skill's exact contents installed in both tool directories. The same fixture establishes failure reporting and recovery without a fault-injection option or platform-specific permissions. Run the compiled command from a relocated package layout with distinct bundled contents to establish that source discovery ignores the invoking repository and npm prefix.
 
 ## Risks / Trade-offs
 
@@ -76,6 +76,6 @@ Each retained item maps to the amended contract:
 - Refusal and I/O exit statuses with the failing path: Setup boundaries and failures; one success status or silent catch hides incomplete installation.
 - Task 1.1, CLI/install tests and setup documentation: Project skill setup; tests of parsing alone do not establish installed contents or correct checkout selection.
 - Task 1.2, refresh/preservation tests and upgrade documentation: Bundled skill refresh; first-install tests do not expose stale files, missing skills or overwritten unrelated content.
-- Task 1.3, refusal/failure tests and recovery documentation: Setup boundaries and failures; happy-path tests cannot establish untouched symlink targets or reported failures.
+- Task 1.3, refusal/failure/recovery tests and recovery documentation: Setup boundaries and failures; happy-path tests cannot establish untouched symlink targets or reported failures, and checking only the failed invocation does not establish successful rerun after repair. One fixture covers source failure and recovery without another task or runtime option.
 - Task 2.1, relocated-package test: Project skill setup; running only beside repository sources does not expose a lookup that relies on the current directory or npm prefix.
 - Task 2.2, full `npm test` and OpenSpec validation: repository check requirement and contract consistency; setup-only tests omit regressions in existing CLI dispatch, and file existence does not establish valid deltas.
