@@ -8,6 +8,8 @@ See `proposal.md` and issue #54 for the failure. The shipped OpenCode adapter re
 
 A separate disposable API proof submitted that serialized format to `POST /session/{sessionID}/message` with `openrouter/xiaomi/mimo-v2.6-flash`. OpenCode returned `info.structured: {"planProblem":null}`, a completed `StructuredOutput` part and reported tokens/cost. This establishes the API enablement path, not the compiled adapter's delivery behavior. The no-work proof did not emit its requested assistant cut report, and aborting its event subscription immediately on the HTTP response did not drain all completion events; apply must verify presentation and stream completion with the actual adapter.
 
+[Verified during apply] The compiled adapter's OpenCode 1.18.34/MiMo smoke printed the requested cut report through bash stdout, then returned the native `{ "planProblem": null }` object separately. Both model-step reports reached the usage file, the adapter exited zero and its owned listener was closed afterward. The small redacted API recording in `test/recordings/opencode-api-native.json` also passes a replay test. The smoke establishes the requested transcript/reply boundary; it does not promise that MiMo emits ordinary assistant prose before a tool call.
+
 Primary references: [versioned prompt API types](https://github.com/anomalyco/opencode/blob/v1.18.34/packages/sdk/js/src/v2/gen/types.gen.ts), [runtime format definition](https://github.com/anomalyco/opencode/blob/v1.18.34/packages/schema/src/v1/session.ts), [prompt engine](https://github.com/anomalyco/opencode/blob/v1.18.34/packages/opencode/src/session/prompt.ts), [headless CLI permission behavior](https://github.com/anomalyco/opencode/blob/v1.18.34/packages/opencode/src/cli/cmd/run.ts), [server command](https://github.com/anomalyco/opencode/blob/v1.18.34/packages/opencode/src/cli/cmd/serve.ts), [server lifecycle](https://github.com/anomalyco/opencode/blob/v1.18.34/packages/opencode/src/server/server.ts), [SDK server helper](https://github.com/anomalyco/opencode/blob/v1.18.34/packages/sdk/js/src/server.ts), [server authentication](https://github.com/anomalyco/opencode/blob/v1.18.34/packages/opencode/src/server/auth.ts).
 
 ## Goals / Non-Goals
@@ -68,7 +70,7 @@ Replace the unfinished hook implementation during apply, including removing `ope
 
 ## Cut Pass
 
-Every retained item serves amended **Shipped adapters**, existing **Worker interface**, **Run control**, or the explicit #54 revision request. This list describes the revised plan; the unfinished implementation has not yet been reconciled.
+Every retained item serves amended **Shipped adapters**, existing **Worker interface**, **Run control**, or the explicit #54 revision request. This list was reconciled against the implemented adapter and its fixtures during apply. There are no new persistent loop state fields or configuration options.
 
 | Item kept | Clause/request served | Simpler version and concrete failure |
 |---|---|---|
@@ -79,6 +81,13 @@ Every retained item serves amended **Shipped adapters**, existing **Worker inter
 | Listening URL and readiness/error check | Shipped adapters: startup failure | Sending before readiness fails; silence otherwise leaves startup unbounded. |
 | Five-second readiness bound | Shipped adapters: startup failure | Waiting only for exit hangs on a live child that never becomes ready; use the SDK's existing default, no knob. |
 | Cleanup and bounded child termination | Shipped adapters: no surviving harness | Stopping only the HTTP request leaves the owned server running. |
+| Child close promise | Shipped adapters: owned lifecycle | Observing only exit can finish before child streams close and the process is reaped. |
+| Cleanup phase flag | Shipped adapters: expected shutdown is not failure | Treating the adapter's own termination signal as an unexpected exit rejects successful turns. |
+| Failure message/status record | Shipped adapters: preserve exit status and usage | Exiting inside an event callback skips cleanup and reported usage. |
+| Shared abort controller | Shipped adapters: failure/interruption cleanup | Killing only the server leaves the HTTP response and subscription waiting. |
+| Abort-to-readiness promise | Shipped adapters: startup failure | Waiting only for the ready line delays a known spawn failure until the readiness timeout. |
+| SIGINT/SIGTERM handlers | Shipped adapters and Run control: interrupted cleanup | Default adapter-only termination can leave its child running when invoked outside the loop's process-group stop. |
+| Three-second forced cleanup timer | Shipped adapters: bounded child termination | A child ignoring SIGTERM otherwise blocks cleanup indefinitely. |
 | Inherited environment without overlay | Shipped adapters: preserve configuration | Use this simpler version; rebuilding JSONC discards accepted syntax or settings. |
 | Directory on API requests | Shipped adapters: worktree execution | Server startup alone does not select the request's project instance. |
 | Existing-auth Basic header | Shipped adapters: preserve settings | A password-configured server otherwise rejects the owned client. |
@@ -91,6 +100,9 @@ Every retained item serves amended **Shipped adapters**, existing **Worker inter
 | Root session error check | Shipped adapters: execution failures | Judging only transport status loses a streamed root-session failure. |
 | Missing-native-result check | Shipped adapters: native result only | Successful transport can still return no usable object. |
 | Stream subscription before prompt | Shipped adapters: transcript/accounting | Subscribing afterward loses earlier worker steps and permission requests. |
+| Prompt and stream completion promises | Shipped adapters: native reply/accounting boundary | Waiting for either alone can lose the native response or queued step reports. |
+| Streaming UTF-8 decoder | Shipped adapters: transcript preservation | Decoding each network chunk independently corrupts characters split between chunks. |
+| Incomplete SSE block buffer | Shipped adapters: event accounting | Parsing individual network chunks drops events split between chunks. |
 | Root idle completion check | Shipped adapters: accounting boundary | Cancelling on HTTP completion alone loses queued completion events, as the proof showed. |
 | Premature stream closure check | Shipped adapters: execution failures | A closed stream otherwise drops permissions or accounting while a model continues. |
 | Native JSON-line transcript and final response | Worker interface: kept output; #54 evidence | Reply-only output hides the work and presentation needed to diagnose failure. |
@@ -120,7 +132,7 @@ Every retained item serves amended **Shipped adapters**, existing **Worker inter
 | Response-before-idle and stream-close regression | Shipped adapters: accounting and execution failure | An ordered stream misses lost completion events or premature closure. |
 | Success/failure/interruption cleanup regression | Shipped adapters and Run control | Reply-only tests miss surviving servers or subscriptions. |
 | Implementation-cycle fixture and parser mutation | #54 acceptance | Adapter-only checks cannot establish commit/check/review progression or preserved edits. |
-| Redacted compiled-adapter live recording | Shipped adapters: actual native enablement | The prior stubs passed despite a real runtime rejection. |
+| Redacted compiled-adapter live recording | Shipped adapters: actual native enablement | The prior stubs passed despite a real runtime rejection; retain only presentation/native tool parts and step accounting, replacing real IDs and omitting paths and unrelated plugin events. |
 | README revision | #54 usability and argument migration | Hook documentation becomes false and unsupported flags otherwise surprise users. |
 | Proposal record | Explicit proposal/revision request | Tasks alone omit motivation and breaking compatibility. |
 | Delta spec record | Repository contract rule | Code-only edits leave the old passthrough and reply contract unchanged. |
@@ -133,6 +145,35 @@ Every retained item serves amended **Shipped adapters**, existing **Worker inter
 | Task 2.1: loop regressions | #54 acceptance | Protocol tests cannot establish preserved edits and normal progression. |
 | Task 2.2: integrated checks/cut pass | Repository check and cut-pass rules | Isolated protocol checks miss integration and artifact drift. |
 
-Removed in this revision: bundled format hook; root-schema closure; plugin options/config overlay; JSONC dependency and configuration reconstruction; pure-mode refusal; completed-tool-input selector/status/metadata gates; CLI JSON-event translation; arbitrary run-argument passthrough; SDK server helper/dependency; common-harness environment changes. The live hook failure and direct prompt response make these unnecessary or incorrect.
+Removed from the route during revision/apply:
 
-Still cut: text extraction/fallback, repair turns/retry overrides, internal runtime-class tricks, persistent plugin/config edits, a generic server abstraction, lifecycle configuration knobs, version probes, usage lookups or price calculation, cumulative usage summaries, and compaction workarounds. They duplicate existing boundaries or serve no delivery clause.
+- Bundled format hook: the installed harness rejects its runtime format object.
+- Root-schema closure: the API supplies the schema on the root prompt alone.
+- Plugin schema options: the root prompt already carries the supplied schema.
+- Configuration overlay: unchanged environment inheritance preserves the existing settings.
+- JSONC dependency/reconstruction: no overlay needs parsing; OpenCode parses its own configuration.
+- Pure-mode refusal: native API output does not depend on plugins.
+- Completed-tool-input selector: the prompt response already supplies the native result.
+- Extra completed-status/metadata gates: the response's structured field comes from native tool success.
+- CLI JSON-event translation: native events and the response can remain in the transcript directly.
+- Arbitrary run-argument passthrough: run flags cannot be forwarded to a serve/API invocation; supported mappings and named refusals replace it explicitly.
+- SDK server helper/dependency: it overwrites inherited inline configuration; built-in spawn/fetch need no new package.
+- Common-harness environment changes: other adapters keep their existing harness path.
+- Unused prompt-response `parts` type field: reply selection never reads it.
+- Mutable startup-timer declaration: one constant implements the same readiness bound.
+- Fake-server password/username state fields: the controlled authorization-header check already verifies authentication without recording those credentials again.
+- Step-start entries in the live replay recording: presentation/native tool parts and step-finish reports establish this recording's acceptance need.
+
+Still cut:
+
+- Text extraction/fallback: violates the native-only reply boundary.
+- Repair turns/retry overrides: violate the one-prompt boundary or alter native retry behavior without a need.
+- Internal runtime-class tricks: the supported API already decodes the format.
+- Persistent plugin/config edits: the worker inherits its configuration directly.
+- Generic server abstraction: only this adapter needs the fixed native API path.
+- Lifecycle configuration knobs: the fixed readiness/termination bounds serve the owned process.
+- Version probes: the compiled installed-harness smoke establishes compatibility without another runtime command.
+- Usage lookups: streamed step records already provide the invocation's usage.
+- Price calculation: the harness reports cost directly.
+- Cumulative usage summaries: they duplicate the per-step accounting boundary.
+- Compaction workarounds: no required native result may be replaced by text when compaction loses the format.

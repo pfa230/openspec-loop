@@ -9,6 +9,99 @@ const root = new URL("../../", import.meta.url);
 const pkg = JSON.parse(readFileSync(new URL("package.json", root), "utf8"));
 export const BIN = fileURLToPath(new URL(pkg.bin.loop, root));
 
+// A small OpenCode HTTP/SSE fixture; responses and event updates remain separate.
+export const OPENCODE_STUB = `#!/usr/bin/env node
+const fs = require("node:fs");
+const http = require("node:http");
+const path = require("node:path");
+const args = process.argv.slice(2);
+fs.appendFileSync(process.env.STUB_LOG, JSON.stringify(args) + "\\n");
+const state = { pid: process.pid, config: process.env.OPENCODE_CONFIG_CONTENT, pure: process.env.OPENCODE_PURE, streamClosed: false, terminated: false };
+function save() { if (process.env.STUB_STATE_LOG) fs.writeFileSync(process.env.STUB_STATE_LOG, JSON.stringify(state)); }
+save();
+if (process.env.STUB_MODE === "early-exit") process.exit(Number(process.env.STUB_EXIT || 5));
+let events;
+const send = event => { if (events && !events.writableEnded) events.write("data: " + JSON.stringify(event) + "\\n\\n"); };
+function stream(file) {
+  if (file) for (const line of fs.readFileSync(file, "utf8").split("\\n").filter(Boolean)) send(JSON.parse(line));
+}
+const server = http.createServer(async (req, res) => {
+  let text = "";
+  for await (const chunk of req) text += chunk;
+  const body = text ? JSON.parse(text) : undefined;
+  const url = new URL(req.url, "http://fixture");
+  if (process.env.STUB_API_LOG) fs.appendFileSync(process.env.STUB_API_LOG, JSON.stringify({ method: req.method, path: url.pathname, directory: url.searchParams.get("directory"), headers: req.headers, body }) + "\\n");
+  if (req.method === "GET" && req.url.split("?")[0] === "/event") {
+    events = res;
+    res.writeHead(200, { "content-type": "text/event-stream" });
+    res.flushHeaders();
+    send({ type: "server.connected", properties: {} });
+    res.on("close", () => { state.streamClosed = true; save(); });
+    return;
+  }
+  res.setHeader("content-type", "application/json");
+  if (req.method === "POST" && req.url.split("?")[0] === "/session") return res.end(JSON.stringify({ id: "root" }));
+  if (req.url.includes("/permission/")) return res.end("true");
+  if (req.method === "POST" && req.url.includes("/message")) {
+    for (const [file, content] of Object.entries(JSON.parse(process.env.STUB_EDITS || "{}"))) {
+      const target = path.join(process.cwd(), file);
+      fs.mkdirSync(path.dirname(target), { recursive: true });
+      fs.writeFileSync(target, content);
+    }
+    stream(process.env.STUB_STREAM);
+    if (process.env.STUB_EXIT) return setTimeout(() => process.exit(Number(process.env.STUB_EXIT)), 30);
+    if (process.env.STUB_MODE === "stream-close") { events.end(); return; }
+    if (process.env.STUB_MODE === "hold") return;
+    const finish = () => {
+      stream(process.env.STUB_LATE_STREAM);
+      send({ type: "session.status", properties: { sessionID: "root", status: { type: "idle" } } });
+    };
+    if (process.env.STUB_HTTP_ERROR) {
+      res.statusCode = Number(process.env.STUB_HTTP_ERROR);
+      return setTimeout(() => res.end(JSON.stringify({ error: "scripted API failure" })), 30);
+    }
+    res.end(process.env.STUB_RESPONSE ? fs.readFileSync(process.env.STUB_RESPONSE, "utf8") : JSON.stringify({ info: {}, parts: [] }));
+    setTimeout(finish, 75);
+    return;
+  }
+  res.statusCode = 404;
+  res.end(JSON.stringify({ error: "unexpected fixture request" }));
+});
+server.listen(0, "127.0.0.1", () => {
+  if (process.env.STUB_MODE !== "no-ready") console.log("opencode server listening on http://127.0.0.1:" + server.address().port);
+});
+process.on("SIGTERM", () => {
+  if (process.env.STUB_MODE === "ignore-term") return;
+  state.terminated = true;
+  if (events) events.end();
+  save();
+  server.closeAllConnections();
+  server.close(() => process.exit(0));
+});
+`;
+
+// Installs the HTTP fixture while running the real adapter in a loop test.
+export function installOpencode(repo: Repo, stream: string, edits: Record<string, string>, response?: object): string[] {
+  const bin = join(repo.root, "bin", "opencode");
+  writeFileSync(bin, OPENCODE_STUB);
+  chmodSync(bin, 0o755);
+  const responsePath = join(repo.root, "opencode-response.json");
+  writeFileSync(responsePath, JSON.stringify(response ?? { info: {}, parts: [] }));
+  Object.assign(repo.env, {
+    OPENCODE_CONFIG_CONTENT: undefined,
+    OPENCODE_PURE: undefined,
+    OPENCODE_SERVER_PASSWORD: undefined,
+    OPENCODE_SERVER_USERNAME: undefined,
+    STUB_STREAM: stream,
+    STUB_RESPONSE: responsePath,
+    STUB_LOG: join(repo.root, "opencode-calls.jsonl"),
+    STUB_API_LOG: join(repo.root, "opencode-api.jsonl"),
+    STUB_STATE_LOG: join(repo.root, "opencode-state.json"),
+    STUB_EDITS: JSON.stringify(edits),
+  });
+  return [process.execPath, fileURLToPath(new URL(pkg.bin["loop-opencode"], root))];
+}
+
 export function configYaml(defaultBranch = "main", delivery = "local"): string {
   return `defaultBranch: ${defaultBranch}
 worktrees: .worktrees

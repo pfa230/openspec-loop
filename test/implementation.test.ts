@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { chmodSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { test } from "node:test";
-import { APPLY_GUIDANCE, APPLY_INSTRUCTION, commitWith, finding, makeRepo, patchIdOf, type Repo, runLoop, startLoop, writeFile } from "./helpers.js";
+import { APPLY_GUIDANCE, APPLY_INSTRUCTION, commitWith, finding, installOpencode, makeRepo, patchIdOf, type Repo, runLoop, startLoop, writeFile } from "./helpers.js";
 
 const DESIGN = "openspec/changes/add-thing/design.md";
 const TASKS = "openspec/changes/add-thing/tasks.md";
@@ -386,6 +386,58 @@ for (const agent of ["implementer", "verifier"]) {
     const role = agent === "implementer" ? "implementer" : "implementationReviewer";
     assert.match(result.stdout, new RegExp(`Cause: execution failure of ${role} agent "${agent}" in attempt 1 of 3, (implementer|review): exit status 4\\n`));
     assert.equal(repo.calls(agent).length, 1);
+  });
+}
+
+for (const [label, info, expected] of [
+  ["cut report without native output", {}, "missing"],
+  ["cut report with native output", { structured: { planProblem: null } }, "success"],
+  ["native output with the wrong role shape", { structured: { findings: [] } }, "invalid"],
+  ["erroneous native output", { structured: { planProblem: null }, error: { name: "StructuredOutputError", data: { message: "native output failed", retries: 0 } } }, "error"],
+] as const) {
+  test(`the real OpenCode adapter ${label} preserves edits and obeys commit/check/review progression`, (t) => {
+    const repo = makeRepo(t);
+    const before = repo.git("rev-parse", "main");
+    const stream = join(repo.root, "opencode-stream.jsonl");
+    const cut = readFileSync(new URL("../../test/recordings/opencode-cut-report.jsonl", import.meta.url), "utf8");
+    writeFileSync(stream, cut);
+    const text = JSON.parse(cut.split("\n")[0]!).properties.part;
+    const command = installOpencode(repo, stream, { "done.txt": "done\n", [TASKS]: "## 1. Work\n\n- [x] 1.1 Do the thing\n" }, { info, parts: [text] });
+    configure(repo, `agents:\n  mimo: ${JSON.stringify(command)}\nroles:\n  implementer: mimo\nchecks:\n  - test -f done.txt\n`);
+    const result = runLoop(repo, ["run", "add-thing"]);
+    assert.equal(result.status, expected === "success" ? 0 : 1, result.stdout + result.stderr);
+    assert.equal(readFileSync(join(repo.worktree, "done.txt"), "utf8"), "done\n");
+    assert.equal(readFileSync(repo.env.STUB_LOG!, "utf8").trim().split("\n").length, 1);
+    const requests = readFileSync(repo.env.STUB_API_LOG!, "utf8").trim().split("\n").map(line => JSON.parse(line));
+    assert.equal(requests.filter(request => request.method === "POST" && request.path === "/session/root/message").length, 1);
+    const [log] = transcripts(repo, "-implementation.log");
+    assert.ok(readFileSync(log, "utf8").includes("Cut pass:"));
+    const [prompt] = transcripts(repo, "-implementation.prompt.md");
+    const replyPath = prompt.replace(".prompt.md", ".reply.json");
+    if (expected === "success") {
+      assert.deepEqual(JSON.parse(readFileSync(replyPath, "utf8")), { planProblem: null });
+      const progress = implementation(result.stdout);
+      const committed = progress.findIndex(line => line.includes("implementer committed"));
+      const checked = progress.indexOf("implementation: attempt 1 of 3, check `test -f done.txt` passed");
+      const reviewed = progress.findIndex(line => line.includes("review APPROVE"));
+      assert.ok(committed >= 0 && checked > committed && reviewed > checked, progress.join("\n"));
+      assert.equal(repo.calls("verifier").length, 1);
+      assert.match(repo.gitIn(repo.worktree, "show", "HEAD:done.txt"), /^done$/);
+    } else {
+      assert.match(readFileSync(join(repo.worktree, TASKS), "utf8"), /- \[x\] 1\.1 Do the thing/);
+      assert.equal(repo.git("rev-parse", "loop/add-thing"), before);
+      assert.equal(transcripts(repo, "-check.log").length, 0);
+      assert.equal(repo.calls("verifier").length, 0);
+      assert.equal(state(repo).stages.implementation, "pending");
+      if (expected === "missing" || expected === "error") {
+        assert.equal(existsSync(replyPath), false);
+        assert.match(readFileSync(log, "utf8"), expected === "missing" ? /no successful native structured output/ : /native output failed/);
+        assert.match(result.stdout, /execution failure of implementer agent "mimo".*exit status 1/);
+      } else {
+        assert.equal(existsSync(replyPath), true);
+        assert.match(result.stdout, /the reply does not match the schema/);
+      }
+    }
   });
 }
 
