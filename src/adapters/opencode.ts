@@ -10,11 +10,11 @@ Answer with exactly one JSON object that matches this JSON schema, and nothing e
 
 ${schema}`;
 const stdout = await runHarness("opencode", ["run", "--format", "json", ...args, request], usagePath, (out) => {
-  const tokens: Record<string, number> = {};
+  const tokens: Record<string, number> = Object.create(null);
   let cost: number | undefined;
   for (const event of jsonLines(out) as { type?: string; part?: { tokens?: unknown; cost?: unknown } }[]) {
     if (event.type !== "step_finish") continue;
-    for (const [name, count] of Object.entries(counters(event.part?.tokens, ["input", "cache.read", "cache.write", "output", "reasoning"]))) {
+    for (const [name, count] of Object.entries(counters(event.part?.tokens))) {
       tokens[name] = (tokens[name] ?? 0) + count;
     }
     if (typeof event.part?.cost === "number") cost = (cost ?? 0) + event.part.cost;
