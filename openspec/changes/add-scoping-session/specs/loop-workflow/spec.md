@@ -12,14 +12,14 @@ The loop SHALL provide `loop scope start <session>` and `loop scope finish <sess
 
 #### Scenario: Session already exists
 - **WHEN** start encounters an existing session branch or worktree
-- **THEN** it refuses without resetting or replacing it and identifies the branch or path collision, reporting a registered checkout when one exists or saying that the branch has no registered checkout
+- **THEN** it refuses without resetting or replacing it and identifies the branch or path collision, reporting its registered checkout or lack of one when the branch exists
 
 #### Scenario: Configuration and syntax refusals
 - **WHEN** a scope command has missing or extra arguments, Git rejects its generated branch name, or its required loop configuration is invalid or missing
 - **THEN** it exits 2 with the offending syntax or configuration identified and creates no session work
 
 #### Scenario: Finish has no registered session checkout
-- **WHEN** finish cannot find a registered worktree holding the named session branch
+- **WHEN** finish cannot find an existing registered worktree holding the named session branch, including when Git retains an entry for a deleted checkout
 - **THEN** it refuses with exit 2, identifies the missing checkout and tells the user to inspect Git's worktree list and complete or abort any manual rebase before retrying, without changing files or Git operations
 
 #### Scenario: Finish needs an upstream

@@ -106,16 +106,20 @@ test("scope collisions retain work and distinguish branches with and without che
   writeFile(worktree, "draft.md", "keep\n");
   const existing = runLoop(repo, ["scope", "start", "triage"]);
   assert.equal(existing.status, 2);
+  assert.match(existing.stderr, /session branch scope\/triage already exists/);
   assert.ok(existing.stderr.includes(worktree));
   assert.equal(readFileSync(join(worktree, "draft.md"), "utf8"), "keep\n");
   repo.git("branch", "scope/orphan", "main");
   const orphan = runLoop(repo, ["scope", "start", "orphan"]);
   assert.equal(orphan.status, 2);
+  assert.match(orphan.stderr, /session branch scope\/orphan already exists/);
   assert.match(orphan.stderr, /no registered checkout|without a registered checkout/);
   writeFile(repo.top, ".worktrees/scope-blocked/keep.txt", "keep\n");
   const blocked = runLoop(repo, ["scope", "start", "blocked"]);
   assert.equal(blocked.status, 2);
-  assert.ok(blocked.stderr.includes("scope-blocked"));
+  assert.ok(blocked.stderr.includes(`session worktree ${join(repo.top, ".worktrees/scope-blocked")} already exists`));
+  assert.doesNotMatch(blocked.stderr, /session branch|registered checkout/);
+  assert.equal(repo.git("branch", "--list", "scope/blocked"), "");
   assert.equal(readFileSync(join(repo.top, ".worktrees/scope-blocked/keep.txt"), "utf8"), "keep\n");
 });
 
@@ -151,6 +155,23 @@ test("scope finish refuses missing and manually rebasing checkouts without touch
   repo.gitIn(worktree, "rebase", "--abort");
   repo.git("worktree", "remove", worktree);
   assert.equal(finish(repo).status, 2);
+});
+
+test("scope finish refuses a deleted but still-registered checkout without pruning its branch or metadata", (t) => {
+  const repo = makeRepo(t);
+  const worktree = session(repo);
+  const tip = proposal(repo, worktree);
+  const main = repo.git("rev-parse", "main");
+  rmSync(worktree, { recursive: true, force: true });
+  const registered = repo.git("worktree", "list", "--porcelain");
+  assert.ok(registered.includes(`worktree ${worktree}\n`));
+  const result = finish(repo);
+  assert.equal(result.status, 2, result.stdout + result.stderr);
+  assert.match(result.stderr, /has no registered checkout.*git worktree list/);
+  assert.equal(repo.git("worktree", "list", "--porcelain"), registered);
+  assert.equal(repo.git("rev-parse", "scope/triage"), tip);
+  assert.equal(repo.git("rev-parse", "main"), main);
+  assert.deepEqual(repo.ghCalls(), []);
 });
 
 for (const draft of ["openspec/changes/next-thing/proposal.md", "openspec/changes/unfinished/proposal.md"]) {
@@ -286,6 +307,25 @@ test("published PR rebase rejects before lookup, then succeeds after merging pub
   noRun(repo, worktree);
 });
 
+test("a first PR push rejected by server policy gives general recovery and qualifies the history-reconciliation recipe", (t) => {
+  const repo = makeRepo(t, { delivery: "pr" });
+  const origin = repo.addOrigin();
+  const worktree = session(repo);
+  const tip = proposal(repo, worktree);
+  const main = repo.git("rev-parse", "main");
+  writeFile(origin, "hooks/pre-receive", "#!/bin/sh\necho 'server policy rejected publication' >&2\nexit 1\n");
+  chmodSync(join(origin, "hooks/pre-receive"), 0o755);
+  const result = finish(repo);
+  assert.equal(result.status, 1, result.stdout + result.stderr);
+  assert.match(result.stderr, /server policy rejected publication/);
+  assert.match(result.stderr, /Recovery: address what Git reports/);
+  assert.match(result.stderr, /If Git rejected the push as non-fast-forward,.*fetch.*merge the published session history/);
+  assert.equal(remote(repo, "scope/triage"), "");
+  assert.equal(repo.gitIn(worktree, "rev-parse", "HEAD"), tip);
+  assert.equal(repo.git("rev-parse", "main"), main);
+  assert.deepEqual(repo.ghCalls(), []);
+});
+
 test("merge scope synchronizes upstream first and lands unarchived proposals", (t) => {
   const repo = makeRepo(t, { delivery: "merge" });
   const origin = repo.addOrigin();
@@ -316,18 +356,30 @@ test("scope rejects a dirty default holder before publishing", (t) => {
   assert.equal(repo.git("rev-parse", "main"), main);
 });
 
-test("merge scope refuses a local default ahead of upstream", (t) => {
-  const repo = makeRepo(t, { delivery: "merge" });
-  repo.addOrigin();
-  const worktree = session(repo);
-  proposal(repo, worktree);
-  repo.git("commit", "--quiet", "--allow-empty", "-m", "unpushed base");
-  const main = repo.git("rev-parse", "main");
-  const result = finish(repo);
-  assert.equal(result.status, 1, result.stdout + result.stderr);
-  assert.match(result.stdout + result.stderr, /ahead/);
-  assert.equal(repo.git("rev-parse", "main"), main);
-});
+for (const state of ["ahead", "diverged"]) {
+  test(`merge scope names the default/upstream recovery when they are ${state}, then succeeds after reconciliation`, (t) => {
+    const repo = makeRepo(t, { delivery: "merge" });
+    const origin = repo.addOrigin();
+    const worktree = session(repo);
+    proposal(repo, worktree);
+    repo.git("commit", "--quiet", "--allow-empty", "-m", "unpushed base");
+    if (state === "diverged") moveRemote(repo, origin);
+    const main = repo.git("rev-parse", "main");
+    const published = remote(repo, "main");
+    const result = finish(repo);
+    assert.equal(result.status, 1, result.stdout + result.stderr);
+    assert.match(result.stderr, new RegExp(state));
+    assert.match(result.stderr, /Recovery: reconcile main with origin\/main:/);
+    assert.doesNotMatch(result.stderr, /Recovery: reconcile scope\/triage with main/);
+    assert.match(result.stderr, state === "ahead" ? /push or remove those commits/ : /reconcile them/);
+    assert.equal(repo.git("rev-parse", "main"), main);
+    assert.equal(remote(repo, "main"), published);
+    if (state === "diverged") repo.git("merge", "--quiet", "--no-edit", "origin/main");
+    repo.git("push", "--quiet", "origin", "main");
+    const retried = finish(repo);
+    assert.equal(retried.status, 0, retried.stdout + retried.stderr);
+  });
+}
 
 test("merge scope retries a published tip after an obstructing ignored file stops the local update", (t) => {
   const repo = makeRepo(t, { delivery: "merge" });

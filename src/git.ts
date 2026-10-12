@@ -100,6 +100,13 @@ export function dirtyDefaultCheckout(cwd: string, branch: string): string | unde
   return checkoutsHolding(cwd, branch).find((checkout) => git(checkout, "status", "--porcelain", "--untracked-files=no") !== "");
 }
 
+// Both callers need the upstream reconciliation action, independently of their own retry command.
+export class DefaultSynchronizationError extends Error {
+  constructor(message: string, readonly recovery: string) {
+    super(message);
+  }
+}
+
 // The two tips checked for a possible upstream fast-forward. Keep local as the update's expected old value.
 export function defaultSynchronization(cwd: string, branch: string, upstream: Upstream): { local: string; published: string } | undefined {
   const local = git(cwd, "rev-parse", branch);
@@ -108,10 +115,10 @@ export function defaultSynchronization(cwd: string, branch: string, upstream: Up
   const remote = upstream.ref.replace(/^refs\/remotes\//, "");
   if (gitSucceeds(cwd, "merge-base", "--is-ancestor", published, local)) {
     const ahead = git(cwd, "rev-list", "--count", `${published}..${local}`);
-    throw new Error(`${branch} is ${ahead} commit${ahead === "1" ? "" : "s"} ahead of ${remote}`);
+    throw new DefaultSynchronizationError(`${branch} is ${ahead} commit${ahead === "1" ? "" : "s"} ahead of ${remote}`, "push or remove those commits");
   }
   if (!gitSucceeds(cwd, "merge-base", "--is-ancestor", local, published)) {
-    throw new Error(`${branch} and ${remote} have diverged`);
+    throw new DefaultSynchronizationError(`${branch} and ${remote} have diverged`, "reconcile them");
   }
   return { local, published };
 }

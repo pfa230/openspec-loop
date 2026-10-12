@@ -1,7 +1,7 @@
 import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { type Agent, type Config, type Role, ROLES } from "./config.js";
-import { type Base, checkoutsHolding, conflicted, defaultSynchronization, dirtyDefaultCheckout, fastForwardDefault, git, gitMessage, gitSucceeds, merging, patchId } from "./git.js";
+import { type Base, checkoutsHolding, conflicted, defaultSynchronization, DefaultSynchronizationError, dirtyDefaultCheckout, fastForwardDefault, git, gitMessage, gitSucceeds, merging, patchId } from "./git.js";
 import { applyInstructions } from "./openspec.js";
 import { changeDir, outsideChange, planDigest, planFiles } from "./plan.js";
 import {
@@ -292,9 +292,8 @@ function syncDefaultBranch(run: Run): Halt | undefined {
   try {
     tips = defaultSynchronization(worktree, branch, upstream);
   } catch (error) {
-    const cause = (error as Error).message;
-    const action = cause.includes("have diverged") ? "reconcile them" : "push or remove those commits";
-    return { cause, recovery: `${action}, then run \`loop resume ${run.state.change}\`` };
+    const action = error instanceof DefaultSynchronizationError ? error.recovery : "clear what Git names";
+    return { cause: gitMessage(error), recovery: `${action}, then run \`loop resume ${run.state.change}\`` };
   }
   if (tips === undefined) return undefined;
   return dirtyHolder(run) ?? fastForward(run, "integration", tips.published, tips.local);

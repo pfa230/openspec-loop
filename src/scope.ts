@@ -4,7 +4,7 @@ import { join, resolve } from "node:path";
 import { readConfig } from "./config.js";
 import { progress } from "./controller.js";
 import {
-  checkoutsHolding, defaultSynchronization, deliveryBase, dirtyDefaultCheckout, fastForwardDefault,
+  checkoutsHolding, defaultSynchronization, DefaultSynchronizationError, deliveryBase, dirtyDefaultCheckout, fastForwardDefault,
   git, gitMessage, gitSucceeds, topLevel,
 } from "./git.js";
 import { Refusal } from "./refusal.js";
@@ -16,10 +16,11 @@ export async function startScope(session: string): Promise<number> {
   const branch = sessionBranch(top, session);
   const worktree = join(resolve(top, config.worktrees), `scope-${session}`);
   const [existing] = checkoutsHolding(top, branch);
-  if (gitSucceeds(top, "show-ref", "--verify", "--quiet", `refs/heads/${branch}`) || existsSync(worktree)) {
+  if (gitSucceeds(top, "show-ref", "--verify", "--quiet", `refs/heads/${branch}`)) {
     const checkout = existing === undefined ? "the branch has no registered checkout" : `registered checkout ${existing}`;
-    throw new Refusal(`session branch ${branch} or worktree ${worktree} already exists; ${checkout}; inspect it rather than replacing it`);
+    throw new Refusal(`session branch ${branch} already exists; ${checkout}; inspect it rather than replacing it`);
   }
+  if (existsSync(worktree)) throw new Refusal(`session worktree ${worktree} already exists; inspect it rather than replacing it`);
   let head: string;
   try {
     head = git(top, "rev-parse", "--verify", `refs/heads/${config.defaultBranch}`);
@@ -76,7 +77,7 @@ export async function finishScope(session: string): Promise<number> {
       try {
         git(worktree, "push", "--quiet", upstream.remote, `${branch}:refs/heads/${branch}`);
       } catch (error) {
-        process.stderr.write(`loop: ${gitMessage(error)}\nRecovery: in ${worktree}, fetch the session branch ${branch} and current base ${upstream.branch} from ${upstream.remote}; merge the published session history into ${branch}, then merge the current base if it is not already an ancestor; resolve and commit any conflicts before retrying ${retry}\n`);
+        process.stderr.write(`loop: ${gitMessage(error)}\nRecovery: address what Git reports in ${worktree}, then retry ${retry}. If Git rejected the push as non-fast-forward, fetch the session branch ${branch} and current base ${upstream.branch} from ${upstream.remote}; merge the published session history into ${branch}, then merge the current base if it is not already an ancestor; resolve and commit any conflicts before retrying\n`);
         return 1;
       }
       progress(`scope: pushed ${branch} to ${upstream.remote} at ${head.slice(0, 7)}`);
@@ -107,7 +108,10 @@ export async function finishScope(session: string): Promise<number> {
     return 0;
   } catch (error) {
     if (error instanceof Refusal) throw error;
-    process.stderr.write(`loop: ${gitMessage(error)}\nRecovery: reconcile ${branch} with ${base.ref} and clear what Git names in worktree ${worktree} or the default checkout, then retry ${retry}; the session branch and worktree are retained\n`);
+    const recovery = error instanceof DefaultSynchronizationError
+      ? `reconcile ${config.defaultBranch} with ${base.upstream!.ref.replace(/^refs\/remotes\//, "")}: ${error.recovery}`
+      : `reconcile ${branch} with ${base.ref} and clear what Git names in worktree ${worktree} or the default checkout`;
+    process.stderr.write(`loop: ${gitMessage(error)}\nRecovery: ${recovery}, then retry ${retry}; the session branch and worktree are retained\n`);
     return 1;
   }
 }
