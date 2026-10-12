@@ -94,3 +94,8 @@ The loop SHALL ship worker commands for Claude Code, Codex, Antigravity and Open
 - **WHEN** a usage object contains nested numeric consumption counters, an array of numeric consumption breakdowns, and metadata such as a service-tier string
 - **THEN** the adapter preserves each numeric leaf under its dotted object path or array-index path in the counter map
 - **AND** it leaves nonnumeric metadata in the transcript and does not turn it into a counter
+
+#### Scenario: Invalid collected quantity
+- **WHEN** collecting the numeric leaves of a backend's selected usage or token object produces a usage file containing a negative or nonfinite quantity
+- **THEN** the existing malformed-usage validation rejects that file and the worker step is an execution failure
+- **AND** the adapter does not silently remove an invalid numeric field to make the file pass validation

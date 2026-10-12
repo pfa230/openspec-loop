@@ -47,14 +47,19 @@ export async function runHarness(command: string, args: string[], usagePath: str
   return stdout;
 }
 
-// The named counters of a harness's usage object that it reports as numbers, in the order named.
-// A dotted name reads a nested field.
-export function counters(source: unknown, names: string[]): Record<string, number> {
-  const found: Record<string, number> = {};
-  for (const name of names) {
-    const value = name.split(".").reduce<unknown>((node, key) => (node as Record<string, unknown> | null | undefined)?.[key], source);
-    if (typeof value === "number") found[name] = value;
-  }
+// Every numeric leaf of a harness's usage object, with dotted object keys and array indexes.
+// Leave numerical validity to the worker's usage-file validation.
+export function counters(source: unknown): Record<string, number> {
+  const found: Record<string, number> = Object.create(null);
+  const visit = (node: unknown, path: string): void => {
+    if (node === null || typeof node !== "object") return;
+    for (const [key, value] of Object.entries(node)) {
+      const name = path ? `${path}.${key}` : key;
+      if (typeof value === "number") found[name] = value;
+      else visit(value, name);
+    }
+  };
+  visit(source, "");
   return found;
 }
 

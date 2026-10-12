@@ -98,16 +98,18 @@ An agent's command is an adapter followed by arguments for its harness. The pack
 | `loop-agy` | Antigravity 1.2.17 | none | `--dangerously-skip-permissions` |
 | `loop-opencode` | OpenCode 1.18.34 | `--agent plan` | none |
 
-Each adapter writes the usage its harness reports to the usage file, even when the harness then fails:
+Each adapter writes every numeric field in its harness's usage or token object to the usage file, even when the harness then fails. These are examples from the recorded output, not fixed lists of supported counters:
 
-| Adapter | Token counters | Cost |
+| Adapter | Example usage counters | Cost in recorded output |
 |---|---|---|
-| `loop-claude` | `input_tokens`, `cache_creation_input_tokens`, `cache_read_input_tokens`, `output_tokens` | Reported |
+| `loop-claude` | `input_tokens`, `cache_creation_input_tokens`, `cache_read_input_tokens`, `output_tokens`, `output_tokens_details.thinking_tokens`, `server_tool_use.web_search_requests` | Reported |
 | `loop-codex` | `input_tokens`, `cached_input_tokens`, `cache_write_input_tokens`, `output_tokens`, `reasoning_output_tokens` | Not reported |
-| `loop-agy` | `input_tokens`, `cache_read_tokens`, `output_tokens`, `thinking_tokens` | Not reported |
-| `loop-opencode` | `input`, `cache.read`, `cache.write`, `output`, `reasoning`, summed over the model steps of the turn | Reported, summed likewise |
+| `loop-agy` | `input_tokens`, `cache_read_tokens`, `output_tokens`, `thinking_tokens`, `total_tokens` | Not reported |
+| `loop-opencode` | `input`, `cache.read`, `cache.write`, `output`, `reasoning`, `total`, summed over the model steps of the turn | Reported, summed likewise |
 
 Counters keep the harness's own names, because the harnesses count differently: Claude Code's `input_tokens` leaves out cache reads, while Codex's `input_tokens` includes its `cached_input_tokens`. A cost is the harness's own figure. Claude Code reports list price even under a subscription, and OpenCode reports `0` for a model it has no price for.
+
+Nested counters use dotted paths, such as `cache_creation.ephemeral_1h_input_tokens`; arrays include the index, such as `iterations.0.input_tokens`. Strings, nulls and other nonnumeric metadata stay in the transcript. Claude Code's `result.usage` supplies the counters for the report; its separate `modelUsage` block, including per-model details and output/context limits, stays in the transcript. Claude Code and Antigravity use their last result summary, Codex its last completed turn, and OpenCode sums its model steps. Usage collection adds no command or API call, and never calculates an unreported cost.
 
 Add the model flag of the harness (`--model`, `-m`) to choose a model. Without restriction arguments, a harness runs with its own defaults; headless Claude Code and Codex cannot edit files by default.
 
@@ -117,7 +119,7 @@ OpenCode has no way to enforce a reply schema, so `loop-opencode` asks for bare 
 
 To use another tool, write your own adapter. The loop runs the agent's command with four paths appended: a prompt file, a JSON schema file, a reply file and a usage file. Take the paths from the last four arguments, since the agent's own arguments come first. The command runs in the run's worktree with no input, and its output becomes the step's transcript. It must exit 0 after writing a JSON object that matches the schema to the reply file; anything else stops the run as an execution failure.
 
-The command may also write what its harness reported spending to the usage file, as a JSON object with two optional keys: `tokens`, which maps each token counter, under the harness's own name, to a non-negative number, and `costUsd`, a non-negative cost in US dollars. Without a usage file, the step's usage shows as unavailable. A usage file that is not such an object stops the run as an execution failure.
+The command may also write what its harness reported spending to the usage file, as a JSON object with two optional keys: `tokens`, which maps each numeric usage counter (including token and request counts), under the harness's own name or nested path, to a finite non-negative number, and `costUsd`, a finite non-negative cost in US dollars. Every counter name is accepted without a fixed list. Without a usage file, the step's usage shows as unavailable. A usage file that is not such an object, including a negative or nonfinite counter, stops the run as an execution failure.
 
 ## Running a change
 
@@ -149,17 +151,17 @@ You can keep using `step` for integration, archive and delivery instead. Each su
 
 Each `step` call receives fresh configured attempt budgets. If implementation returns the plan for revision or integration returns findings to implementation, the same call follows that handoff and returns when the first stage succeeds; the next stage can therefore be an earlier one. Failures and decision questions stop with the usual cause and recovery. After resolving the stop, use `step` or `resume` explicitly to continue.
 
-When a worker step ends, its progress line names the agent and what the harness reported it spent, such as `(gpt; input_tokens=16641, cached_input_tokens=0, output_tokens=59, reasoning_output_tokens=21, cost unavailable)`. The counters and cost are exactly what the harness reported. A value it did not report reads `unavailable`, never zero, and `usage unavailable` means it reported nothing.
+When a worker step ends, its progress line names the agent and every usage counter the harness reported, such as `(gpt; input_tokens=16641, cached_input_tokens=0, cache_write_input_tokens=0, output_tokens=59, reasoning_output_tokens=21, cost unavailable)`. The counters and cost are exactly what the harness reported. A value it did not report reads `unavailable`, never zero; an explicitly reported zero stays zero, and `usage unavailable` means it reported nothing.
 
 The report at the end of `loop run`, `loop resume` and `loop step`, whether the run completed, stopped or returned control between stages, totals the usage by role over every worker step the run has had, across every advancement:
 
 ```
 Usage by role:
-  proposalReviewer: 2 steps; input_tokens=33282, cached_input_tokens=0, output_tokens=118, reasoning_output_tokens=42, cost unavailable
-  implementer: 3 steps, 1 without usage; input_tokens=27, cache_creation_input_tokens=90210, cache_read_input_tokens=401177, output_tokens=5120, cost $1.2034117, 1 step without cost
+  proposalReviewer: 2 steps; input_tokens=33282, cached_input_tokens=0, cache_write_input_tokens=0, output_tokens=118, reasoning_output_tokens=42, cost unavailable
+  implementer: 3 steps, 1 without usage; input_tokens=27, cache_creation_input_tokens=90210, cache_read_input_tokens=401177, output_tokens=5120, output_tokens_details.thinking_tokens=97, server_tool_use.web_search_requests=0, cost $1.2034117, 1 step without cost
 ```
 
-Each counter is summed by name. `without usage` counts the steps with no valid usage: a missing or empty usage file, such as after a turn stopped before its harness reported, or a malformed one, which also stopped the run. When only some of a role's steps reported a cost, the line says how many did not; when none did, the cost is unavailable.
+Each counter is summed independently by name, including dotted and array-index paths. Totals and their breakdowns can overlap; they are never added together into a grand total. `without usage` counts the steps with no valid usage: a missing or empty usage file, such as after a turn stopped before its harness reported, or a malformed one, which also stopped the run. When only some of a role's steps reported a cost, the line says how many did not; when none did, the cost is unavailable.
 
 A run accepts one advancement at a time, shared by `run`, `resume` and `step`. If the process advancing it dies, `loop resume` takes the run over and redoes the step that was in progress. A process killed with SIGKILL, for example by `kill -9` or the OOM killer, can leave its step running; `loop resume` then refuses and names the step's process group. End it with `kill -- -<group>` or wait for it to exit, then resume. If the group it names is not the run's, because its ID was reused after the step ended, check it with `pgrep -l -g <group>` and set `stepGroup` to `null` in the run directory's `state.json`.
 

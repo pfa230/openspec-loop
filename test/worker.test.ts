@@ -28,6 +28,8 @@ const failures: Record<string, [Turn, string]> = {
   "a reply that does not match the schema": [{ reply: { verdict: "APPROVE" } }, "the reply does not match the schema"],
   "a usage file that is not JSON": [{ usage: "{" }, "the usage file is not JSON"],
   "a usage file with an unknown key": [{ usage: { cost: 1 } }, "the usage file does not match the usage format"],
+  "a negative additional usage counter": [{ usage: { tokens: { new_requests: -1 } } }, "the usage file does not match the usage format"],
+  "a nonfinite additional usage counter": [{ usage: '{"tokens":{"new_requests":1e400}}' }, "the usage file does not match the usage format"],
 };
 
 for (const [name, [turn, problem]] of Object.entries(failures)) {

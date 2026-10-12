@@ -70,7 +70,7 @@ export function startWorker(command: string[], cwd: string, base: string, prompt
   return { step: runStep(executable, [...args, files.prompt, files.schema, files.reply, files.usage], cwd, files.transcript), files };
 }
 
-// What a worker reports its harness spent: token counters under the harness's own names, and a cost in US dollars.
+// What a worker reports its harness spent: numeric usage counters under native names/paths, and a cost in US dollars.
 export interface Usage {
   tokens?: Record<string, number>;
   costUsd?: number;

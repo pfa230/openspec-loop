@@ -33,6 +33,8 @@ Alternative: extend each allowlist for today's fixtures. That still drops the ne
 | Antigravity | Last result event's `result.usage` | No USD cost in the recorded output |
 | OpenCode | Each `step_finish.part.tokens`, summed by native path | Sum explicitly reported `step_finish.part.cost` |
 
+Claude's separate `modelUsage` block remains in the transcript. The selected consumption source is `result.usage`; `modelUsage` additionally mixes per-model details with context/output limits, which must not enter role spending totals. This preserves the existing summary boundary without asserting that the single-model recording establishes every multi-model or subagent accounting detail.
+
 Remove every call site's list of counter names. Keep the known native cost mappings and preserve their explicit zero values. Do not assume a field is USD based solely on a name, map credits to dollars or read account cost. If a backend adds a documented USD value to its normal output, its adapter can map that value to `costUsd` without changing the universal counter/reporting policy. This proposal does not claim an unobserved cost field exists for Codex or Antigravity.
 
 Do not sum final cumulative summaries across repeated result events. Continue to sum OpenCode's independent model-step records. Continue writing usage before judging the harness exit, so a failing worker retains its reported usage. `runHarness` remains synchronous in its extraction callback; collection requires no additional wait.
@@ -67,6 +69,7 @@ Each retained item names its authority and the concrete failure of its simpler a
 | Shared collection of every numeric leaf | Shipped adapters; user requests all available usage | Extending fixed lists still drops the next reported counter. |
 | Native dotted object paths | Worker interface; Shipped adapters | Keeping only top-level numbers drops Claude's nested thinking, cache and tool request counts. |
 | Native array-index paths | Shipped adapters | Skipping arrays drops Claude's reported per-iteration consumption; summing the array into top-level fields double-counts its summary. |
+| Null-prototype maps for collection and OpenCode sums | Worker interface; Shipped adapters | Plain object maps mistake native names such as `__proto__` or `constructor` for inherited properties and lose or corrupt counters. |
 | Collection confined to usage/token objects | Shipped adapters | Traversing a whole event turns unrelated indexes, schema numbers and limits into spending. |
 | Existing final-summary selection for Claude | Shipped adapters | Adding cumulative result summaries counts the same consumption repeatedly. |
 | Existing final-summary selection for Codex | Shipped adapters | Adding completed-turn summaries changes the existing accounting boundary and can repeat cumulative consumption. |
@@ -86,6 +89,13 @@ Each retained item names its authority and the concrete failure of its simpler a
 | Task 1.2: stream/accounting/failure cases | Shipped adapters | A single final recording cannot establish repeated-summary accounting or preserved failures. |
 | Task 2.1: existing report/custom-worker coverage and examples | Worker interface; Progress and usage reporting | Adapter tests alone do not establish the end-to-end reports or cumulative totals. |
 | Task 2.2: complete package and spec checks | Repository `npm test` rule; contract is source of truth | Focused fixtures alone miss regressions and invalid contract deltas. |
+| Recorded-output expectations extended in place | Shipped adapters | Keeping the old expected counter subset would allow newly reported fields to be discarded. |
+| Four additional-field/nested/array adapter cases | Shipped adapters | A checked-in recording alone cannot establish support for a previously unknown field or safe native property names. |
+| Three repeated-summary adapter cases | Shipped adapters | Single summary fixtures cannot reveal accidental addition of cumulative usage. |
+| Existing OpenCode sum case extended with additional paths | Shipped adapters | Summing only the old recognized fields loses new counters from earlier model steps. |
+| Existing stub log changed to append and count invocations | Shipped adapters; explicit task 1.2 | An overwritten log cannot show an extra cost-collection invocation; no new test harness is needed. |
+| Two worker malformed-number cases | Worker interface | Existing invalid-JSON/unknown-key tests do not establish rejection of newly collected negative or nonfinite counters. |
+| Existing resume totals case extended in place | Progress and usage reporting | Checking only old names cannot establish dotted/array paths, overlapping totals, explicit zero cost and empty usage together. |
 | `.openspec.yaml` schema record | Explicit OpenSpec proposal workflow | Unregistered planning files omit the native change metadata. |
 | `proposal.md` record | Explicit OpenSpec proposal workflow | A checklist alone omits the replacement scope and reason. |
 | Spec delta record | Contract is source of truth | Adapter-only instructions leave the expanded consumption policy outside the contract. |
@@ -93,3 +103,5 @@ Each retained item names its authority and the concrete failure of its simpler a
 | `tasks.md` record | Explicit OpenSpec proposal workflow | Prose alone lacks the required apply checklist. |
 
 Removed with the superseded proposal: Codex app-server lookup, initialization/experimental opt-in, RPC/request/thread matching, helper deadline and shutdown lifecycle, lookup-specific resume exclusion, asynchronous usage callback, lookup diagnostics, microdollar conversion, `costEstimated` and estimate-specific aggregation/labels, and live lookup tasks. These served native estimate retrieval, which the user replaced with direct reporting. Also cut ccusage, a price table, new metrics/raw/provenance fields, persisted usage state, normalization and a new reporting layer: the existing invocation, counter map, cost field, transcripts and reports already serve the requested behavior.
+
+Implementation cut pass: removed all four counter allowlists and reused the existing controller and worker validation without behavioral changes. Extended existing argument/failure/step-sum/resume tests rather than duplicating that coverage. Kept only the new-field, native-path, cumulative-summary and malformed-number cases that exercise this change. No per-step numerical-validity check was added to OpenCode: its existing aggregate validation remains the boundary.
