@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
-import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 import { test } from "node:test";
@@ -217,7 +217,7 @@ test("OpenCode submits the exact schema to one fresh session and preserves inher
     { permission: "plan_exit", pattern: "*", action: "deny" },
   ]);
   for (const request of outcome.requests) {
-    assert.equal(request.directory, outcome.dir);
+    assert.equal(request.directory, realpathSync(outcome.dir));
     assert.equal(request.headers.authorization, "Basic " + Buffer.from("fixture-user:fixture-secret").toString("base64"));
   }
   assert.doesNotMatch(outcome.stdout + outcome.stderr, /fixture-secret|fixture-user/);

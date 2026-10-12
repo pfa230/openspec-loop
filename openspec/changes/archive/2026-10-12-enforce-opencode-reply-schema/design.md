@@ -121,6 +121,7 @@ Every retained item serves amended **Shipped adapters**, existing **Worker inter
 | Unsupported argument check | Shipped adapters: explicit compatibility failures | Silently discarding run flags changes their intended session or restrictions. |
 | Fake API server and request log | #54 and revised API acceptance | A plugin stub cannot verify HTTP schema decoding or lifecycle. |
 | Controlled test environment | Revised API acceptance | Inherited config/pure/auth settings change fixture outcomes. |
+| Canonical test-directory comparison | Shipped adapters: worktree execution | Comparing a temporary directory's unresolved alias rejects the same directory returned by `process.cwd()`, as macOS CI and a symlinked-temp reproduction showed. |
 | Native reply regression | Shipped adapters: native result | A transport-only test cannot establish object selection. |
 | Cut-report and text-only regression | Shipped adapters and #54 | A happy-path object misses the reported prose boundary. |
 | Native/API/session failure regression | Shipped adapters: error reporting | A success-only test cannot establish failure usage and missing replies. |
