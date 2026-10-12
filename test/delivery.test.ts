@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { existsSync, readFileSync } from "node:fs";
+import { chmodSync, existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 import { makeRepo, type Repo, runLoop, writeFile } from "./helpers.js";
@@ -228,4 +228,18 @@ test("resume after a fast-forward failed behind a completed push finishes the de
   assert.equal(resumed.status, 0, resumed.stdout);
   assert.equal(remoteTip(repo, "main"), tip);
   assert.equal(repo.git("rev-parse", "main"), tip);
+});
+
+test("merge delivery preserves an unchecked-out default ref moved after its ancestry check", (t) => {
+  const repo = makeRepo(t, { branch: "feature", delivery: "merge" });
+  const origin = repo.addOrigin();
+  const main = repo.git("rev-parse", "main");
+  const concurrent = repo.git("commit-tree", `${main}^{tree}`, "-p", main, "-m", "concurrent writer");
+  writeFile(origin, "hooks/pre-receive", `#!/bin/sh\nunset GIT_QUARANTINE_PATH GIT_OBJECT_DIRECTORY GIT_ALTERNATE_OBJECT_DIRECTORIES\ngit --git-dir='${join(repo.top, ".git")}' update-ref refs/heads/main '${concurrent}' '${main}'\n`);
+  chmodSync(join(origin, "hooks/pre-receive"), 0o755);
+  const result = runLoop(repo, ["run", "add-thing"]);
+  assert.equal(result.status, 1, result.stdout + result.stderr);
+  assert.match(result.stdout, /fast-forwarding main.*cannot lock ref/);
+  assert.equal(repo.git("rev-parse", "main"), concurrent);
+  assert.equal(remoteTip(repo, "main"), repo.git("rev-parse", "feature"));
 });

@@ -16,7 +16,7 @@ openspec-loop takes an OpenSpec change you proposed and committed, and runs it u
 npm install -g openspec-loop
 ```
 
-This installs the `loop` command and the four adapters described under Agents and adapters. When npm's global prefix belongs to root, as with a system-wide Node, give npm a prefix you own, such as `npm config set prefix ~/.npm-global` with `~/.npm-global/bin` on PATH, rather than installing with `sudo`. To upgrade, run `npm update -g openspec-loop`, then copy the supervision skill into each project again, as Setting up a project describes.
+This installs the `loop` command and the four adapters described under Agents and adapters. When npm's global prefix belongs to root, as with a system-wide Node, give npm a prefix you own, such as `npm config set prefix ~/.npm-global` with `~/.npm-global/bin` on PATH, rather than installing with `sudo`. To upgrade, run `npm update -g openspec-loop`, then copy the skills into each project again, as Setting up a project describes.
 
 ## Setting up a project
 
@@ -32,10 +32,15 @@ In a repository set up for OpenSpec:
 
    Put your personal overrides in the main checkout's `openspec/loop.local.yaml`. Fresh issue worktrees inherit them automatically; no copy is needed.
 
-3. Copy the supervision skill into the project for Claude Code and Codex, and commit both copies:
+3. Copy the supervision and scoping skills into the project for Claude Code and Codex, and commit the copies:
 
    ```sh
-   for dir in .claude/skills .agents/skills; do mkdir -p "$dir" && cp -R "$(npm root -g)/openspec-loop/skills/openspec-loop" "$dir/"; done
+   for dir in .claude/skills .agents/skills; do
+     mkdir -p "$dir"
+     for skill in openspec-loop openspec-scope; do
+       cp -R "$(npm root -g)/openspec-loop/skills/$skill" "$dir/"
+     done
+   done
    ```
 
    Run the same command and commit again after every upgrade: the skill describes the commands and flags of the installed version, and nothing detects a stale copy.
@@ -65,12 +70,12 @@ checks:
 delivery: pr
 ```
 
-- `worktrees` is the directory where a run started on the default branch gets its worktree, at `<worktrees>/<change>`. A relative path is relative to the checkout where you enroll through `loop run` or `loop step`; an absolute path is used as written. A run keeps the worktree it was created with, so changing `worktrees` affects only new runs. The loop never edits ignore rules: when the directory lies inside a checkout, add it to `.gitignore`, or to `.git/info/exclude` for one clone only, because an unignored worktree makes that checkout dirty.
+- `worktrees` is the directory where a run started on the default branch gets its worktree, at `<worktrees>/<change>`, and a scoping session gets its worktree at `<worktrees>/scope-<session>`. A relative path is relative to the invoking checkout; an absolute path is used as written. Existing runs and sessions keep their worktrees when this setting changes. The loop never edits ignore rules: when the directory lies inside a checkout, add it to `.gitignore`, or to `.git/info/exclude` for one clone only, because an unignored worktree makes that checkout dirty.
 - `agents` maps an alias of your choice to the command that runs that agent. Define one agent per harness and model you use, such as `opus` and `fable`, or `deepseek` and `mimo` on OpenCode. Progress lines name agents by alias.
 - `roles` assigns an agent to each role. The proposal reviewer judges the plan; the plan reviser revises it and applies minor plan fixes; the implementer implements the plan and applies minor implementation fixes; the implementation reviewer judges the patch. One agent may fill several roles: every turn runs in a fresh context.
 - `attempts.proposalReview` bounds how many proposal reviews one advancement runs, and `attempts.implementation` how many implementation attempts.
 - `checks` lists the required checks, each a shell command run with `sh -c` in the run's worktree. `checks: []` means the change has no required checks; leaving `checks` out refuses the run.
-- `delivery` is `local`, `pr` or `merge`, and has no default. `local` contacts no remote. `pr` and `merge` use the remote of the default branch's upstream, as Git records it, and its branch there; `loop run`, `loop resume` and `loop step` refuse them when the default branch has no upstream. Set one with `git branch --set-upstream-to=origin/main main`.
+- `delivery` is `local`, `pr` or `merge`, and has no default. `local` contacts no remote. `pr` and `merge` use the remote of the default branch's upstream, as Git records it, and its branch there; `loop run`, `loop resume`, `loop step` and `loop scope finish` refuse them when the default branch has no upstream. Set one with `git branch --set-upstream-to=origin/main main`.
 
 Put settings you do not want to commit, such as your own agents, in the main checkout's `openspec/loop.local.yaml`, and add that file to `.gitignore`. They apply across that clone's worktrees. A worktree can also have its own `openspec/loop.local.yaml` to override them. At each layer, `defaultBranch`, `worktrees`, `checks` and `delivery` replace the preceding value as a whole, and `agents`, `roles` and `attempts` replace entries individually, so a local file can add one agent and point one role at it:
 
@@ -86,6 +91,8 @@ Every `loop run`, `loop resume` or `loop step` reads settings again in this orde
 The loop uses Git's directory and worktree records to locate the main checkout. If those records do not identify an accessible working tree of this clone, it refuses. With a separated Git directory, invocation directly from the main checkout works; invocation from a linked worktree refuses when Git reports the metadata directory instead of the main checkout.
 
 A missing committed file, an unreadable present file, invalid YAML, an unknown key or a wrong type in any file, or a required field missing after merging, refuses the command. An invalid main local file cannot be hidden by a worktree override. So does a role whose alias is undefined or whose agent's command cannot be found: a command without `/` is looked up on PATH, and one with `/` is taken relative to the invoking checkout, even when defined in the main local file. Relative `worktrees` paths also remain relative to the invoking checkout.
+
+Both `loop scope` commands use the same configuration merge order, including shared main-checkout and invoking-checkout overrides, but do not resolve worker commands or start workers. Scoping still requires structurally valid configuration.
 
 ### Agents and adapters
 
@@ -120,6 +127,45 @@ OpenCode has no way to enforce a reply schema, so `loop-opencode` asks for bare 
 To use another tool, write your own adapter. The loop runs the agent's command with four paths appended: a prompt file, a JSON schema file, a reply file and a usage file. Take the paths from the last four arguments, since the agent's own arguments come first. The command runs in the run's worktree with no input, and its output becomes the step's transcript. It must exit 0 after writing a JSON object that matches the schema to the reply file; anything else stops the run as an execution failure.
 
 The command may also write what its harness reported spending to the usage file, as a JSON object with two optional keys: `tokens`, which maps each numeric usage counter (including token and request counts), under the harness's own name or nested path, to a finite non-negative number, and `costUsd`, a finite non-negative cost in US dollars. Every counter name is accepted without a fixed list. Without a usage file, the step's usage shows as unavailable. A usage file that is not such an object, including a negative or nonfinite counter, stops the run as an execution failure.
+
+## Scoping proposals together
+
+Invoke `/openspec-scope` in Claude Code or `$openspec-scope` in Codex to prepare proposals in an attended session. The skill follows the repository's issue-listing instructions, explains its recommended order and waits for your issue selections. It uses native OpenSpec proposing, reviews material decisions with you, records routine defaults in the design, trims each proposal to one implementable change and commits its artifacts separately. Explicitly invoking the skill authorizes filing trimmed requested work as follow-up issues linked to the source issue and OpenSpec change, with a backlink in the proposal's non-goals. Source issues stay open until implementation.
+
+You can also use the deterministic commands directly, with no options:
+
+| Command | What it does | Exit status |
+|---|---|---|
+| `loop scope start <session>` | Creates branch `scope/<session>` and a separate worktree from the committed local default branch, without fetching or changing that branch. Prints the worktree, branch and finish command. | 0 created, 2 refused |
+| `loop scope finish <session>` | Rebases the clean session onto the current base, then delivers its committed proposals using `delivery`. Retains the branch and worktree. | 0 delivered, 1 integration/publication failed, 2 refused |
+
+Git validates the generated branch name; no separate naming format is imposed. Existing branch or path collisions refuse without replacement and identify a registered checkout when one exists. Finish discovers the checkout through Git's worktree list. If it cannot find one, use `git worktree list` to locate a detached manual rebase, complete or abort it, or restore the session checkout before retrying.
+
+Run start and finish from the same invoking checkout to retain its configuration and ignored local overrides. The session checkout inherits shared main-checkout settings through configuration reading, but does not receive a copy of the invoking checkout's `openspec/loop.local.yaml`. Use the reported session worktree explicitly as the working directory for native proposing, every OpenSpec artifact command and each proposal commit. Check the root from `openspec list --json` and the paths from native OpenSpec instructions before writing or staging: they must resolve inside that worktree. Follow the selected OpenSpec store's instructions if the project uses a store. Run scope commands and proposal commits with permission to write the shared Git directory; in Codex, request escalated permissions as with the supervision skill. Do not author in the default checkout when a sandbox refuses Git writes.
+
+Native proposing may stop for review. Inspect its artifacts and request the next action explicitly before the attended workflow continues. Record `Source issue: <URL>` in each proposal and decisions/defaults in `design.md`; commit only `openspec/changes/<change>/`, for example `docs(scope): propose <change> (relates to #14)`, without closing keywords. Interrupted drafting resumes in the same worktree: inspect its files and Git history, retain finished proposal commits, and continue the draft. Finish refuses any uncommitted tracked or untracked work, including an unfinished proposal, with exit 2. Complete the draft or deliberately move it elsewhere first; finish does not commit, stash or remove it.
+
+Session delivery differs from run delivery:
+
+| Mode | Base and delivery |
+|---|---|
+| `local` | Rebase onto the current local default branch, then fast-forward it without remote contact. Local **run** delivery instead leaves the default branch untouched. |
+| `pr` | Fetch and rebase onto the default branch's configured upstream, push the session branch without force, then find or create one PR against that upstream branch/repository. The local default branch stays unchanged. New PRs use `gh pr create --fill`, preserving issue-bearing proposal commit subjects. |
+| `merge` | Fetch and safely synchronize the local default branch with its upstream, rebase onto it, push the session tip to the upstream default branch, then fast-forward the local default branch. |
+
+Default updates require clean tracked files in any checkout holding that branch, preserve unrelated untracked files and stop if Git would overwrite a file, including an ignored one. An ahead or diverged local default in `merge`, a dirty default holder, a conflict, a rejected push or a failed fast-forward exits 1 with attended recovery. Syntax/configuration problems, invalid names, collisions, missing session checkouts, uncommitted session work and a missing required upstream refuse with exit 2. A conflicting finish rebase is aborted; reconcile manually in the session worktree before retrying. No automatic merge fallback, force push, implementation, enrollment or archival occurs.
+
+Retry finish from the original invoking checkout after resolving its reported cause. If a merge push succeeded before the local update failed, retry can complete the safe local update. An open PR is reused only after the retry's non-force push succeeds. If rebasing onto a moved base rewrites an already-published session branch, Git can reject that push. In the session worktree, fetch the upstream remote's session branch and current base, merge the published session history into the rebased branch, then merge the current base if it is not already an ancestor. For example, substituting the actual upstream remote and branch names:
+
+```sh
+git fetch origin scope/planning main
+git merge --no-edit origin/scope/planning
+git merge --no-edit origin/main       # if not already an ancestor of HEAD
+```
+
+Resolve and commit any conflicts before retrying `loop scope finish planning` from the original invoking checkout. Both the published tip and current base must be ancestors of the session tip; finish then avoids another rebase and can push without force. Resetting only to the published tip would repeat the rebase and rejection.
+
+After proposals land, explicitly run `loop run <change>` or `loop step <change>` from the default branch. In `pr` mode, merge the proposal PR there first. Enrolling from the multi-proposal session branch includes sibling proposal commits in the selected change's patch. Finishing scoping leaves proposals unarchived and unenrolled, and keeps the session checkout for inspection or manual Git cleanup.
 
 ## Running a change
 

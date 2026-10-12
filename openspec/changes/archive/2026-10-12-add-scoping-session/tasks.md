@@ -1,0 +1,19 @@
+# Tasks
+
+## 1. Session commands and shared Git protections
+
+- [x] 1.1 Share the existing default-checkout cleanliness, upstream synchronization and safe fast-forward operations through `src/git.ts` without introducing a general delivery layer; pass the default tip checked for ancestry as the expected old value for unchecked-out ref updates in both run and scope callers. Add a deterministic concurrent-ref regression proving a later writer's commits survive, and retain existing run integration/delivery tests for dirty holders, ahead/diverged branches and ignored-file preservation.
+- [x] 1.2 Add `loop scope start <session>` and `loop scope finish <session>` parsing in `src/cli.ts`, and start/session-worktree discovery in `src/scope.ts`; add CLI and `test/scoping.test.ts` cases for Git-accepted/rejected branch names, malformed arguments, configuration/local overrides, branch/path collisions with and without registered checkouts, missing or detached session checkouts, unavailable worker executables, and unchanged invoking files/index. Document syntax, Git-owned name validation, the invoking-checkout convention and missing-checkout/manual-rebase recovery in README.
+
+## 2. Finish integration and proposal delivery
+
+- [x] 2.1 Implement clean-session prerequisites, base selection/fetch, merge-mode default synchronization and rebasing with attended conflict recovery in `src/scope.ts`; verify moved bases preserve proposal commits and unrelated work, unfinished tracked and untracked drafts refuse with exit 2 and survive, and conflicting rebases abort with exit 1. Verify the scope calls to existing synchronization/clean-holder helpers once, relying on the existing helper/run regressions for their full behavior matrix. Document base selection, exit codes and the clean-session decision in README.
+- [x] 2.2 Implement local fast-forward, non-force PR publication/open-PR reuse using `gh pr create --fill`, and merge push-before-local-update, reporting external effects and failures. Verify the three modes' destinations and command wiring, with one alternate-upstream fixture, missing-upstream refusal, and retry after successful publication followed by failed local update or interrupted PR creation. Add the moved-base/published-PR rejection and manual merge-reconciliation regression; assert no PR lookup after rejection and no duplicate PR after a successful retry. Reuse shared file-preservation tests instead of repeating them for every mode. Assert no run state, worker call, archival or issue closure; document local-session/local-run differences and the exact published-history plus current-base merge recovery.
+
+## 3. Attended scoping skill
+
+- [x] 3.1 Add `skills/openspec-scope/SKILL.md` for Claude Code and Codex and README installation/use guidance: issue ordering and selection, explicit session working directory and verified artifact paths, permissions for shared-Git writes, native planning boundaries, recorded decisions/defaults, follow-up source-issue/change references, individual artifact-only commits, draft recovery, explicit finish and later enrollment from the landed default branch. Verify in an attended rehearsal in a disposable repository with GitHub writes intercepted by a recording fixture: inspect actual artifact locations, separate commits, follow-up call contents, a material-decision pause and continued interrupted drafting, rather than claiming a read-only walkthrough establishes those effects.
+
+## 4. Whole-workflow verification
+
+- [x] 4.1 Run `npm test` and strict OpenSpec validation, then review the final patch against the delta and issue #14; verify existing local run delivery still leaves the default branch untouched, session delivery retains unenrolled native proposals, and a later explicit `loop run <change>` can consume one landed proposal through the existing enrollment path. Run the required cut pass and remove mechanisms or tasks without a contract clause or explicit issue requirement.
