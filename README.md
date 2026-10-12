@@ -20,7 +20,7 @@ The package installs the `loop` command and four [agent adapters](#agents-and-ad
 
 For a system-wide Node installation whose npm global prefix belongs to root, configure a user-owned prefix with `npm config set prefix ~/.npm-global` and add `~/.npm-global/bin` to PATH. This allows installation without `sudo`.
 
-To upgrade, run `npm update -g openspec-loop`, then refresh the project skills as described in [Project setup](#project-setup).
+To upgrade, run `npm update -g openspec-loop`, then run `loop setup` in each project and commit the refreshed skills.
 
 ## Project setup
 
@@ -36,18 +36,17 @@ In an OpenSpec-initialized repository:
 
    Store uncommitted configuration overrides in the main checkout's `openspec/loop.local.yaml`. Linked worktrees read these overrides automatically.
 
-3. Copy the supervision and scoping skills into the project for Claude Code and Codex, and commit the copies:
+3. Install the bundled supervision and scoping skills for Claude Code and Codex, then commit the installed files:
 
    ```sh
-   for dir in .claude/skills .agents/skills; do
-     mkdir -p "$dir"
-     for skill in openspec-loop openspec-scope; do
-       cp -R "$(npm root -g)/openspec-loop/skills/$skill" "$dir/"
-     done
-   done
+   loop setup
    ```
 
-   Repeat the copy and commit after each upgrade. Skills describe the installed version's commands and flags; stale copies are not detected automatically.
+   The command installs all bundled skills into `.claude/skills/` and `.agents/skills/` at the invoking Git checkout's root. It also works from a subdirectory and targets the invoking linked worktree. It accepts no options and needs no OpenSpec root, loop configuration or worker executables.
+
+   Run the same command after each package upgrade and commit the refreshed files. Existing bundled skill directories are replaced completely: local edits are overwritten and obsolete files are removed. Unrelated skills, native OpenSpec skills and project configuration are preserved. Setup uses the executing package's files, independently of npm's current global prefix.
+
+`loop setup` prints each installed skill directory and exits 0 on success. Extra arguments, invocation outside a Git working tree, or a file or symlink blocking a destination directory refuse with exit 2 before changing copies. Source or write failures exit 1 and identify the failing path; some copies may already have been refreshed. Correct the reported cause and rerun `loop setup` to complete the refresh.
 
 The loop installs no Git hooks and requires no additional OpenSpec schema configuration.
 

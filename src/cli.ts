@@ -2,9 +2,10 @@
 import { resume, run, status, step, stop } from "./commands.js";
 import { Refusal } from "./refusal.js";
 import { finishScope, startScope } from "./scope.js";
+import { setup } from "./setup.js";
 
 const COMMANDS = { run, step, status, stop, resume };
-const USAGE = "Usage: loop <run|step|status|stop> <change>\n       loop resume <change> [--attempts <n>] [--implement]\n       loop scope <start|finish> <session>\n";
+const USAGE = "Usage: loop <run|step|status|stop> <change>\n       loop resume <change> [--attempts <n>] [--implement]\n       loop scope <start|finish> <session>\n       loop setup\n";
 
 interface Args {
   name: keyof typeof COMMANDS;
@@ -13,9 +14,10 @@ interface Args {
   implement: boolean;
 }
 
-// Returns the command, the change and resume's options, or undefined for a malformed command line.
-function parseArgs(argv: string[]): Args | { name: "scope"; action: "start" | "finish"; session: string } | undefined {
+// Returns the requested command and its arguments, or undefined for malformed syntax.
+function parseArgs(argv: string[]): Args | { name: "scope"; action: "start" | "finish"; session: string } | { name: "setup" } | undefined {
   const [name, change, ...extra] = argv;
+  if (name === "setup") return argv.length === 1 ? { name } : undefined;
   if (name === "scope") {
     if ((change !== "start" && change !== "finish") || extra.length !== 1) return undefined;
     return { name, action: change, session: extra[0] };
@@ -45,7 +47,9 @@ if (parsed === undefined) {
   process.exitCode = 2;
 } else {
   try {
-    if (parsed.name === "scope") {
+    if (parsed.name === "setup") {
+      process.exitCode = setup();
+    } else if (parsed.name === "scope") {
       process.exitCode = parsed.action === "start" ? await startScope(parsed.session) : await finishScope(parsed.session);
     } else {
       const { name, change, attempts, implement } = parsed;
