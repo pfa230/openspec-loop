@@ -2,7 +2,7 @@
 
 ## Purpose
 
-The openspec-loop product contract: how a change proposed with the user becomes a reviewed, implemented, tested, archived and delivered result without further attention, and what the loop does and does not own along the way. The user attends only the proposal; everything after it runs unattended. openspec-loop is a simple, minimal harness: a lightweight assistant that runs one change and steps aside for the human, not a bulletproof enforcement system.
+This specification defines the openspec-loop product contract: proposal review, implementation, testing, integration, archival and delivery of a committed OpenSpec change. Proposal authoring is attended; execution runs unattended until completion or a stop requiring intervention. The loop owns one enrolled change and its delivery. Manual verification and repository-wide policy enforcement remain outside its responsibilities.
 
 ## Requirements
 

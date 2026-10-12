@@ -1,14 +1,14 @@
 # openspec-loop
 
-openspec-loop takes an OpenSpec change you proposed and committed, and runs it unattended to a reviewed, implemented, tested, archived and delivered result. You attend the proposal; the loop handles everything after it.
+openspec-loop runs a proposed, committed OpenSpec change through proposal review, implementation, testing, integration, archival and delivery. Proposal authoring is attended; execution runs unattended until completion or a stop that requires intervention.
 
 ## Prerequisites
 
 - Node 24 or later, on Linux or macOS
 - OpenSpec 1.14.0 or later, as the `openspec` command on PATH
 - Git
-- A repository initialized with `openspec init` for the tools you use, which installs OpenSpec's own skills and commands in the project
-- The CLI of each harness your agents use: `claude`, `codex`, `agy` or `opencode`
+- A repository initialized with `openspec init` for the selected tools, with OpenSpec's skills and commands installed in the project
+- The CLI for each configured agent harness: `claude`, `codex`, `agy` or `opencode`
 
 ## Installation
 
@@ -16,13 +16,17 @@ openspec-loop takes an OpenSpec change you proposed and committed, and runs it u
 npm install -g openspec-loop
 ```
 
-This installs the `loop` command and the four adapters described under Agents and adapters. When npm's global prefix belongs to root, as with a system-wide Node, give npm a prefix you own, such as `npm config set prefix ~/.npm-global` with `~/.npm-global/bin` on PATH, rather than installing with `sudo`. To upgrade, run `npm update -g openspec-loop`, then copy the skills into each project again, as Setting up a project describes.
+The package installs the `loop` command and four [agent adapters](#agents-and-adapters).
 
-## Setting up a project
+For a system-wide Node installation whose npm global prefix belongs to root, configure a user-owned prefix with `npm config set prefix ~/.npm-global` and add `~/.npm-global/bin` to PATH. This allows installation without `sudo`.
 
-In a repository set up for OpenSpec:
+To upgrade, run `npm update -g openspec-loop`, then refresh the project skills as described in [Project setup](#project-setup).
 
-1. Write `openspec/loop.yaml` as Configuration describes, and commit it.
+## Project setup
+
+In an OpenSpec-initialized repository:
+
+1. Create and commit `openspec/loop.yaml` using the [configuration format](#configuration).
 2. Add the worktrees directory and `openspec/loop.local.yaml` to `.gitignore`, for example:
 
    ```
@@ -30,7 +34,7 @@ In a repository set up for OpenSpec:
    openspec/loop.local.yaml
    ```
 
-   Put your personal overrides in the main checkout's `openspec/loop.local.yaml`. Fresh issue worktrees inherit them automatically; no copy is needed.
+   Store uncommitted configuration overrides in the main checkout's `openspec/loop.local.yaml`. Linked worktrees read these overrides automatically.
 
 3. Copy the supervision and scoping skills into the project for Claude Code and Codex, and commit the copies:
 
@@ -43,13 +47,13 @@ In a repository set up for OpenSpec:
    done
    ```
 
-   Run the same command and commit again after every upgrade: the skill describes the commands and flags of the installed version, and nothing detects a stale copy.
+   Repeat the copy and commit after each upgrade. Skills describe the installed version's commands and flags; stale copies are not detected automatically.
 
-Setup changes nothing else in the project. The loop installs no Git hooks and needs no OpenSpec schema or configuration of its own.
+The loop installs no Git hooks and requires no additional OpenSpec schema configuration.
 
 ## Configuration
 
-Commit `openspec/loop.yaml` in the repository. It names the default branch, which the loop does not detect, the directory for the worktrees the loop creates, the agents that do the work, the role each agent fills, the attempt budgets, the required checks and how the change is delivered:
+The committed `openspec/loop.yaml` defines the default branch, worktree directory, agent commands, role assignments, attempt budgets, required checks and delivery mode. The default branch must be specified explicitly:
 
 ```yaml
 defaultBranch: main
@@ -70,14 +74,18 @@ checks:
 delivery: pr
 ```
 
-- `worktrees` is the directory where a run started on the default branch gets its worktree, at `<worktrees>/<change>`, and a scoping session gets its worktree at `<worktrees>/scope-<session>`. A relative path is relative to the invoking checkout; an absolute path is used as written. Existing runs and sessions keep their worktrees when this setting changes. The loop never edits ignore rules: when the directory lies inside a checkout, add it to `.gitignore`, or to `.git/info/exclude` for one clone only, because an unignored worktree makes that checkout dirty.
-- `agents` maps an alias of your choice to the command that runs that agent. Define one agent per harness and model you use, such as `opus` and `fable`, or `deepseek` and `mimo` on OpenCode. Progress lines name agents by alias.
-- `roles` assigns an agent to each role. The proposal reviewer judges the plan; the plan reviser revises it and applies minor plan fixes; the implementer implements the plan and applies minor implementation fixes; the implementation reviewer judges the patch. One agent may fill several roles: every turn runs in a fresh context.
-- `attempts.proposalReview` bounds how many proposal reviews one advancement runs, and `attempts.implementation` how many implementation attempts.
-- `checks` lists the required checks, each a shell command run with `sh -c` in the run's worktree. `checks: []` means the change has no required checks; leaving `checks` out refuses the run.
-- `delivery` is `local`, `pr` or `merge`, and has no default. `local` contacts no remote. `pr` and `merge` use the remote of the default branch's upstream, as Git records it, and its branch there; `loop run`, `loop resume`, `loop step` and `loop scope finish` refuse them when the default branch has no upstream. Set one with `git branch --set-upstream-to=origin/main main`.
+- `worktrees` sets the parent directory for default-branch runs (`<worktrees>/<change>`) and scoping sessions (`<worktrees>/scope-<session>`). Relative paths resolve against the invoking checkout. Absolute paths are used as written. Changing this setting does not move existing worktrees. Ignore an in-checkout directory through `.gitignore` or, for one clone, `.git/info/exclude`; the loop does not edit ignore rules, and an unignored worktree makes the checkout dirty.
+- `agents` maps configured aliases to agent commands. Each harness/model combination can have a separate alias, such as `opus` and `fable`, or `deepseek` and `mimo` on OpenCode. Progress lines identify agents by alias.
+- `roles` assigns agents to proposal review, plan revision, implementation and implementation review. The plan reviser also applies minor plan fixes; the implementer also applies minor implementation fixes. One agent may fill several roles, but each turn uses a fresh context.
+- `attempts.proposalReview` limits proposal reviews per advancement. `attempts.implementation` limits implementation attempts per advancement.
+- `checks` lists required shell commands, executed with `sh -c` in the run's worktree. An empty list (`checks: []`) declares no required checks. Omitting the field causes refusal.
+- `delivery` selects `local`, `pr` or `merge`; there is no default. `local` contacts no remote. `pr` and `merge` use the default branch's configured upstream remote and branch. Without an upstream, `loop run`, `loop resume`, `loop step` and `loop scope finish` refuse these modes. For example, configure an upstream with `git branch --set-upstream-to=origin/main main`.
 
-Put settings you do not want to commit, such as your own agents, in the main checkout's `openspec/loop.local.yaml`, and add that file to `.gitignore`. They apply across that clone's worktrees. A worktree can also have its own `openspec/loop.local.yaml` to override them. At each layer, `defaultBranch`, `worktrees`, `checks` and `delivery` replace the preceding value as a whole, and `agents`, `roles` and `attempts` replace entries individually, so a local file can add one agent and point one role at it:
+### Local overrides
+
+The ignored `openspec/loop.local.yaml` in the main checkout supplies uncommitted settings, such as machine-specific agent commands, across the clone's worktrees. A linked worktree can override them with its own local file.
+
+At each layer, `defaultBranch`, `worktrees`, `checks` and `delivery` replace whole values; `agents`, `roles` and `attempts` replace individual entries. For example, a local file can add an agent and assign it a role:
 
 ```yaml
 agents:
@@ -86,13 +94,21 @@ roles:
   proposalReviewer: deepseek
 ```
 
-Every `loop run`, `loop resume` or `loop step` reads settings again in this order: the invoking checkout's committed `openspec/loop.yaml`, the main checkout's optional `openspec/loop.local.yaml`, then the invoking checkout's optional local file when it is a different checkout. The main checkout is the clone's primary working tree, regardless of its current branch. A bare clone has no main checkout, so only the invoking files apply.
+Each `loop run`, `loop resume` and `loop step` rereads configuration in this order:
 
-The loop uses Git's directory and worktree records to locate the main checkout. If those records do not identify an accessible working tree of this clone, it refuses. With a separated Git directory, invocation directly from the main checkout works; invocation from a linked worktree refuses when Git reports the metadata directory instead of the main checkout.
+1. The invoking checkout's committed `openspec/loop.yaml`.
+2. The main checkout's optional `openspec/loop.local.yaml`.
+3. The invoking checkout's optional local file, if that checkout differs from the main checkout.
 
-A missing committed file, an unreadable present file, invalid YAML, an unknown key or a wrong type in any file, or a required field missing after merging, refuses the command. An invalid main local file cannot be hidden by a worktree override. So does a role whose alias is undefined or whose agent's command cannot be found: a command without `/` is looked up on PATH, and one with `/` is taken relative to the invoking checkout, even when defined in the main local file. Relative `worktrees` paths also remain relative to the invoking checkout.
+The main checkout is the clone's primary working tree, regardless of its current branch. Bare clones have no main checkout, so only the invoking checkout's files apply.
 
-Both `loop scope` commands use the same configuration merge order, including shared main-checkout and invoking-checkout overrides, but do not resolve worker commands or start workers. Scoping still requires structurally valid configuration.
+Git's directory and worktree records identify the main checkout. Commands refuse if those records do not identify an accessible working tree belonging to the clone. With a separated Git directory, direct invocation from the main checkout works; linked-worktree invocation refuses if Git reports the metadata directory instead of the main checkout.
+
+Commands refuse missing committed configuration, unreadable files, invalid YAML, unknown keys, incorrect types and required fields missing after merging. Worktree overrides cannot hide an invalid main local file.
+
+Commands that run workers also refuse undefined role aliases and unavailable agent commands. Commands without `/` resolve through PATH; commands containing `/` resolve against the invoking checkout, even when defined in the main local file. Relative `worktrees` paths also resolve against the invoking checkout.
+
+Both `loop scope` commands use the same merge order and require structurally valid configuration. They neither resolve agent executables nor start workers.
 
 ### Agents and adapters
 
@@ -120,21 +136,29 @@ Nested counters use dotted paths, such as `cache_creation.ephemeral_1h_input_tok
 
 Add the model flag of the harness (`--model`, `-m`) to choose a model. Without restriction arguments, a harness runs with its own defaults; headless Claude Code and Codex cannot edit files by default.
 
-Claude Code's auto mode needs a model and account that support it. Without it, Claude Code starts in its default mode and denies the commands an implementer needs to run, such as the checks. In auto mode, a classifier judges every edit inside a `.git` directory and may refuse one, so an editing Claude agent whose `worktrees` directory lies inside the repository's Git directory can be refused edits there. `--permission-mode bypassPermissions` approves them all. Run such an agent inside a sandbox if you want to limit what it can do: put the sandbox command first, for example `[ai-jail, --exec, ..., loop-claude, ...]`.
+Claude Code's auto mode needs a model and account that support it. Without it, Claude Code starts in its default mode and denies the commands an implementer needs to run, such as the checks. In auto mode, a classifier judges every edit inside a `.git` directory and may refuse one, so an editing Claude agent whose `worktrees` directory lies inside the repository's Git directory can be refused edits there. `--permission-mode bypassPermissions` approves them all. To restrict an agent's access, prepend a sandbox command to the adapter command, for example `[ai-jail, --exec, ..., loop-claude, ...]`.
 
 `loop-opencode` starts one local OpenCode server in the worktree and sends the supplied schema through its prompt API. It inherits existing configuration, plugins and server authentication without changing configuration files. Cut reports and other prose stay in the transcript; only the successful prompt response's native structured object supplies the reply. Text containing JSON cannot replace a missing native result. API/session failures and unexpected server exits fail the step with any reported usage preserved, and the adapter closes its event subscription and stops its server before exiting.
 
 Supported OpenCode arguments are `-m`/`--model`, `--agent`, `--variant`, `--auto` and `--pure`, including equals/value forms and explicit boolean false or `--no-auto`/`--no-pure`. Pure mode from the environment is preserved and native output still uses the API. Other run arguments, including `--attach` (even localhost), session continuation, file attachments and `--dir`, fail by name before OpenCode starts. Permission requests in root and delegated sessions are rejected by default; explicit `--auto` approves requested permissions once while configured denies remain in force. Questions and plan-mode transitions remain denied as in the headless CLI. With `--agent plan`, OpenCode rejects reads outside the repository without asking and can end without native output; an explicit `loop resume` runs the failed step again. OpenCode 1.18.34 can also lose the native format after automatic compaction; absent native output still fails rather than accepting a text reply.
 
-To use another tool, write your own adapter. The loop runs the agent's command with four paths appended: a prompt file, a JSON schema file, a reply file and a usage file. Take the paths from the last four arguments, since the agent's own arguments come first. The command runs in the run's worktree with no input, and its output becomes the step's transcript. It must exit 0 after writing a JSON object that matches the schema to the reply file; anything else stops the run as an execution failure.
+#### Custom adapters
+
+Additional tools require an adapter that implements the worker interface. The loop appends four paths to the configured agent arguments, in order: prompt file, JSON schema file, reply file and usage file. Adapters must read these paths from the last four arguments.
+
+The command runs in the run's worktree without standard input. Its output becomes the step transcript. Success requires exit status 0 and a reply file containing a JSON object that matches the supplied schema. Any other outcome stops the run as an execution failure.
 
 The command may also write what its harness reported spending to the usage file, as a JSON object with two optional keys: `tokens`, which maps each numeric usage counter (including token and request counts), under the harness's own name or nested path, to a finite non-negative number, and `costUsd`, a finite non-negative cost in US dollars. Every counter name is accepted without a fixed list. Without a usage file, the step's usage shows as unavailable. A usage file that is not such an object, including a negative or nonfinite counter, stops the run as an execution failure.
 
-## Scoping proposals together
+## Scoping sessions
 
-Invoke `/openspec-scope` in Claude Code or `$openspec-scope` in Codex to prepare proposals in an attended session. The skill follows the repository's issue-listing instructions, explains its recommended order and waits for your issue selections. It uses native OpenSpec proposing, reviews material decisions with you, records routine defaults in the design, trims each proposal to one implementable change and commits its artifacts separately. Explicitly invoking the skill authorizes filing trimmed requested work as follow-up issues linked to the source issue and OpenSpec change, with a backlink in the proposal's non-goals. Source issues stay open until implementation.
+The `openspec-scope` skill prepares proposals in an attended session. Invoke it as `/openspec-scope` in Claude Code or `$openspec-scope` in Codex.
 
-You can also use the deterministic commands directly, with no options:
+The skill follows the repository's issue-listing workflow, recommends an order and waits for the user to select issues. It uses native OpenSpec proposing, requests material decisions, records routine defaults in the design and trims each proposal to one implementable change. Each proposal receives a separate artifact-only commit.
+
+Explicit invocation authorizes follow-up issues for requested work trimmed from a proposal. Each follow-up links the source issue and names the OpenSpec change; the proposal links back from its non-goals. Source issues remain open until implementation.
+
+The session commands can also be invoked directly. Neither accepts options:
 
 | Command | What it does | Exit status |
 |---|---|---|
@@ -171,9 +195,9 @@ After proposals land, explicitly run `loop run <change>` or `loop step <change>`
 
 ## Running a change
 
-Propose the change with OpenSpec's own proposing, `/opsx:propose` in Claude Code or the `$openspec-propose` skill in Codex, and commit it. The proposal must be committed on the branch the run works on, which you choose by where you enroll through `loop run` or `loop step`:
+Create and commit a proposal with native OpenSpec proposing: `/opsx:propose` in Claude Code or `$openspec-propose` in Codex. The proposal must be committed on the branch used by the run. The checkout where `loop run` or an enrolling `loop step` is invoked determines that branch:
 
-- **On the default branch.** Commit the proposal on the default branch and run `loop run <change>` there. The loop creates branch `loop/<change>` from that commit in a worktree under `worktrees` and leaves your checkout's files and index untouched.
+- **On the default branch.** Commit the proposal on the default branch and run `loop run <change>` there. The loop creates branch `loop/<change>` from that commit in a worktree under `worktrees` and leaves the invoking checkout's files and index untouched.
 - **On a branch of its own.** Create a worktree on a new branch, propose and commit there, and run `loop run <change>` in that worktree. The run works in that worktree, which must have no uncommitted changes.
 
 The commands work from any checkout of the repository:
@@ -195,7 +219,7 @@ loop step <change>     # implementation, including checks, review and revisions
 loop resume <change>   # continue through integration, archive and delivery
 ```
 
-You can keep using `step` for integration, archive and delivery instead. Each successful boundary returns control with exit status 0 while the run remains incomplete; its report and `status` name the next stage and continuation commands. Delivery reports the whole run complete. `run` still refuses an already-enrolled change. Attempt overrides and reopening implementation remain options of `resume` only.
+Alternatively, continue with `loop step <change>` through integration, archival and delivery. Each successful boundary returns control with exit status 0 while the run remains incomplete; its report and `status` name the next stage and continuation commands. Delivery reports the whole run complete. `run` still refuses an already-enrolled change. Attempt overrides and reopening implementation remain options of `resume` only.
 
 Each `step` call receives fresh configured attempt budgets. If implementation returns the plan for revision or integration returns findings to implementation, the same call follows that handoff and returns when the first stage succeeds; the next stage can therefore be an earlier one. Failures and decision questions stop with the usual cause and recovery. After resolving the stop, use `step` or `resume` explicitly to continue.
 
@@ -223,13 +247,13 @@ rm -rf "<run directory>"
 
 ### Proposal review
 
-The first stage reviews the plan: the change's proposal, design, spec deltas and tasks.
+Proposal review covers the change's proposal, design, spec deltas and tasks.
 
-- **The review.** The proposal reviewer judges whether the whole plan can be implemented and verified as one change without asking you, and whether it keeps the decisions recorded in its design. It reports each problem as blocking or minor. A minor finding is a local fix, such as a typo or a wrong path, that cannot change behavior or a recorded decision.
+- **The review.** The proposal reviewer judges whether the whole plan can be implemented and verified as one change without further decisions, and whether it keeps the decisions recorded in its design. It reports each problem as blocking or minor. A minor finding is a local fix, such as a typo or a wrong path, that cannot change behavior or a recorded decision.
 - **The verdict.** It follows from the findings: any blocking finding is `REVISE`; otherwise the verdict is `APPROVE`. Each review's verdict and findings are kept as `NNN-proposal-review.verdict.json` in the transcripts.
 - **Revision.** On `REVISE`, the plan reviser revises the plan in a fresh context, the loop commits the change directory on the run's branch, and the plan is reviewed again.
 - **Minor fixes.** On `APPROVE` with minor findings, the plan reviser applies them, the loop commits them, and ordinary advancement starts implementation without another review; `step` returns at the proposal-review boundary.
-- **Approval.** It covers the plan as it then stands. The loop does not check the plan again for edits you make: if you change it by hand while the run is stopped, the run resumes where it stopped, and verifying the edit is up to you. To have the implementer implement an edited plan after implementation completed, commit the edit on the run's branch and run `loop resume <change> --implement`: the implementer works from what the branch already holds, the checks, implementation review, integration, archival and delivery follow, and the plan is not reviewed again. Once the change is archived, `--implement` is refused.
+- **Approval.** Approval covers the resulting plan. Manual plan edits do not invalidate it automatically or change the resume point; those edits require manual verification. To reopen completed implementation for an edited plan, commit the edit on the run's branch and run `loop resume <change> --implement`. The implementer continues from the branch's existing work, followed by checks, implementation review, integration, archival and delivery. Proposal review is not repeated. The option is refused after archival.
 - **Decisions.** When a finding needs a decision the plan does not record, the run stops with the reviewer's question before revising anything. Answer it by recording the decision in the design in the run's worktree, committing it on the run's branch, and running `loop resume <change>`. The report names the worktree and the branch.
 - **Attempts.** Each review uses one attempt. When the last allowed review is `REVISE`, the run stops after that review's revision. Every resume starts a fresh budget; `loop resume <change> --attempts 1` gives exactly one more review.
 
@@ -237,29 +261,29 @@ A worker that exits nonzero, is killed, or writes a missing or malformed reply s
 
 ### Implementation
 
-During ordinary advancement, once the plan is approved, the implementation stage runs without you, in attempts. With `step`, it starts on the next invocation. Each attempt is one round:
+Implementation runs in attempts after proposal approval. Ordinary advancement starts it automatically; stage-bounded advancement starts it on the next `loop step` invocation. Each attempt includes:
 
 - **The implementer turn.** The implementer works in a fresh context from OpenSpec's own apply instructions for the change, including any `operations.apply.guidance` in `openspec/config.yaml`, and from the findings of the last attempt. It ticks task boxes as it goes. The loop then commits everything in the run's worktree on the run's branch as `<change>: implement`, `<change>: revise implementation` or `<change>: apply minor implementation fixes`.
 - **The checks.** Every required check runs, in order, even after one fails. A failed check is not a failure of the run: its exit status and the end of its output become a finding for the next attempt, kept as `NNN-checks.findings.json` in the transcripts, and review waits until the checks pass. The implementer fixes only failures the change caused, so a check that already fails on the base fails until attempts run out.
-- **The review.** The implementation reviewer judges whether the patch implements the whole approved plan, stays within it and keeps the decisions in the design. The patch is the change's work outside `openspec/changes/<change>/`: plan revisions, minor plan fixes and decisions you record on the run's branch are not part of it. The verdict follows from the findings as in proposal review, and is kept as `NNN-implementation-review.verdict.json` with the base and candidate commits it covers. `REVISE` starts the next attempt on the review's findings.
+- **The review.** The implementation reviewer judges whether the patch implements the whole approved plan, stays within it and keeps the decisions in the design. The patch is the change's work outside `openspec/changes/<change>/`: plan revisions, minor plan fixes and decisions recorded on the run's branch are not part of it. The verdict follows from the findings as in proposal review, and is kept as `NNN-implementation-review.verdict.json` with the base and candidate commits it covers. `REVISE` starts the next attempt on the review's findings.
 - **Minor fixes.** On `APPROVE` with minor findings, the implementer applies them, the checks run again, and the stage completes without another review. If a check fails after the fixes, the approval lapses and the next attempt runs a full round.
 - **Plan problems.** When the implementer reports that the plan needs a change, the plan reviser revises the plan and it returns to proposal review. Implementation continues after the plan is approved again, with the same attempt count. The implementer may tick task boxes but not change the plan itself: a turn that edits the plan otherwise stops the run, and the report names the turn's commit. Revert that commit's plan changes on the run's branch and resume. The loop compares the plan before and after each turn, so a turn interrupted before it ends is not checked.
 - **Decisions.** A review finding that needs a decision the plan does not record stops the run, as in proposal review. Record the decision in the design, commit it, and resume; the plan is reviewed again first.
 - **Attempts.** When the last allowed attempt ends with failed checks or `REVISE`, the run stops and names the findings. Resume starts with an implementer turn on those findings and a fresh budget, or `--attempts <n>`. A resume after a stop in the middle of an attempt also starts with an implementer turn, so a stop during checks or review costs one extra turn.
 
-Changes outside the change's directory that you leave uncommitted in the run's worktree while the run is stopped are committed with the next implementer turn and become part of the patch. They are checked, and reviewed unless that turn applies minor fixes, which complete without another review. A run started before proposal review or implementation became real treated them as fixtures and may skip them on resume: discard such a run as described above and start it again.
+Uncommitted edits outside the change directory in a stopped run's worktree are included in the next implementer commit and become part of the patch. They are checked, and reviewed unless that turn applies minor fixes, which complete without another review. Runs created when proposal review and implementation were fixture stages may skip them on resume. Discard and restart such runs using the procedure above.
 
 ### Integration
 
 Once implementation completes, the loop integrates the change with the current base: the remote's default branch in `pr` mode, and the local default branch in `local` and `merge` modes.
 
-- **Bringing the base in.** Every delivery mode rebases the run's branch onto the base, keeping its history linear when the rebase is clean. When the rebase conflicts, the loop abandons it and merges instead. A rebase rewrites the branch's commits, so review records and stop reports from before it name commits that are no longer on the branch; Git keeps them until it prunes unreachable objects, so `git diff` against them still works. The loop overrides `rebase.updateRefs` and `merge.ff` from your Git configuration for these commands without changing it.
+- **Bringing the base in.** Every delivery mode rebases the run's branch onto the base, keeping its history linear when the rebase is clean. When the rebase conflicts, the loop abandons it and merges instead. A rebase rewrites the branch's commits, so review records and stop reports from before it name commits that are no longer on the branch; Git keeps them until it prunes unreachable objects, so `git diff` against them still works. The loop overrides `rebase.updateRefs` and `merge.ff` from the existing Git configuration for these commands without changing it.
 - **Conflicts.** A conflicted merge stays in progress in the run's worktree, and the next attempt's implementer gets the conflicted files as a finding. The loop commits the resolution as the merge commit, with Git's message, and the checks and review run as in any attempt.
 - **A changed patch.** When integration changes the change's patch, the same patch the review judged, compared without context lines or line numbers, for example because the base already holds part of the change, the result goes back to the implementer the same way and is checked and reviewed again.
 - **Checks.** The required checks run on the integrated result, and a failure goes back to the implementer as a finding. Each return to the implementer uses an implementation attempt.
 - **The default branch in `merge` mode.** The loop first fetches the upstream and brings the local default branch level with it. When it is behind, the loop fast-forwards it in the checkout that holds it, and stops if that checkout has uncommitted changes to tracked files; untracked files do not count. When the local default branch is ahead of its upstream, or the two have diverged, the run stops: push or remove the extra commits, or reconcile the branches, then run `loop resume <change>`. A proposal commit left unpushed on the default branch stops the run this way, so in `merge` mode push the proposal before `loop run`, or propose on a branch of its own.
-- **Unpushed commits in `pr` mode.** The base is the remote's branch, so commits on your local default branch that are not pushed become part of the pull request. Push them first if they should not.
-- **Already-pushed branches in `pr` mode.** Enrollment accepts a branch you have already pushed. The same rebase rule applies, so its later non-force delivery push can be rejected.
+- **Unpushed commits in `pr` mode.** The base is the remote's branch, so unpushed commits on the local default branch become part of the pull request. Push them before enrollment to keep them out of the change's pull request.
+- **Already-pushed branches in `pr` mode.** Enrollment accepts an already-published branch. The same rebase rule applies, so its later non-force delivery push can be rejected.
 - **Interruptions.** A rebase or merge that a stop or crash left in progress before its conflict reached the implementer is aborted when integration runs again.
 
 ### Archive
@@ -282,16 +306,18 @@ When delivery stops, the report says what to fix:
 
 - **A dirty checkout:** commit or discard its changes, then resume.
 - **Commits on the default branch that the run's branch lacks, or a rejected push because the upstream moved:** bring them into the run's branch in its worktree, then resume.
-- **A rejected PR branch push after rebasing:** reconcile the run's branch with its published history in the run's worktree, then run `loop resume <change>` or `loop step <change>`. Continuation retries delivery without repeating completed integration, checks, review or archival; checking the reconciliation is your responsibility.
+- **A rejected PR branch push after rebasing:** reconcile the run's branch with its published history in the run's worktree, then run `loop resume <change>` or `loop step <change>`. Continuation retries delivery without repeating completed integration, checks, review or archival; the reconciliation requires manual verification.
 - **A failed fast-forward:** clear what Git names in the checkout, such as a file in the way, then resume.
 
 Resume after an interrupted delivery repeats its steps safely. Git does nothing for a push or a fast-forward whose commit is already there, and in `pr` mode the loop reports a pull request that is already open for the run's branch against the upstream branch instead of opening another.
 
 ## Supervising from Claude Code or Codex
 
-The skill you copied in Setting up a project lets a Claude Code or Codex session drive the loop for you. Ask the session to run, stop or resume a change. It gives the same `loop` commands you would, relays each progress line as it is printed, and shows the report unchanged. When a run stops, it diagnoses the stop with you from the report, the transcripts, the agent's configured command and the findings. For an execution failure, it traces the specific failed operation, inspecting the invoked adapter and relevant helper when needed to distinguish a harness failure from reply rejection. It explains the committed and uncommitted work, completed and pending validation, and remaining uncertainty before proposing recovery. Diagnosis changes nothing; repairs or continuation wait for your agreement.
+The `openspec-loop` skill installed during [project setup](#project-setup) allows a Claude Code or Codex session to supervise a run. Requests to run, stop or resume a change use the documented `loop` commands. The skill relays progress lines as they appear and displays the final report unchanged.
 
-`loop` writes the repository's Git directory and starts its own workers, so the session runs it outside its sandbox. In Codex, approve the escalated permissions the session requests for each `loop` command.
+For a stopped run, the skill diagnoses the cause from the report, transcripts, effective agent command and findings. Execution-failure diagnosis traces the failed operation and, when necessary, reads the invoked adapter and its helper to distinguish a harness failure from reply rejection. The diagnosis describes committed and uncommitted work, completed and pending validation, and uncertainty before recommending recovery. Investigation is read-only; repairs and continuation require the user's agreement.
+
+`loop` writes the repository's Git directory and starts workers, so supervision commands run outside the session's sandbox. Codex requests escalated permissions for each `loop` command.
 
 ## Development
 
@@ -304,7 +330,7 @@ The loop's contract is `openspec/specs/loop-workflow/spec.md`.
 
 ### Releasing
 
-On the branch of the change that releases, set the version and commit `package.json` and `package-lock.json` with it:
+Set the version on the release change's branch, then include `package.json` and `package-lock.json` in the change's commit:
 
 ```sh
 npm version <version> --no-git-tag-version
@@ -322,4 +348,4 @@ git push origin v<version>
 npm install -g openspec-loop@<version>
 ```
 
-Then check that `loop status <any name>` refuses for a missing run and that the skill is under `$(npm root -g)/openspec-loop/skills/`.
+Verify that `loop status <any name>` refuses a missing run and that the packaged skills are installed under `$(npm root -g)/openspec-loop/skills/`.
