@@ -1,0 +1,10 @@
+# Tasks
+
+## 1. Supervision guidance and regression
+
+- [ ] 1.1 Amend `skills/openspec-loop/SKILL.md` Rules and Diagnosing a stop, and the existing README supervision paragraph, to require the failed operation, supporting evidence, remaining work/validation and explicit uncertainty before recovery. Permit targeted reads of the configured invoked adapter/helper, executable-location reads and `git status --short`, while preserving unchanged report relay, configuration precedence, read-only diagnosis and waiting for agreement. Verify the text against every scenario of the amended Supervision skill requirement, including successful-child versus adapter failure and worker checks versus pending loop validation.
+- [ ] 1.2 Add `test/recordings/supervisor-reply-rejection.md` with the disposable-fixture recipe and acceptance record described in the design. Verify setup establishes child exit 0, full-text parse rejection, wrapper exit 1, no reply, surviving uncommitted edits and pending loop checks/review. Exercise diagnosis in fresh Claude and Codex sessions with the shipped skill; record their reads and explanations, verify the required causal chain and uncertainty appear before recovery, reject status-only or prose-plus-JSON-only explanations, and compare fixture run files, Git history and worktree before/after to establish that diagnosis changed nothing. Record an unavailable harness as a limitation and leave this task incomplete rather than substitute a wording check.
+
+## 2. Integration checks
+
+- [ ] 2.1 Run `npm test` and `openspec validate diagnose-supervisor-stops --strict`, then review the full diff against #55 and the delta. Verify the checks pass, implementation remains limited to the skill, README and regression record, report relay and existing controller/adapter behavior are preserved, and no configuration, state field, dependency or runtime diagnosis gate was added. Run the required cut pass after the last edit and record removals plus the authority and simpler alternative for each retained item.
