@@ -1,0 +1,16 @@
+defaultBranch: main
+worktrees: .worktrees
+agents:
+  codex: [loop-codex, -s, read-only]
+  opus: [loop-claude, --model, opus, --permission-mode, auto]
+roles:
+  proposalReviewer: codex
+  planReviser: opus
+  implementer: opus
+  implementationReviewer: codex
+attempts:
+  proposalReview: 3
+  implementation: 3
+checks:
+  - npm test
+delivery: pr
