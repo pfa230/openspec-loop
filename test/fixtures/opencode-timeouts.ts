@@ -5,6 +5,7 @@ const undici = createRequire(import.meta.url)("undici");
 const { Agent, fetch } = undici;
 undici.Agent = class extends Agent {
   constructor(options = {}) {
+    // Let the prompt's header deadline fire before the quiet /event body's deadline.
     super({ headersTimeout: 100, bodyTimeout: process.env.STUB_MODE === "delay-headers" ? 1000 : 100, ...options });
   }
 };

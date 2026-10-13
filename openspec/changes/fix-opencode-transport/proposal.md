@@ -22,7 +22,7 @@ None.
 
 ## Impact
 
-- `src/adapters/opencode.ts`: explicit HTTP client settings, contextual error reporting and client cleanup.
+- `src/adapters/opencode.ts`: explicit HTTP client settings and contextual error reporting.
 - `package.json` and `package-lock.json`: a direct Undici dependency compatible with the package's supported Node versions, providing a public configurable HTTP dispatcher.
 - `test/helpers.ts` and `test/adapters.test.ts`: extend the existing HTTP/SSE fixture and adapter regressions.
 - `README.md`: document unbounded response waits and the retained diagnostic evidence.

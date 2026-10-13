@@ -382,9 +382,8 @@ for (const [mode, httpError, context] of [
     assert.equal(outcome.usage, USAGE.opencode);
     assert.match(outcome.stderr, context);
     assert.match(outcome.stderr, /\[cause\]: TypeError: (fetch failed|terminated)/);
-    assert.match(outcome.stderr, /\[cause\]: SocketError:/);
+    assert.match(outcome.stderr, /\[cause\]: SocketError: [^\n]*\n\s+at /);
     assert.match(outcome.stderr, /UND_ERR_SOCKET/);
-    assert.match(outcome.stderr, /at /);
     assert.equal((outcome.stdout + outcome.stderr).includes(password), false);
     assert.equal((outcome.stdout + outcome.stderr).includes(authorization), false);
     assert.equal(outcome.requests.filter(request => request.path === "/session/root/message").length, 1);
@@ -396,9 +395,8 @@ test("OpenCode spawn failure retains its original error code and stack", (t) => 
   const outcome = adapter(t, "opencode", { PATH: "/nonexistent" });
   assert.equal(outcome.status, 1, outcome.stderr);
   assert.match(outcome.stderr, /cannot run opencode/);
-  assert.match(outcome.stderr, /\[cause\]: Error: spawn opencode ENOENT/);
+  assert.match(outcome.stderr, /\[cause\]: Error: spawn opencode ENOENT\n\s+at /);
   assert.match(outcome.stderr, /code: 'ENOENT'/);
-  assert.match(outcome.stderr, /at /);
   assert.equal(outcome.reply, undefined);
 });
 
