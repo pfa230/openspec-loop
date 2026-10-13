@@ -113,6 +113,19 @@ test("the reviewed patch leaves out the plan's minor fixes and the task ticks", 
   assert.equal(files, "a.txt\n");
 });
 
+test("both reviews judge the repository's rules for what a change contains", (t) => {
+  const repo = makeRepo(t);
+  repo.queue("implementer", { edits: { "a.txt": "a\n", [TASKS]: "## 1. Work\n\n- [x] 1.1 Do the thing\n" } });
+  const result = runLoop(repo, ["run", "add-thing"]);
+  assert.equal(result.status, 0, result.stdout);
+  for (const suffix of ["-proposal-review.prompt.md", "-implementation-review.prompt.md"]) {
+    const [path] = transcripts(repo, suffix);
+    const prompt = readFileSync(path, "utf8");
+    assert.match(prompt, /follow the rules that the repository's instructions for agents/, path);
+    assert.doesNotMatch(prompt, /two things/, path);
+  }
+});
+
 test("every check runs after one fails, and its failure is recorded as a finding", (t) => {
   const repo = makeRepo(t);
   configure(repo, "checks:\n  - echo first broke; exit 2\n  - echo second ran\nattempts:\n  implementation: 1\n");
