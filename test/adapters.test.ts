@@ -37,7 +37,7 @@ interface Outcome {
   dir: string;
 }
 
-function adapter(t: { after: (fn: () => void) => void }, harness: string, env: Record<string, string>, args: string[] = [], schema: object = { type: "object" }, response: object = { info: { structured: REPLY }, parts: [] }): Outcome {
+function adapter(t: { after: (fn: () => void) => void }, harness: string, env: Record<string, string>, args: string[] = [], schema: object = { type: "object" }, response: object = { info: { structured: REPLY }, parts: [] }, nodeArgs: string[] = []): Outcome {
   const dir = mkdtempSync(join(tmpdir(), "loop-adapter-"));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
   writeFileSync(join(dir, harness), harness === "opencode" ? OPENCODE_STUB : STUB);
@@ -48,7 +48,7 @@ function adapter(t: { after: (fn: () => void) => void }, harness: string, env: R
   const reply = join(dir, "reply.json");
   const usage = join(dir, "usage.json");
   const bin = fileURLToPath(new URL(`dist/src/adapters/${harness}.js`, root));
-  const result = spawnSync(process.execPath, [bin, ...args, join(dir, "prompt.md"), join(dir, "schema.json"), reply, usage], {
+  const result = spawnSync(process.execPath, [...nodeArgs, bin, ...args, join(dir, "prompt.md"), join(dir, "schema.json"), reply, usage], {
     cwd: dir,
     encoding: "utf8",
     env: { ...process.env, OPENCODE_CONFIG_CONTENT: undefined, OPENCODE_PURE: undefined, OPENCODE_SERVER_PASSWORD: undefined, OPENCODE_SERVER_USERNAME: undefined, PATH: `${dir}${delimiter}${process.env.PATH}`, STUB_LOG: join(dir, "args.json"), STUB_API_LOG: join(dir, "api.jsonl"), STUB_STATE_LOG: join(dir, "state.json"), STUB_RESPONSE: join(dir, "response.json"), ...env },
@@ -363,6 +363,45 @@ for (const failure of ["http", "native", "session", "stream"]) {
   });
 }
 
+for (const [mode, httpError, context] of [
+  ["drop-headers", "", /POST \/session\/root\/message request failed/],
+  ["drop-body", "", /POST \/session\/root\/message response read failed/],
+  ["drop-body", "503", /POST \/session\/root\/message response read failed \(HTTP 503\)/],
+  ["drop-events", "", /GET \/event response read failed/],
+] as const) {
+  test(`OpenCode ${mode} ${httpError} retains the originating error before cleanup without leaking authentication`, (t) => {
+    const password = "fixture-secret";
+    const authorization = Buffer.from(`fixture-user:${password}`).toString("base64");
+    const outcome = adapter(t, "opencode", {
+      STUB_MODE: mode, STUB_HTTP_ERROR: httpError,
+      STUB_STREAM: recording("opencode-structured.jsonl"),
+      OPENCODE_SERVER_PASSWORD: password, OPENCODE_SERVER_USERNAME: "fixture-user",
+    });
+    assert.equal(outcome.status, 1, outcome.stderr);
+    assert.equal(outcome.reply, undefined);
+    assert.equal(outcome.usage, USAGE.opencode);
+    assert.match(outcome.stderr, context);
+    assert.match(outcome.stderr, /\[cause\]: TypeError: (fetch failed|terminated)/);
+    assert.match(outcome.stderr, /\[cause\]: SocketError:/);
+    assert.match(outcome.stderr, /UND_ERR_SOCKET/);
+    assert.match(outcome.stderr, /at /);
+    assert.equal((outcome.stdout + outcome.stderr).includes(password), false);
+    assert.equal((outcome.stdout + outcome.stderr).includes(authorization), false);
+    assert.equal(outcome.requests.filter(request => request.path === "/session/root/message").length, 1);
+    cleaned(outcome);
+  });
+}
+
+test("OpenCode spawn failure retains its original error code and stack", (t) => {
+  const outcome = adapter(t, "opencode", { PATH: "/nonexistent" });
+  assert.equal(outcome.status, 1, outcome.stderr);
+  assert.match(outcome.stderr, /cannot run opencode/);
+  assert.match(outcome.stderr, /\[cause\]: Error: spawn opencode ENOENT/);
+  assert.match(outcome.stderr, /code: 'ENOENT'/);
+  assert.match(outcome.stderr, /at /);
+  assert.equal(outcome.reply, undefined);
+});
+
 for (const [args, auto] of [[[], false], [["--auto"], true], [["--auto=true"], true], [["--auto=false"], false], [["--auto", "false"], false], [["--no-auto"], false]] as [string[], boolean][]) {
   test(`OpenCode permission selection ${JSON.stringify(args)} ${auto ? "approves once" : "rejects"} for root and known descendants only`, (t) => {
     const session = (id: string, parentID: string) => ({ type: "session.created", properties: { info: { id, parentID } } });
@@ -408,37 +447,61 @@ test("OpenCode bounds shutdown when its owned server ignores graceful terminatio
   assert.throws(() => process.kill(outcome.state.pid, 0), /ESRCH/);
 });
 
-test("OpenCode interruption closes its subscription and terminates the owned child", async (t) => {
-  const dir = mkdtempSync(join(tmpdir(), "loop-interrupt-"));
-  t.after(() => rmSync(dir, { recursive: true, force: true }));
-  writeFileSync(join(dir, "opencode"), OPENCODE_STUB);
-  chmodSync(join(dir, "opencode"), 0o755);
-  writeFileSync(join(dir, "prompt.md"), "Do the work.");
-  writeFileSync(join(dir, "schema.json"), '{"type":"object"}');
-  const child = spawn(process.execPath, [fileURLToPath(new URL("dist/src/adapters/opencode.js", root)), join(dir, "prompt.md"), join(dir, "schema.json"), join(dir, "reply.json"), join(dir, "usage.json")], {
-    cwd: dir, env: { ...process.env, OPENCODE_CONFIG_CONTENT: undefined, OPENCODE_PURE: undefined, OPENCODE_SERVER_PASSWORD: undefined, OPENCODE_SERVER_USERNAME: undefined, PATH: `${dir}${delimiter}${process.env.PATH}`, STUB_LOG: join(dir, "args.jsonl"), STUB_API_LOG: join(dir, "api.jsonl"), STUB_STATE_LOG: join(dir, "state.json"), STUB_MODE: "hold", STUB_STREAM: recording("opencode-cut-report.jsonl") },
+for (const mode of ["hold-headers", "hold-body", "hold-events"]) {
+  test(`OpenCode interruption during ${mode} closes its subscription and terminates the owned child`, async (t) => {
+    const dir = mkdtempSync(join(tmpdir(), "loop-interrupt-"));
+    t.after(() => rmSync(dir, { recursive: true, force: true }));
+    writeFileSync(join(dir, "opencode"), OPENCODE_STUB);
+    chmodSync(join(dir, "opencode"), 0o755);
+    writeFileSync(join(dir, "prompt.md"), "Do the work.");
+    writeFileSync(join(dir, "schema.json"), '{"type":"object"}');
+    const child = spawn(process.execPath, [fileURLToPath(new URL("dist/src/adapters/opencode.js", root)), join(dir, "prompt.md"), join(dir, "schema.json"), join(dir, "reply.json"), join(dir, "usage.json")], {
+      cwd: dir, env: { ...process.env, OPENCODE_CONFIG_CONTENT: undefined, OPENCODE_PURE: undefined, OPENCODE_SERVER_PASSWORD: undefined, OPENCODE_SERVER_USERNAME: undefined, PATH: `${dir}${delimiter}${process.env.PATH}`, STUB_LOG: join(dir, "args.jsonl"), STUB_API_LOG: join(dir, "api.jsonl"), STUB_STATE_LOG: join(dir, "state.json"), STUB_MODE: mode, STUB_STREAM: recording("opencode-cut-report.jsonl") },
+    });
+    let stderr = "";
+    child.stderr.on("data", chunk => stderr += chunk);
+    child.stdout.resume();
+    const exited = new Promise(resolve => child.once("close", resolve));
+    t.after(() => { if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL"); });
+    const deadline = Date.now() + 5000;
+    while (!existsSync(join(dir, "api.jsonl")) || !readFileSync(join(dir, "api.jsonl"), "utf8").includes("/message")) {
+      assert.ok(Date.now() < deadline && child.exitCode === null, stderr);
+      await new Promise(resolve => setTimeout(resolve, 10));
+    }
+    // Let the already-written usage events reach the adapter before interrupting it.
+    await new Promise(resolve => setTimeout(resolve, 50));
+    child.kill("SIGTERM");
+    await exited;
+    assert.equal(child.exitCode, 143, stderr);
+    const state = JSON.parse(readFileSync(join(dir, "state.json"), "utf8"));
+    assert.equal(state.streamClosed, true);
+    assert.equal(state.terminated, true);
+    assert.throws(() => process.kill(state.pid, 0), /ESRCH/);
+    assert.equal(existsSync(join(dir, "reply.json")), false);
+    assert.equal(readFileSync(join(dir, "usage.json"), "utf8"), '{"tokens":{"input":11,"output":8,"reasoning":5,"total":24},"costUsd":0}\n');
   });
-  let stderr = "";
-  child.stderr.on("data", chunk => stderr += chunk);
-  child.stdout.resume();
-  const exited = new Promise(resolve => child.once("close", resolve));
-  t.after(() => { if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL"); });
-  const deadline = Date.now() + 5000;
-  while (!existsSync(join(dir, "api.jsonl")) || !readFileSync(join(dir, "api.jsonl"), "utf8").includes("/message")) {
-    assert.ok(Date.now() < deadline && child.exitCode === null, stderr);
-    await new Promise(resolve => setTimeout(resolve, 10));
+}
+
+for (const mode of ["delay-headers", "delay-body", "delay-events"]) {
+  const preload = ["--import", fileURLToPath(new URL("dist/test/fixtures/opencode-timeouts.js", root))];
+  const env = { STUB_MODE: mode, STUB_STREAM: recording("opencode-structured.jsonl") };
+  for (const control of ["agent", "default", "global"]) {
+    test(`OpenCode ${mode} timeout control uses ${control} defaults in the adapter child`, (t) => {
+      const outcome = adapter(t, "opencode", { ...env, TEST_OPENCODE_FETCH: control }, [], undefined, undefined, preload);
+      assert.equal(outcome.status, 1, outcome.stderr);
+      assert.match(outcome.stderr, mode === "delay-headers" ? /UND_ERR_HEADERS_TIMEOUT/ : /UND_ERR_BODY_TIMEOUT/);
+      assert.equal(outcome.reply, undefined);
+      cleaned(outcome);
+    });
   }
-  // Let the already-written usage events reach the adapter before interrupting it.
-  await new Promise(resolve => setTimeout(resolve, 50));
-  child.kill("SIGTERM");
-  await exited;
-  const state = JSON.parse(readFileSync(join(dir, "state.json"), "utf8"));
-  assert.equal(state.streamClosed, true);
-  assert.equal(state.terminated, true);
-  assert.throws(() => process.kill(state.pid, 0), /ESRCH/);
-  assert.equal(existsSync(join(dir, "reply.json")), false);
-  assert.equal(readFileSync(join(dir, "usage.json"), "utf8"), '{"tokens":{"input":11,"output":8,"reasoning":5,"total":24},"costUsd":0}\n');
-});
+  test(`OpenCode explicitly configured transport waits through ${mode}`, (t) => {
+    const outcome = adapter(t, "opencode", env, [], undefined, undefined, preload);
+    assert.equal(outcome.status, 0, outcome.stderr);
+    assert.deepEqual(outcome.reply, REPLY);
+    assert.equal(outcome.usage, USAGE.opencode);
+    cleaned(outcome);
+  });
+}
 
 test("OpenCode 1.18.34/MiMo API recording preserves the cut report, native reply and both model steps", (t) => {
   const recorded = JSON.parse(readFileSync(recording("opencode-api-native.json"), "utf8"));

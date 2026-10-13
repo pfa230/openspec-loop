@@ -51,17 +51,32 @@ const server = http.createServer(async (req, res) => {
     stream(process.env.STUB_STREAM);
     if (process.env.STUB_EXIT) return setTimeout(() => process.exit(Number(process.env.STUB_EXIT)), 30);
     if (process.env.STUB_MODE === "stream-close") { events.end(); return; }
-    if (process.env.STUB_MODE === "hold") return;
+    if (process.env.STUB_MODE === "hold-headers") return;
+    if (process.env.STUB_MODE === "drop-headers") return setTimeout(() => res.destroy(), 50);
+    if (process.env.STUB_MODE === "drop-events") return setTimeout(() => events.destroy(), 50);
     const finish = () => {
       stream(process.env.STUB_LATE_STREAM);
       send({ type: "session.status", properties: { sessionID: "root", status: { type: "idle" } } });
     };
     if (process.env.STUB_HTTP_ERROR) {
       res.statusCode = Number(process.env.STUB_HTTP_ERROR);
+      if (process.env.STUB_MODE === "drop-body") {
+        res.write("{");
+        return setTimeout(() => res.destroy(), 50);
+      }
       return setTimeout(() => res.end(JSON.stringify({ error: "scripted API failure" })), 30);
     }
-    res.end(process.env.STUB_RESPONSE ? fs.readFileSync(process.env.STUB_RESPONSE, "utf8") : JSON.stringify({ info: {}, parts: [] }));
-    setTimeout(finish, 75);
+    const response = process.env.STUB_RESPONSE ? fs.readFileSync(process.env.STUB_RESPONSE, "utf8") : JSON.stringify({ info: {}, parts: [] });
+    if (["hold-body", "delay-body", "drop-body"].includes(process.env.STUB_MODE)) {
+      res.write(response.slice(0, 1));
+      if (process.env.STUB_MODE === "hold-body") return;
+      if (process.env.STUB_MODE === "drop-body") return setTimeout(() => res.destroy(), 50);
+      return setTimeout(() => { res.end(response.slice(1)); finish(); }, 1200);
+    }
+    if (process.env.STUB_MODE === "delay-headers") return setTimeout(() => { res.end(response); finish(); }, 1200);
+    res.end(response);
+    if (process.env.STUB_MODE === "hold-events") return;
+    setTimeout(finish, process.env.STUB_MODE === "delay-events" ? 1200 : 75);
     return;
   }
   res.statusCode = 404;
