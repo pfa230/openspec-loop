@@ -81,3 +81,44 @@ checks:
   assert.equal(repo.calls("reviewer").length, 1);
   assert.equal(existsSync(join(observer, "openspec/loop.local.yaml")), false);
 });
+
+test("agents named on run apply to the run, are written to the run worktree's local file and are kept by a later resume there", (t) => {
+  const repo = makeRepo(t);
+  appendFileSync(join(repo.top, ".git/info/exclude"), "openspec/loop.local.yaml\n");
+  writeFile(repo.top, "openspec/loop.local.yaml", "agents:\n  alt: [stub-agent, implementer, --model, alt]\n");
+  repo.queue("implementer", { exit: 3 });
+  const stopped = runLoop(repo, ["run", "add-thing", "reviewer", "reviser", "alt", "verifier"]);
+  assert.equal(stopped.status, 1, stopped.stdout + stopped.stderr);
+  assert.match(stopped.stdout, /implementer started \(alt\)/);
+  assert.equal(
+    readFileSync(join(repo.worktree, "openspec/loop.local.yaml"), "utf8"),
+    "roles:\n  proposalReviewer: reviewer\n  planReviser: reviser\n  implementer: alt\n  implementationReviewer: verifier\n",
+  );
+
+  const resumed = runLoop(repo, ["resume", "add-thing"], repo.worktree);
+  assert.equal(resumed.status, 0, resumed.stdout + resumed.stderr);
+  const calls = repo.calls("implementer");
+  assert.equal(calls.length, 2);
+  for (const call of calls) assert.deepEqual(call.args.slice(0, 3), ["implementer", "--model", "alt"]);
+});
+
+test("agents named on the command keep the other content of an existing local file", (t) => {
+  const repo = makeRepo(t, { branch: "issue" });
+  appendFileSync(join(repo.top, ".git/info/exclude"), "openspec/loop.local.yaml\n");
+  writeFile(repo.top, "openspec/loop.local.yaml", "agents:\n  alt: [stub-agent, implementer, --model, alt]\nroles:\n  implementer: implementer\nchecks: []\n");
+  const result = runLoop(repo, ["run", "add-thing", "reviewer", "reviser", "alt", "verifier"]);
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.equal(
+    readFileSync(join(repo.top, "openspec/loop.local.yaml"), "utf8"),
+    "agents:\n  alt: [stub-agent, implementer, --model, alt]\nroles:\n  implementer: alt\n  proposalReviewer: reviewer\n  planReviser: reviser\n  implementationReviewer: verifier\nchecks: []\n",
+  );
+});
+
+test("an undefined agent named on the command refuses before anything is written", (t) => {
+  const repo = makeRepo(t);
+  const result = runLoop(repo, ["run", "add-thing", "reviewer", "reviser", "ghost", "verifier"]);
+  assert.equal(result.status, 2);
+  assert.match(result.stderr, /role implementer names agent "ghost", which the configuration does not define/);
+  assert.equal(existsSync(repo.worktree), false);
+  assert.equal(readState(repo.runDir()), undefined);
+});

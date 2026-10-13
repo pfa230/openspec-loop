@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
+import { existsSync } from "node:fs";
 import { test } from "node:test";
 import { loop, makeRepo, runLoop, writeFile } from "./helpers.js";
 
 test("loop prints usage and exits 2", (t) => {
   const repo = makeRepo(t);
-  for (const args of [[], ["run"], ["step"], ["unknown", "add-thing"], ["run", "add-thing", "extra"], ["step", "add-thing", "extra"],
+  for (const args of [[], ["run"], ["step"], ["unknown", "add-thing"], ["run", "add-thing", "extra"], ["step", "add-thing", "extra"], ["run", "add-thing", "a", "b", "c"],
     ["scope"], ["scope", "start"], ["scope", "finish"], ["scope", "other", "session"], ["scope", "start", "session", "extra"], ["scope", "finish", "session", "--force"]]) {
     const result = loop(args, { cwd: repo.top, env: repo.env });
     assert.equal(result.status, 2, args.join(" "));
@@ -46,6 +47,16 @@ test("--attempts and --implement are accepted only on resume, each once, --attem
     assert.equal(accepted.status, 2, extra.join(" "));
     assert.match(accepted.stderr, /add-thing has no run/, extra.join(" "));
   }
+});
+
+test("run, step and resume accept four agent aliases, resume also before its options", (t) => {
+  const repo = makeRepo(t);
+  for (const args of [["run", "add-thing"], ["step", "add-thing"], ["resume", "add-thing"]]) {
+    const result = runLoop(repo, [...args, "reviewer", "ghost", "implementer", "verifier", ...(args[0] === "resume" ? ["--attempts", "2"] : [])]);
+    assert.equal(result.status, 2, args.join(" "));
+    assert.match(result.stderr, /role planReviser names agent "ghost", which the configuration does not define/, args.join(" "));
+  }
+  assert.equal(existsSync(repo.worktree), false);
 });
 
 for (const command of ["run", "step"]) {

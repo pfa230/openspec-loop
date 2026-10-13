@@ -701,7 +701,7 @@ In `pr` and `merge` modes, the remote SHALL be the remote of the default branch'
 - **THEN** status retains stopped or interrupted semantics, and step/resume uses existing takeover rules, refusing while the dead controller's worker group survives and redoing incomplete work once takeover is permitted
 
 #### Scenario: Step options remain minimal
-- **WHEN** step is invoked with extra arguments, including attempts or implement options
+- **WHEN** step is invoked with extra arguments other than four agent aliases, including attempts or implement options
 - **THEN** the CLI refuses the syntax with usage and exit status 2; those options remain exclusive to resume
 
 ### Requirement: Scoping session commands
@@ -904,3 +904,32 @@ Setup SHALL require a Git working tree, without loading loop configuration, requ
 - **WHEN** setup succeeds in a configured project
 - **THEN** loop configuration, OpenSpec configuration, ignore files, Git refs, the index and existing run state remain unchanged
 - **AND** only the invoking checkout's bundled skill destinations are installed or refreshed
+
+### Requirement: Role agents on the command
+
+`loop run`, `loop step` and `loop resume` SHALL accept no agent aliases or exactly four after the change name, in role order: proposal reviewer, plan reviser, implementer, implementation reviewer. The command SHALL run with them and SHALL write them as the `roles` entries of `openspec/loop.local.yaml` in the run's worktree, keeping the file's other content. Each alias SHALL resolve through the configuration. The supervision skill SHALL pass aliases the user names.
+
+#### Scenario: Agents named on run
+- **WHEN** the configuration defines `claude`, `codex`, `muse` and `deepseek`, and the user runs `loop run add-thing claude codex muse deepseek`
+- **THEN** `claude` reviews the proposal, `codex` revises the plan, `muse` implements and `deepseek` reviews the implementation
+- **AND** the run worktree's `openspec/loop.local.yaml` assigns those four agents to the roles
+
+#### Scenario: Existing local file kept
+- **WHEN** the run worktree's local file already defines agents or other settings and the user names four aliases
+- **THEN** only its `roles` entries change
+
+#### Scenario: Later command from the run's worktree
+- **WHEN** the four agents are defined in configuration the run's worktree reads, and the user later runs `loop resume add-thing` or `loop step add-thing` without aliases from that worktree
+- **THEN** the run continues with the written agents
+
+#### Scenario: Unresolvable alias
+- **WHEN** an alias on the command is not defined by the configuration, or its agent's command cannot be found
+- **THEN** the loop refuses, names the role and the alias, and changes nothing
+
+#### Scenario: Wrong number of aliases
+- **WHEN** the user gives one, two, three or more than four aliases
+- **THEN** the loop prints usage, exits 2 and changes nothing
+
+#### Scenario: Skill invoked with agents
+- **WHEN** the user asks the supervision skill to run a change with four agents
+- **THEN** the skill runs the command with those aliases in role order
