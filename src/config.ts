@@ -105,7 +105,7 @@ export function writeLocalRoles(checkout: string, roles: Record<Role, string>): 
   const path = join(checkout, LOCAL_CONFIG_PATH);
   const doc = parseDocument(readText(path) ?? "");
   if (doc.errors.length > 0) throw new Refusal(`${path} is not valid YAML: ${doc.errors[0]!.message}`);
-  for (const role of ROLES) doc.setIn(["roles", role], doc.createNode(roles[role]));
+  for (const role of ROLES) doc.setIn(["roles", role], roles[role]);
   writeFileSync(path, doc.toString({ flowCollectionPadding: false }));
 }
 
