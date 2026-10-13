@@ -89,23 +89,28 @@ ${files.map((file) => `- ${file}`).join("\n")}
 
 The spec deltas under the change's \`specs/\` modify the main specs under \`openspec/specs/\`. Read any other repository file you need to judge the plan. Task completion marks in the tasks file are bookkeeping, not part of the plan.
 
-Judge two things:
+Judge these criteria:
 1. Can the whole plan be implemented and verified as one change without asking the user?
 2. Does the plan keep the decisions recorded in its design?
+${rulesCriterion("plan")}
 
 ${findingRules("plan")}
 `;
 }
 
+function rulesCriterion(subject: string): string {
+  return `3. Does the ${subject} follow the rules that the repository's instructions for agents, such as \`AGENTS.md\` or \`CLAUDE.md\`, set for what a change contains? A rule for how an agent works or reports is not one of them.`;
+}
+
 function findingRules(subject: string): string {
   return `Report each problem as a finding:
-- severity "blocking": the ${subject} fails one of the two criteria.
+- severity "blocking": the ${subject} fails one of the criteria.
 - severity "minor": a local fix that cannot change behavior or a decision recorded in the design, such as a typo, an unclear sentence or a wrong path.
 - location: the file, and the section or line.
 - problem: what is wrong and what would fix it.
 - question: null, unless resolving the finding needs a decision the plan does not record. Then write the question the user must answer, so that the answer can be recorded in the design. Do not make such a decision yourself.
 
-Return no findings when the ${subject} passes both criteria. Do not create, modify or delete any file, and do not commit. ${DATA}`;
+Return no findings when the ${subject} passes every criterion. Do not create, modify or delete any file, and do not commit. ${DATA}`;
 }
 
 // The implementer's prompt: implement the plan, address the last attempt's findings, or, with fix, apply an approval's minor findings.
@@ -151,9 +156,10 @@ ${files.map((file) => `- ${file}`).join("\n")}
 
 The change branches from commit ${base}, and commit ${commit} is the candidate. Review the patch \`git diff ${base} ${commit} -- '${outsideChange(change)}'\`, which leaves out the change's directory: the plan there is approved and is not under review. ${checked}
 
-Judge two things:
+Judge these criteria:
 1. Does the patch implement the whole approved plan?
 2. Does it stay within the plan and keep the decisions recorded in its design?
+${rulesCriterion("patch")}
 
 ${findingRules("patch")}
 `;
