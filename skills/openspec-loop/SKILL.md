@@ -11,6 +11,7 @@ The loop runs a committed OpenSpec change unattended. Supervision uses only thes
 - `loop step <change>` enrolls a new run or continues an existing one through the first successful pending-stage completion, including its internal cycles and recovery handoffs. It exits 0 when it returns control between stages or completes the whole run, 1 when it stops and 2 when it refuses. It shares the existing state, preparation, lock, transcripts and configured attempt budgets; it accepts no options.
 - `loop status <change>` shows the run's state, branch, stages and locations.
 - `loop stop <change>` ends the current step at once; the active advancement then prints its stop report.
+- `loop run`, `loop step` and `loop resume` accept four agent aliases after the change name, in role order: proposal reviewer, plan reviser, implementer, implementation reviewer. When the user names four agents, pass them in that order, for example `loop run <change> claude codex muse deepseek`. The loop writes them to the run worktree's `openspec/loop.local.yaml`, so later commands invoked from that worktree keep them.
 - `loop resume <change>` continues a run that is between stages, stopped or interrupted, with a fresh attempt budget; `loop resume <change> --attempts <n>` sets that budget, and `--implement` sends the run back to the implementer, which implements the plan as it stands; proposal review stays as it is, so an approved plan is not reviewed again. It advances in the foreground like `loop run`, with the same output and exit statuses.
 
 ## Rules

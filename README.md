@@ -205,9 +205,11 @@ The commands work from any checkout of the repository:
 |---|---|---|
 | `loop run <change>` | Starts a run and advances it in the foreground, printing a progress line as each step starts and ends, then a report. | 0 completed, 1 stopped, 2 refused |
 | `loop step <change>` | Enrolls a new run or continues an existing one, returning after the first pending stage succeeds with its normal review/revision cycle. Reports the next stage and how to continue. | 0 boundary or completed, 1 stopped, 2 refused |
-| `loop resume <change> [--attempts <n>] [--implement]` | Continues a run that is between stages, stopped or interrupted, from its first incomplete stage, with a fresh attempt budget: the configured one, or `<n>` when given. `--implement` first makes implementation and every later stage incomplete, so the implementer implements the plan as it stands; it is refused once the change is archived. | 0 completed, 1 stopped, 2 refused |
+| `loop resume <change> [<agents>] [--attempts <n>] [--implement]` | Continues a run that is between stages, stopped or interrupted, from its first incomplete stage, with a fresh attempt budget: the configured one, or `<n>` when given. `--implement` first makes implementation and every later stage incomplete, so the implementer implements the plan as it stands; it is refused once the change is archived. | 0 completed, 1 stopped, 2 refused |
 | `loop stop <change>` | Ends the current step at once; the run reports how to resume. Ctrl-C and closing the terminal do the same. | 0, 2 if there is no run |
 | `loop status <change>` | Shows the run's state, branch, stages and locations. | 0, 2 if there is no run |
+
+`run`, `step` and `resume` accept four agent aliases after the change name, in role order: proposal reviewer, plan reviser, implementer, implementation reviewer. For example, `loop run <change> claude codex muse deepseek`. Each must be an agent the configuration defines. The command runs with them and writes them as the `roles` of `openspec/loop.local.yaml` in the run's worktree, keeping the file's other content, so later commands invoked from that worktree use them too.
 
 To inspect an approved plan and then a reviewed implementation, use the same committed change with:
 

@@ -1,6 +1,6 @@
-import { accessSync, constants, readFileSync, statSync } from "node:fs";
+import { accessSync, constants, readFileSync, statSync, writeFileSync } from "node:fs";
 import { delimiter, join, resolve } from "node:path";
-import { parse } from "yaml";
+import { parse, parseDocument } from "yaml";
 import { primaryCheckout } from "./git.js";
 import { Refusal } from "./refusal.js";
 
@@ -98,6 +98,15 @@ export function resolveRoles(top: string, config: Config): Record<Role, Agent> {
     agents[role] = { alias, command: [path, ...args] };
   }
   return agents;
+}
+
+// Sets the roles of a checkout's local file, keeping its other content.
+export function writeLocalRoles(checkout: string, roles: Record<Role, string>): void {
+  const path = join(checkout, LOCAL_CONFIG_PATH);
+  const doc = parseDocument(readText(path) ?? "");
+  if (doc.errors.length > 0) throw new Refusal(`${path} is not valid YAML: ${doc.errors[0]!.message}`);
+  for (const role of ROLES) doc.setIn(["roles", role], roles[role]);
+  writeFileSync(path, doc.toString({ flowCollectionPadding: false }));
 }
 
 function readText(path: string): string | undefined {

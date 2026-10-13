@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync } from "node:fs";
 import { setTimeout as sleep } from "node:timers/promises";
 import { join, resolve } from "node:path";
-import { type Config, readConfig, resolveRoles } from "./config.js";
+import { type Config, readConfig, resolveRoles, ROLES, writeLocalRoles } from "./config.js";
 import { advance, continuation, locations, progress, type Setup } from "./controller.js";
 import { deliveryBase, git, gitMessage, gitSucceeds, topLevel } from "./git.js";
 import { checkOpenSpec } from "./openspec.js";
@@ -19,22 +19,23 @@ import {
   writeState,
 } from "./state.js";
 
-export async function run(change: string): Promise<number> {
-  return start(change, "run");
+export async function run(change: string, roles?: string[]): Promise<number> {
+  return start(change, "run", roles);
 }
 
-export async function step(change: string): Promise<number> {
-  return start(change, "step");
+export async function step(change: string, roles?: string[]): Promise<number> {
+  return start(change, "step", roles);
 }
 
-export async function resume(change: string, attempts?: number, implement = false): Promise<number> {
-  return start(change, "resume", attempts, implement);
+export async function resume(change: string, roles?: string[], attempts?: number, implement = false): Promise<number> {
+  return start(change, "resume", roles, attempts, implement);
 }
 
 // Every advancement prepares and takes the same lock before enrolling or loading the run.
-async function start(change: string, command: "run" | "step" | "resume", attempts?: number, implement = false): Promise<number> {
+// Agent aliases named on the command replace the configured roles, in role order.
+async function start(change: string, command: "run" | "step" | "resume", roles?: string[], attempts?: number, implement = false): Promise<number> {
   const top = topLevel(process.cwd());
-  const setup = prepare(top, attempts);
+  const setup = prepare(top, attempts, roles);
   const dir = runDir(top, change);
   if (command === "resume" && !existsSync(dir)) throw noRun(change);
   mkdirSync(dir, { recursive: true });
@@ -44,6 +45,7 @@ async function start(change: string, command: "run" | "step" | "resume", attempt
       : command === "step" ? readState(dir) ?? enroll(top, dir, change, setup.config)
       : existingState(dir, change);
     if (implement) reimplement(state);
+    if (roles) writeLocalRoles(state.worktree, setup.config.roles);
     if (deadPid !== undefined) progress(`took over run ${change} from process ${deadPid}, which died`);
     return await advance(dir, state, setup, command === "step");
   } catch (error) {
@@ -53,8 +55,9 @@ async function start(change: string, command: "run" | "step" | "resume", attempt
 }
 
 // Reads what an advancement needs, refusing before anything advances.
-function prepare(top: string, attempts: number | undefined): Setup {
+function prepare(top: string, attempts: number | undefined, roles: string[] | undefined): Setup {
   const config = readConfig(top);
+  if (roles) config.roles = Object.fromEntries(ROLES.map((role, index) => [role, roles[index]])) as Config["roles"];
   const agents = resolveRoles(top, config);
   const base = deliveryBase(top, config);
   checkOpenSpec();

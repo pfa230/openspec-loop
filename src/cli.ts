@@ -5,11 +5,12 @@ import { finishScope, startScope } from "./scope.js";
 import { setup } from "./setup.js";
 
 const COMMANDS = { run, step, status, stop, resume };
-const USAGE = "Usage: loop <run|step|status|stop> <change>\n       loop resume <change> [--attempts <n>] [--implement]\n       loop scope <start|finish> <session>\n       loop setup\n";
+const USAGE = "Usage: loop <status|stop> <change>\n       loop <run|step> <change> [<proposalReviewer> <planReviser> <implementer> <implementationReviewer>]\n       loop resume <change> [<the four agents>] [--attempts <n>] [--implement]\n       loop scope <start|finish> <session>\n       loop setup\n";
 
 interface Args {
   name: keyof typeof COMMANDS;
   change: string;
+  roles?: string[];
   attempts?: number;
   implement: boolean;
 }
@@ -24,6 +25,10 @@ function parseArgs(argv: string[]): Args | { name: "scope"; action: "start" | "f
   }
   if (name === undefined || !Object.hasOwn(COMMANDS, name) || change === undefined) return undefined;
   const args: Args = { name: name as keyof typeof COMMANDS, change, implement: false };
+  const options = extra.findIndex((arg) => arg.startsWith("--"));
+  const aliases = options === -1 ? extra.length : options;
+  if (aliases === 4 && name !== "status" && name !== "stop") args.roles = extra.splice(0, 4);
+  else if (aliases !== 0) return undefined;
   if (extra.length > 0 && name !== "resume") return undefined;
   while (extra.length > 0) {
     const option = extra.shift();
@@ -52,8 +57,10 @@ if (parsed === undefined) {
     } else if (parsed.name === "scope") {
       process.exitCode = parsed.action === "start" ? await startScope(parsed.session) : await finishScope(parsed.session);
     } else {
-      const { name, change, attempts, implement } = parsed;
-      process.exitCode = name === "resume" ? await resume(change, attempts, implement) : await COMMANDS[name](change);
+      const { name, change, roles, attempts, implement } = parsed;
+      process.exitCode = name === "resume" ? await resume(change, roles, attempts, implement)
+        : name === "run" || name === "step" ? await COMMANDS[name](change, roles)
+        : await COMMANDS[name](change);
     }
   } catch (error) {
     if (!(error instanceof Refusal)) throw error;
