@@ -58,13 +58,13 @@ The committed `openspec/loop.yaml` defines the default branch, worktree director
 defaultBranch: main
 worktrees: .worktrees
 agents:
-  gpt: [loop-codex, -s, read-only]
+  codex: [loop-codex, -s, read-only]
   opus: [loop-claude, --model, opus, --permission-mode, auto]
 roles:
-  proposalReviewer: gpt
+  proposalReviewer: codex
   planReviser: opus
   implementer: opus
-  implementationReviewer: gpt
+  implementationReviewer: codex
 attempts:
   proposalReview: 3
   implementation: 3
@@ -228,7 +228,7 @@ Alternatively, continue with `loop step <change>` through integration, archival 
 
 Each `step` call receives fresh configured attempt budgets. If implementation returns the plan for revision or integration returns findings to implementation, the same call follows that handoff and returns when the first stage succeeds; the next stage can therefore be an earlier one. Failures and decision questions stop with the usual cause and recovery. After resolving the stop, use `step` or `resume` explicitly to continue.
 
-When a worker step ends, its progress line names the agent and every usage counter the harness reported, such as `(gpt; input_tokens=16641, cached_input_tokens=0, cache_write_input_tokens=0, output_tokens=59, reasoning_output_tokens=21, cost unavailable)`. The counters and cost are exactly what the harness reported. A value it did not report reads `unavailable`, never zero; an explicitly reported zero stays zero, and `usage unavailable` means it reported nothing.
+When a worker step ends, its progress line names the agent and every usage counter the harness reported, such as `(codex; input_tokens=16641, cached_input_tokens=0, cache_write_input_tokens=0, output_tokens=59, reasoning_output_tokens=21, cost unavailable)`. The counters and cost are exactly what the harness reported. A value it did not report reads `unavailable`, never zero; an explicitly reported zero stays zero, and `usage unavailable` means it reported nothing.
 
 The report at the end of `loop run`, `loop resume` and `loop step`, whether the run completed, stopped or returned control between stages, totals the usage by role over every worker step the run has had, across every advancement:
 
