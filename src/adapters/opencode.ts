@@ -2,6 +2,8 @@
 // OpenCode's prompt API decodes the native format; text stays in the transcript.
 import { spawn } from "node:child_process";
 import { writeFileSync } from "node:fs";
+import { inspect } from "node:util";
+import { Agent, fetch, type Response } from "undici";
 import { counters, fail, invocation, usage, writeReply } from "./common.js";
 
 const { args, prompt, schema, replyPath, usagePath } = invocation();
@@ -49,12 +51,14 @@ interface Event {
 interface PromptResponse { info: { structured?: unknown; error?: unknown } }
 
 const controller = new AbortController();
+const dispatcher = new Agent({ headersTimeout: 0, bodyTimeout: 0 });
 const steps = new Map<string, StepPart>();
 let failure: { message: string; status: number } | undefined;
 let closing = false;
-function stop(message: string, status = 1): void {
-  failure ??= { message, status };
-  controller.abort(new Error(message));
+function stop(error: string | Error, status = 1): void {
+  const reason = typeof error === "string" ? new Error(error) : error;
+  failure ??= { message: reason.message, status };
+  controller.abort(reason);
 }
 const failed = new Promise<never>((_, reject) => {
   controller.signal.addEventListener("abort", () => reject(controller.signal.reason), { once: true });
@@ -62,7 +66,7 @@ const failed = new Promise<never>((_, reject) => {
 // Abort can precede the readiness race, or occur during final cleanup.
 void failed.catch(() => {});
 const child = spawn("opencode", ["serve", "--hostname", "127.0.0.1", "--port", "0", "--mdns=false", ...(pure === undefined ? [] : [`--pure=${pure}`])], { stdio: ["ignore", "pipe", "inherit"] });
-child.once("error", (error) => stop(`cannot run opencode: ${error.message}`));
+child.once("error", (error) => stop(new Error(`cannot run opencode: ${error.message}`, { cause: error })));
 const exited = new Promise<void>((resolve) => {
   child.once("exit", (code, signal) => {
     // An HTTP disconnect can precede the exit notification. Cleanup must not
@@ -100,24 +104,47 @@ let base: string;
 async function request(path: string, body?: unknown): Promise<Response> {
   const url = new URL(path, base);
   url.searchParams.set("directory", process.cwd());
-  const response = await fetch(url, { method: body === undefined ? "GET" : "POST", headers, body: body === undefined ? undefined : JSON.stringify(body), signal: controller.signal });
+  const method = body === undefined ? "GET" : "POST";
+  let response: Response;
+  try {
+    response = await fetch(url, { method, headers, body: body === undefined ? undefined : JSON.stringify(body), signal: controller.signal, dispatcher });
+  } catch (error) {
+    throw new Error(`opencode API ${method} ${path} request failed`, { cause: error });
+  }
   if (!response.ok) {
-    process.stdout.write(`${JSON.stringify({ type: "api.error", path, status: response.status, error: await response.text() })}\n`);
-    throw new Error(`opencode API ${path} failed with HTTP ${response.status}`);
+    let text: string;
+    try {
+      text = await response.text();
+    } catch (error) {
+      throw new Error(`opencode API ${method} ${path} response read failed (HTTP ${response.status})`, { cause: error });
+    }
+    process.stdout.write(`${JSON.stringify({ type: "api.error", path, status: response.status, error: text })}\n`);
+    throw new Error(`opencode API ${method} ${path} failed with HTTP ${response.status}`);
   }
   return response;
 }
 
+async function json(path: string, body?: unknown): Promise<unknown> {
+  const response = await request(path, body);
+  try {
+    return await response.json();
+  } catch (error) {
+    throw new Error(`opencode API ${body === undefined ? "GET" : "POST"} ${path} response read failed`, { cause: error });
+  }
+}
+
 async function events(response: Response, sessionID: string): Promise<void> {
-  if (!response.body) throw new Error("opencode event stream has no body");
+  if (!response.body) throw new Error("opencode API GET /event response read failed: event stream has no body");
   const sessions = new Set([sessionID]);
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let pending = "";
   try {
     while (true) {
-      const { value, done } = await reader.read();
-      if (done) throw new Error("opencode event stream closed before the prompt completed");
+      const { value, done } = await reader.read().catch(error => {
+        throw new Error("opencode API GET /event response read failed", { cause: error });
+      });
+      if (done) throw new Error("opencode API GET /event response read failed: event stream closed before the prompt completed");
       pending += decoder.decode(value, { stream: true });
       let boundary: RegExpExecArray | null;
       while ((boundary = /\r?\n\r?\n/.exec(pending))) {
@@ -125,7 +152,12 @@ async function events(response: Response, sessionID: string): Promise<void> {
         pending = pending.slice(boundary.index + boundary[0].length);
         const data = block.split(/\r?\n/).filter(line => line.startsWith("data:")).map(line => line.slice(5).replace(/^ /, "")).join("\n");
         if (!data) continue;
-        const event = JSON.parse(data) as Event;
+        let event: Event;
+        try {
+          event = JSON.parse(data) as Event;
+        } catch (error) {
+          throw new Error("opencode API GET /event response read failed", { cause: error });
+        }
         process.stdout.write(`${JSON.stringify(event)}\n`);
         const props = event.properties;
         if (event.type === "session.created" && props.info?.parentID && sessions.has(props.info.parentID)) sessions.add(props.info.id);
@@ -147,24 +179,25 @@ let response: PromptResponse | undefined;
 let streamed: Promise<void> | undefined;
 try {
   base = await Promise.race([ready, failed]);
-  const session = await (await request("/session", { permission: ["question", "plan_enter", "plan_exit"].map(permission => ({ permission, pattern: "*", action: "deny" })) })).json() as { id: string };
+  const session = await json("/session", { permission: ["question", "plan_enter", "plan_exit"].map(permission => ({ permission, pattern: "*", action: "deny" })) }) as { id: string };
   streamed = events(await request("/event"), session.id);
   const model = selections.model?.split("/");
   const result = (async () => {
-    const returned = await (await request(`/session/${session.id}/message`, {
+    const returned = await json(`/session/${session.id}/message`, {
       format,
       ...(model && { model: { providerID: model[0], modelID: model.slice(1).join("/") } }),
       ...(selections.agent && { agent: selections.agent }),
       ...(selections.variant && { variant: selections.variant }),
       parts: [{ type: "text", text: `${prompt}\nAfter completing the work and any required presentation, finish by calling OpenCode's StructuredOutput tool with the reply matching the supplied schema. Text is kept in the transcript and cannot serve as the reply.` }],
-    })).json() as PromptResponse;
+    }) as PromptResponse;
     process.stdout.write(`${JSON.stringify({ type: "prompt.response", response: returned })}\n`);
     return returned;
   })();
   [response] = await Promise.all([result, streamed]);
   if (response.info.error) throw new Error(`opencode response error: ${JSON.stringify(response.info.error)}`);
 } catch (error) {
-  stop(error instanceof Error ? error.message : String(error));
+  process.stderr.write(`${inspect(error, { depth: null })}\n`);
+  stop(error instanceof Error ? error : String(error));
 } finally {
   clearTimeout(startupTimer);
   closing = true;
