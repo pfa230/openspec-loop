@@ -178,9 +178,15 @@ try {
   process.off("SIGTERM", onTerm);
   const tokens: Record<string, number> = Object.create(null);
   let cost: number | undefined;
+  // Preserve invalid quantities for the worker's usage-file validation.
+  const add = (total: number | undefined, count: number): number => {
+    if (total !== undefined && (!Number.isFinite(total) || total < 0)) return total;
+    if (!Number.isFinite(count) || count < 0) return count;
+    return (total ?? 0) + count;
+  };
   for (const part of steps.values()) {
-    for (const [name, count] of Object.entries(counters(part.tokens))) tokens[name] = (tokens[name] ?? 0) + count;
-    if (typeof part.cost === "number") cost = (cost ?? 0) + part.cost;
+    for (const [name, count] of Object.entries(counters(part.tokens))) tokens[name] = add(tokens[name], count);
+    if (typeof part.cost === "number") cost = add(cost, part.cost);
   }
   const reported = usage(tokens, cost);
   if (reported) writeFileSync(usagePath, `${JSON.stringify(reported)}\n`);

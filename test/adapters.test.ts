@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
+import { readUsage } from "../src/step.js";
 import { OPENCODE_STUB } from "./helpers.js";
 
 const root = new URL("../../", import.meta.url);
@@ -311,6 +312,42 @@ test("OpenCode drains response-before-idle events and sums each latest root step
   assert.equal(outcome.status, 0, outcome.stderr);
   assert.equal(outcome.usage, '{"tokens":{"input":150,"output":2,"reasoning":0,"cache.read":4,"cache.write":0,"total":156,"new_requests":6,"iterations.0.input_tokens":150},"costUsd":0.75}\n');
   cleaned(outcome);
+});
+
+for (const field of ["tool_requests", "details.tool_requests", "costUsd"]) {
+  for (const counts of [[-1, 5], [5, -1]]) {
+    test(`OpenCode retains negative ${field} across distinct steps in order ${counts}`, (t) => {
+      const stream = eventFile(t, counts.map((count, index) => nativeEvent({
+        id: `step-${index}`,
+        type: "step-finish",
+        tokens: field === "costUsd" ? { tool_requests: 2 } : {
+          input: 2,
+          ...(field === "tool_requests" ? { tool_requests: count } : { details: { tool_requests: count } }),
+        },
+        cost: field === "costUsd" ? count : 0,
+      })));
+      const outcome = adapter(t, "opencode", { STUB_STREAM: stream });
+      assert.equal(outcome.status, 0, outcome.stderr);
+      assert.deepEqual(outcome.reply, REPLY);
+      assert.deepEqual(JSON.parse(outcome.usage as string), field === "costUsd"
+        ? { tokens: { tool_requests: 4 }, costUsd: -1 }
+        : { tokens: { input: 4, [field]: -1 }, costUsd: 0 });
+      assert.deepEqual(readUsage(join(outcome.dir, "usage.json")), { problem: "the usage file does not match the usage format" });
+    });
+  }
+}
+
+test("OpenCode replaces an invalid earlier snapshot with valid latest step usage", (t) => {
+  const step = (id: string, count: number) => nativeEvent({
+    id, type: "step-finish", tokens: { tool_requests: count, details: { tool_requests: count } }, cost: count,
+  });
+  const stream = eventFile(t, [step("first", -1), step("first", 5), step("second", 2)]);
+  const outcome = adapter(t, "opencode", { STUB_STREAM: stream });
+  assert.equal(outcome.status, 0, outcome.stderr);
+  assert.deepEqual(outcome.reply, REPLY);
+  const expected = { tokens: { tool_requests: 7, "details.tool_requests": 7 }, costUsd: 7 };
+  assert.deepEqual(JSON.parse(outcome.usage as string), expected);
+  assert.deepEqual(readUsage(join(outcome.dir, "usage.json")), { usage: expected });
 });
 
 for (const failure of ["http", "native", "session", "stream"]) {
