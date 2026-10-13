@@ -58,7 +58,7 @@ The committed `openspec/loop.yaml` defines the default branch, worktree director
 defaultBranch: main
 worktrees: .worktrees
 agents:
-  gpt: [loop-codex, -m, gpt-5.5, -s, read-only]
+  gpt: [loop-codex, -s, read-only]
   opus: [loop-claude, --model, opus, --permission-mode, auto]
 roles:
   proposalReviewer: gpt
