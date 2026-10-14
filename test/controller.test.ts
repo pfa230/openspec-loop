@@ -52,9 +52,9 @@ for (const branch of [undefined, "add-thing"]) {
       "Run add-thing completed.\n" +
         `Worktree: ${worktree}\nRun directory: ${repo.runDir()}\nTranscripts: ${join(repo.runDir(), "transcripts")}\n` +
         "Usage by role:\n" +
-        "  proposalReviewer: 1 step, 1 without usage; tokens unavailable, cost unavailable\n" +
-        "  implementer: 1 step, 1 without usage; tokens unavailable, cost unavailable\n" +
-        "  implementationReviewer: 1 step, 1 without usage; tokens unavailable, cost unavailable\n",
+        "  proposalReviewer: 1 step, 1 without usage; input unavailable, output unavailable, cost unavailable\n" +
+        "  implementer: 1 step, 1 without usage; input unavailable, output unavailable, cost unavailable\n" +
+        "  implementationReviewer: 1 step, 1 without usage; input unavailable, output unavailable, cost unavailable\n",
     );
   });
 }
@@ -81,8 +81,8 @@ test("a failing stage stops the run with a report naming the stage, cause, recov
       "Recovery: loop resume add-thing\n" +
       `Worktree: ${repo.worktree}\nRun directory: ${dir}\nTranscripts: ${join(dir, "transcripts")}\n` +
       "Usage by role:\n" +
-      "  proposalReviewer: 1 step, 1 without usage; tokens unavailable, cost unavailable\n" +
-      "  implementer: 1 step, 1 without usage; tokens unavailable, cost unavailable\n",
+      "  proposalReviewer: 1 step, 1 without usage; input unavailable, output unavailable, cost unavailable\n" +
+      "  implementer: 1 step, 1 without usage; input unavailable, output unavailable, cost unavailable\n",
   );
   assert.match(readFileSync(`${step}.log`, "utf8"), /^stub implementer turn/);
 });

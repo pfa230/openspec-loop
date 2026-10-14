@@ -120,18 +120,16 @@ An agent's command is an adapter followed by arguments for its harness. The pack
 | `loop-agy` | Antigravity 1.2.17 | none | `--dangerously-skip-permissions` |
 | `loop-opencode` | OpenCode 1.18.34 | `--agent plan` | none |
 
-Each adapter writes every numeric field in its harness's usage or token object to the usage file, even when the harness then fails. These are examples from the recorded output, not fixed lists of supported counters:
+Each adapter writes its harness's reported usage to the usage file as two token totals and any reported cost, even when the harness then fails. Input tokens are every prompt token the model processed, cached or not; output tokens are every token it generated, reasoning included. The harnesses count differently, so each adapter adds the native fields that make up those totals:
 
-| Adapter | Example usage counters | Cost in recorded output |
-|---|---|---|
-| `loop-claude` | `input_tokens`, `cache_creation_input_tokens`, `cache_read_input_tokens`, `output_tokens`, `output_tokens_details.thinking_tokens`, `server_tool_use.web_search_requests` | Reported |
-| `loop-codex` | `input_tokens`, `cached_input_tokens`, `cache_write_input_tokens`, `output_tokens`, `reasoning_output_tokens` | Not reported |
-| `loop-agy` | `input_tokens`, `cache_read_tokens`, `output_tokens`, `thinking_tokens`, `total_tokens` | Not reported |
-| `loop-opencode` | `input`, `cache.read`, `cache.write`, `output`, `reasoning`, `total`, summed over the model steps of the turn | Reported, summed likewise |
+| Adapter | Input tokens | Output tokens | Cost |
+|---|---|---|---|
+| `loop-claude` | `input_tokens` + `cache_creation_input_tokens` + `cache_read_input_tokens` | `output_tokens` | Reported |
+| `loop-codex` | `input_tokens`, which includes `cached_input_tokens` | `output_tokens`, which includes `reasoning_output_tokens` | Not reported |
+| `loop-agy` | `input_tokens` + `cache_read_tokens` | `output_tokens`, which includes `thinking_tokens` | Not reported |
+| `loop-opencode` | `input` + `cache.read` + `cache.write`, summed over the model steps of the turn | `output` + `reasoning`, summed likewise | Reported, summed likewise |
 
-Counters keep the harness's own names, because the harnesses count differently: Claude Code's `input_tokens` leaves out cache reads, while Codex's `input_tokens` includes its `cached_input_tokens`. A cost is the harness's own figure. Claude Code reports list price even under a subscription, and OpenCode reports `0` for a model it has no price for.
-
-Nested counters use dotted paths, such as `cache_creation.ephemeral_1h_input_tokens`; arrays include the index, such as `iterations.0.input_tokens`. Strings, nulls and other nonnumeric metadata stay in the transcript. Claude Code's `result.usage` supplies the counters for the report; its separate `modelUsage` block, including per-model details and output/context limits, stays in the transcript. Claude Code and Antigravity use their last result summary, Codex its last completed turn, and OpenCode sums its model steps. Usage collection adds no command or API call, and never calculates an unreported cost.
+A total adds the fields the harness reported and is left out when it reported none of them. A negative or nonfinite field makes the total invalid, which stops the run as an execution failure. A cost is the harness's own figure. Claude Code reports list price even under a subscription, and OpenCode reports `0` for a model it has no price for. Claude Code and Antigravity use their last result summary, Codex its last completed turn, and OpenCode sums its model steps. Usage collection adds no command or API call, and never calculates an unreported cost. The harness's native counters, such as cache and reasoning breakdowns, stay in the step's transcript.
 
 Add the model flag of the harness (`--model`, `-m`) to choose a model. Without restriction arguments, a harness runs with its own defaults; headless Claude Code and Codex cannot edit files by default.
 
@@ -151,7 +149,7 @@ Additional tools require an adapter that implements the worker interface. The lo
 
 The command runs in the run's worktree without standard input. Its output becomes the step transcript. Success requires exit status 0 and a reply file containing a JSON object that matches the supplied schema. Any other outcome stops the run as an execution failure.
 
-The command may also write what its harness reported spending to the usage file, as a JSON object with two optional keys: `tokens`, which maps each numeric usage counter (including token and request counts), under the harness's own name or nested path, to a finite non-negative number, and `costUsd`, a finite non-negative cost in US dollars. Every counter name is accepted without a fixed list. Without a usage file, the step's usage shows as unavailable. A usage file that is not such an object, including a negative or nonfinite counter, stops the run as an execution failure.
+The command may also write what its harness reported spending to the usage file, as a JSON object with three optional keys, each a finite non-negative number: `inputTokens`, every prompt token the model processed, cached or not; `outputTokens`, every token it generated, reasoning included; and `costUsd`, a cost in US dollars. Without a usage file, the step's usage shows as unavailable. A usage file that is not such an object, including any other key or a negative or nonfinite value, stops the run as an execution failure.
 
 ## Scoping sessions
 
@@ -228,17 +226,17 @@ Alternatively, continue with `loop step <change>` through integration, archival 
 
 Each `step` call receives fresh configured attempt budgets. If implementation returns the plan for revision or integration returns findings to implementation, the same call follows that handoff and returns when the first stage succeeds; the next stage can therefore be an earlier one. Failures and decision questions stop with the usual cause and recovery. After resolving the stop, use `step` or `resume` explicitly to continue.
 
-When a worker step ends, its progress line names the agent and every usage counter the harness reported, such as `(codex; input_tokens=16641, cached_input_tokens=0, cache_write_input_tokens=0, output_tokens=59, reasoning_output_tokens=21, cost unavailable)`. The counters and cost are exactly what the harness reported. A value it did not report reads `unavailable`, never zero; an explicitly reported zero stays zero, and `usage unavailable` means it reported nothing.
+When a worker step ends, its progress line names the agent and the step's input tokens, output tokens and cost in the same form for every harness, such as `(claude; input 332,936, output 2,234, cost $0.57)` or `(codex; input 16,641, output 59, cost unavailable)`. Cost is rounded to cents, so a cost below half a cent shows as `$0.00`. A value the harness did not report reads `unavailable`, never zero; an explicitly reported zero stays zero, and `usage unavailable` means it reported nothing. The native counters stay in the step's transcript.
 
 The report at the end of `loop run`, `loop resume` and `loop step`, whether the run completed, stopped or returned control between stages, totals the usage by role over every worker step the run has had, across every advancement:
 
 ```
 Usage by role:
-  proposalReviewer: 2 steps; input_tokens=33282, cached_input_tokens=0, cache_write_input_tokens=0, output_tokens=118, reasoning_output_tokens=42, cost unavailable
-  implementer: 3 steps, 1 without usage; input_tokens=27, cache_creation_input_tokens=90210, cache_read_input_tokens=401177, output_tokens=5120, output_tokens_details.thinking_tokens=97, server_tool_use.web_search_requests=0, cost $1.2034117, 1 step without cost
+  proposalReviewer: 2 steps; input 33,282, output 118, cost unavailable
+  implementer: 3 steps, 1 without usage; input 491,414, output 5,120, cost $1.20, 1 step without cost
 ```
 
-Each counter is summed independently by name, including dotted and array-index paths. Totals and their breakdowns can overlap; they are never added together into a grand total. `without usage` counts the steps with no valid usage: a missing or empty usage file, such as after a turn stopped before its harness reported, or a malformed one, which also stopped the run. When only some of a role's steps reported a cost, the line says how many did not; when none did, the cost is unavailable.
+Input tokens, output tokens and cost are each summed over the steps that reported them, and read `unavailable` when none did. `without usage` counts the steps with no valid usage: a missing or empty usage file, such as after a turn stopped before its harness reported, or a malformed one, which also stopped the run. When only some of a role's steps reported a cost, the line says how many did not.
 
 A run accepts one advancement at a time, shared by `run`, `resume` and `step`. If the process advancing it dies, `loop resume` takes the run over and redoes the step that was in progress. A process killed with SIGKILL, for example by `kill -9` or the OOM killer, can leave its step running; `loop resume` then refuses and names the step's process group. End it with `kill -- -<group>` or wait for it to exit, then resume. If the group it names is not the run's, because its ID was reused after the step ended, check it with `pgrep -l -g <group>` and set `stepGroup` to `null` in the run directory's `state.json`.
 

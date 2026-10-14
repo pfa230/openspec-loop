@@ -70,9 +70,11 @@ export function startWorker(command: string[], cwd: string, base: string, prompt
   return { step: runStep(executable, [...args, files.prompt, files.schema, files.reply, files.usage], cwd, files.transcript), files };
 }
 
-// What a worker reports its harness spent: numeric usage counters under native names/paths, and a cost in US dollars.
+// What a worker reports its harness spent: every prompt token the model processed, cached or not, every token it
+// generated, reasoning included, and a cost in US dollars.
 export interface Usage {
-  tokens?: Record<string, number>;
+  inputTokens?: number;
+  outputTokens?: number;
   costUsd?: number;
 }
 
@@ -95,9 +97,8 @@ export function readUsage(path: string): { usage?: Usage } | { problem: string }
 }
 
 function isUsage(value: unknown): value is Usage {
-  if (!isObject(value) || !Object.keys(value).every((key) => key === "tokens" || key === "costUsd")) return false;
-  const { tokens, costUsd } = value;
-  return (tokens === undefined || (isObject(tokens) && Object.values(tokens).every(isCount))) && (costUsd === undefined || isCount(costUsd));
+  if (!isObject(value)) return false;
+  return Object.entries(value).every(([key, count]) => ["inputTokens", "outputTokens", "costUsd"].includes(key) && isCount(count));
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {
