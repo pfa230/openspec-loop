@@ -47,28 +47,17 @@ export async function runHarness(command: string, args: string[], usagePath: str
   return stdout;
 }
 
-// Every numeric leaf of a harness's usage object, with dotted object keys and array indexes.
-// Leave numerical validity to the worker's usage-file validation.
-export function counters(source: unknown): Record<string, number> {
-  const found: Record<string, number> = Object.create(null);
-  const visit = (node: unknown, path: string): void => {
-    if (node === null || typeof node !== "object") return;
-    for (const [key, value] of Object.entries(node)) {
-      const name = path ? `${path}.${key}` : key;
-      if (typeof value === "number") found[name] = value;
-      else visit(value, name);
-    }
-  };
-  visit(source, "");
-  return found;
+// The sum of the native fields the harness reported, or undefined when it reported none of them. A negative or
+// nonfinite field makes the sum NaN, which the usage file holds as null, so worker validation rejects it.
+export function total(...fields: unknown[]): number | undefined {
+  const reported = fields.filter((field): field is number => typeof field === "number");
+  if (reported.length === 0) return undefined;
+  return reported.every((field) => Number.isFinite(field) && field >= 0) ? reported.reduce((sum, field) => sum + field, 0) : NaN;
 }
 
-// The usage to write, or undefined when the harness reported neither counters nor a cost.
-export function usage(tokens: Record<string, number>, cost: unknown): Usage | undefined {
-  const reported: Usage = {};
-  if (Object.keys(tokens).length > 0) reported.tokens = tokens;
-  if (typeof cost === "number") reported.costUsd = cost;
-  return Object.keys(reported).length > 0 ? reported : undefined;
+// The usage to write, or undefined when the harness reported none of it.
+export function usage(inputTokens: number | undefined, outputTokens: number | undefined, costUsd: number | undefined): Usage | undefined {
+  return inputTokens === undefined && outputTokens === undefined && costUsd === undefined ? undefined : { inputTokens, outputTokens, costUsd };
 }
 
 export function writeReply(path: string, answer: unknown): void {

@@ -3,7 +3,7 @@ import { spawn, spawnSync } from "node:child_process";
 import { chmodSync, existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
-import { test } from "node:test";
+import { test, type TestContext } from "node:test";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { readUsage } from "../src/step.js";
 import { OPENCODE_STUB } from "./helpers.js";
@@ -87,10 +87,10 @@ function cleaned(outcome: Outcome) {
 
 // The usage file each adapter writes for its recording, exactly.
 const USAGE = {
-  claude: '{"tokens":{"input_tokens":9,"cache_creation_input_tokens":34432,"cache_read_input_tokens":0,"output_tokens":183,"output_tokens_details.thinking_tokens":97,"server_tool_use.web_search_requests":0,"server_tool_use.web_fetch_requests":0,"cache_creation.ephemeral_1h_input_tokens":34432,"cache_creation.ephemeral_5m_input_tokens":0,"iterations.0.input_tokens":9,"iterations.0.output_tokens":183,"iterations.0.cache_read_input_tokens":0,"iterations.0.cache_creation_input_tokens":34432,"iterations.0.cache_creation.ephemeral_5m_input_tokens":0,"iterations.0.cache_creation.ephemeral_1h_input_tokens":34432},"costUsd":0.06978799999999999}\n',
-  codex: '{"tokens":{"input_tokens":16641,"cached_input_tokens":0,"cache_write_input_tokens":0,"output_tokens":59,"reasoning_output_tokens":21}}\n',
-  agy: '{"tokens":{"input_tokens":12926,"output_tokens":700,"thinking_tokens":645,"cache_read_tokens":0,"total_tokens":13626}}\n',
-  opencode: '{"tokens":{"total":13837,"input":13808,"output":29,"reasoning":0,"cache.write":0,"cache.read":0},"costUsd":0.000111024}\n',
+  claude: '{"inputTokens":34441,"outputTokens":183,"costUsd":0.06978799999999999}\n',
+  codex: '{"inputTokens":16641,"outputTokens":59}\n',
+  agy: '{"inputTokens":12926,"outputTokens":700}\n',
+  opencode: '{"inputTokens":13808,"outputTokens":29,"costUsd":0.000111024}\n',
 };
 
 const cases = {
@@ -145,20 +145,37 @@ const usageEvents: Record<string, (usage: unknown) => object> = {
   opencode: (tokens) => nativeEvent({ id: "counter-step", type: "step-finish", tokens, cost: 0, index: 99 }),
 };
 
+// Each harness's native usage with every field of its totals, other counters and metadata, and the totals it maps to.
+const OTHER = { details: { thinking_tokens: 3 }, iterations: [{ output_tokens: 2 }, null], new_requests: 2, service_tier: "standard" };
+const nativeUsage: Record<string, { native: object; usage: string }> = {
+  claude: { native: { input_tokens: 7, cache_creation_input_tokens: 2, cache_read_input_tokens: 1, output_tokens: 3, ...OTHER }, usage: '{"inputTokens":10,"outputTokens":3,"costUsd":0}\n' },
+  codex: { native: { input_tokens: 7, cached_input_tokens: 4, output_tokens: 3, reasoning_output_tokens: 1, ...OTHER }, usage: '{"inputTokens":7,"outputTokens":3}\n' },
+  agy: { native: { input_tokens: 7, cache_read_tokens: 3, output_tokens: 3, thinking_tokens: 1, total_tokens: 10, ...OTHER }, usage: '{"inputTokens":10,"outputTokens":3}\n' },
+  opencode: { native: { input: 7, cache: { read: 2, write: 1 }, output: 3, reasoning: 1, total: 14, ...OTHER }, usage: '{"inputTokens":10,"outputTokens":4,"costUsd":0}\n' },
+};
+
 for (const [harness, event] of Object.entries(usageEvents)) {
-  test(`loop-${harness} retains additional native counters and nested/array paths without treating metadata as usage`, (t) => {
+  const run = (t: TestContext, native: object) => {
     const dir = mkdtempSync(join(tmpdir(), "loop-stream-"));
     t.after(() => rmSync(dir, { recursive: true, force: true }));
-    const source = JSON.parse('{"input_tokens":7,"total_tokens":10,"cached_input_tokens":0,"details":{"thinking_tokens":3},"iterations":[{"output_tokens":2},null,{"output_tokens":1}],"new_requests":2,"__proto__":4,"constructor":5,"toString":6,"service_tier":"standard","missing":null,"enabled":true}');
     const stream = join(dir, "stream.jsonl");
-    const events = [event(source), harness === "opencode" ? replyEvent() : { type: "text", part: { text: JSON.stringify(REPLY) } }];
+    const events = [event(native), harness === "opencode" ? replyEvent() : { type: "text", part: { text: JSON.stringify(REPLY) } }];
     writeFileSync(stream, events.map((value) => JSON.stringify(value)).join("\n"));
-    const outcome = adapter(t, harness, { ...(harness === "opencode" ? {} : cases[harness as keyof typeof cases].env), STUB_STREAM: stream });
+    return adapter(t, harness, { ...(harness === "opencode" ? {} : cases[harness as keyof typeof cases].env), STUB_STREAM: stream });
+  };
+
+  test(`loop-${harness} writes only its input and output totals and reported cost, leaving other counters and metadata out`, (t) => {
+    const outcome = run(t, nativeUsage[harness].native);
     assert.equal(outcome.status, 0, outcome.stderr);
     assert.equal(outcome.calls, 1);
     assert.deepEqual(outcome.reply, REPLY);
-    const cost = harness === "claude" || harness === "opencode" ? ',"costUsd":0' : "";
-    assert.equal(outcome.usage, `{"tokens":{"input_tokens":7,"total_tokens":10,"cached_input_tokens":0,"details.thinking_tokens":3,"iterations.0.output_tokens":2,"iterations.2.output_tokens":1,"new_requests":2,"__proto__":4,"constructor":5,"toString":6}${cost}}\n`);
+    assert.equal(outcome.usage, nativeUsage[harness].usage);
+  });
+
+  test(`loop-${harness} writes an invalid input total when a field of it is negative`, (t) => {
+    const outcome = run(t, harness === "opencode" ? { input: 7, cache: { read: -1 } } : { input_tokens: -1 });
+    assert.equal(JSON.parse(outcome.usage as string).inputTokens, null);
+    assert.deepEqual(readUsage(join(outcome.dir, "usage.json")), { problem: "the usage file does not match the usage format" });
   });
 
   if (harness === "opencode") continue;
@@ -166,11 +183,11 @@ for (const [harness, event] of Object.entries(usageEvents)) {
     const dir = mkdtempSync(join(tmpdir(), "loop-stream-"));
     t.after(() => rmSync(dir, { recursive: true, force: true }));
     const stream = join(dir, "stream.jsonl");
-    writeFileSync(stream, [event({ input_tokens: 10, new_requests: 2 }), event({ input_tokens: 15, new_requests: 5 })].map((value) => JSON.stringify(value)).join("\n"));
+    writeFileSync(stream, [event({ input_tokens: 10, output_tokens: 2 }), event({ input_tokens: 15, output_tokens: 5 })].map((value) => JSON.stringify(value)).join("\n"));
     const outcome = adapter(t, harness, { ...(harness === "opencode" ? {} : cases[harness as keyof typeof cases].env), STUB_STREAM: stream });
     assert.equal(outcome.status, 0, outcome.stderr);
     const cost = harness === "claude" ? ',"costUsd":0' : "";
-    assert.equal(outcome.usage, `{"tokens":{"input_tokens":15,"new_requests":5}${cost}}\n`);
+    assert.equal(outcome.usage, `{"inputTokens":15,"outputTokens":5${cost}}\n`);
   });
 }
 
@@ -300,7 +317,7 @@ test("issue #54: cut report plus JSON stays in transcript and a missing reply-to
   assert.match(outcome.stderr, /without a loop_reply call/);
   assert.equal(outcome.reply, undefined);
   assert.match(outcome.stdout, /Cut pass:/);
-  assert.equal(outcome.usage, '{"tokens":{"input":11,"output":8,"reasoning":5,"total":24},"costUsd":0}\n');
+  assert.equal(outcome.usage, '{"inputTokens":11,"outputTokens":13,"costUsd":0}\n');
   assert.equal(outcome.calls, 1);
   cleaned(outcome);
 });
@@ -327,28 +344,25 @@ test("OpenCode drains response-before-idle events and sums each latest root step
   const late = eventFile(t, [step("last", 50, 0.5)]);
   const outcome = adapter(t, "opencode", { STUB_STREAM: stream, STUB_LATE_STREAM: late });
   assert.equal(outcome.status, 0, outcome.stderr);
-  assert.equal(outcome.usage, '{"tokens":{"input":150,"output":2,"reasoning":0,"cache.read":4,"cache.write":0,"total":156,"new_requests":6,"iterations.0.input_tokens":150},"costUsd":0.75}\n');
+  assert.equal(outcome.usage, '{"inputTokens":154,"outputTokens":2,"costUsd":0.75}\n');
   cleaned(outcome);
 });
 
-for (const field of ["tool_requests", "details.tool_requests", "costUsd"]) {
+for (const field of ["output", "cache.read", "costUsd"]) {
   for (const counts of [[-1, 5], [5, -1]]) {
-    test(`OpenCode retains negative ${field} across distinct steps in order ${counts}`, (t) => {
+    test(`OpenCode keeps a negative ${field} invalid across distinct steps in order ${counts}`, (t) => {
       const stream = eventFile(t, counts.map((count, index) => nativeEvent({
         id: `step-${index}`,
         type: "step-finish",
-        tokens: field === "costUsd" ? { tool_requests: 2 } : {
-          input: 2,
-          ...(field === "tool_requests" ? { tool_requests: count } : { details: { tool_requests: count } }),
-        },
+        tokens: { input: 2, ...(field === "output" ? { output: count } : field === "cache.read" ? { cache: { read: count } } : {}) },
         cost: field === "costUsd" ? count : 0,
       })).concat(replyEvent()));
       const outcome = adapter(t, "opencode", { STUB_STREAM: stream });
       assert.equal(outcome.status, 0, outcome.stderr);
       assert.deepEqual(outcome.reply, REPLY);
-      assert.deepEqual(JSON.parse(outcome.usage as string), field === "costUsd"
-        ? { tokens: { tool_requests: 4 }, costUsd: -1 }
-        : { tokens: { input: 4, [field]: -1 }, costUsd: 0 });
+      assert.deepEqual(JSON.parse(outcome.usage as string), field === "output"
+        ? { inputTokens: 4, outputTokens: null, costUsd: 0 }
+        : field === "cache.read" ? { inputTokens: null, costUsd: 0 } : { inputTokens: 4, costUsd: null });
       assert.deepEqual(readUsage(join(outcome.dir, "usage.json")), { problem: "the usage file does not match the usage format" });
     });
   }
@@ -356,13 +370,13 @@ for (const field of ["tool_requests", "details.tool_requests", "costUsd"]) {
 
 test("OpenCode replaces an invalid earlier snapshot with valid latest step usage", (t) => {
   const step = (id: string, count: number) => nativeEvent({
-    id, type: "step-finish", tokens: { tool_requests: count, details: { tool_requests: count } }, cost: count,
+    id, type: "step-finish", tokens: { output: count, cache: { read: count } }, cost: count,
   });
   const stream = eventFile(t, [step("first", -1), step("first", 5), step("second", 2), replyEvent()]);
   const outcome = adapter(t, "opencode", { STUB_STREAM: stream });
   assert.equal(outcome.status, 0, outcome.stderr);
   assert.deepEqual(outcome.reply, REPLY);
-  const expected = { tokens: { tool_requests: 7, "details.tool_requests": 7 }, costUsd: 7 };
+  const expected = { inputTokens: 7, outputTokens: 7, costUsd: 7 };
   assert.deepEqual(JSON.parse(outcome.usage as string), expected);
   assert.deepEqual(readUsage(join(outcome.dir, "usage.json")), { usage: expected });
 });
@@ -374,7 +388,7 @@ for (const failure of ["http", "response", "session", "stream"]) {
     const outcome = adapter(t, "opencode", { STUB_STREAM: eventFile(t, rows), ...(failure === "http" ? { STUB_HTTP_ERROR: "503" } : {}), ...(failure === "stream" ? { STUB_MODE: "stream-close" } : {}) }, [], undefined, { info: failure === "response" ? { error: { name: "APIError", data: { message: "response failure" } } } : {}, parts: [] });
     assert.equal(outcome.status, 1, outcome.stderr);
     assert.equal(outcome.reply, undefined);
-    assert.equal(outcome.usage, '{"tokens":{"input":11,"output":8,"reasoning":5,"total":24},"costUsd":0}\n');
+    assert.equal(outcome.usage, '{"inputTokens":11,"outputTokens":13,"costUsd":0}\n');
     assert.match(outcome.stderr, failure === "http" ? /503|API/ : failure === "response" ? /response failure/ : failure === "session" ? /root failure|APIError/ : /stream/);
     cleaned(outcome);
   });
@@ -494,7 +508,7 @@ for (const mode of ["hold-headers", "hold-body", "hold-events"]) {
     assert.throws(() => process.kill(state.pid, 0), /ESRCH/);
     assert.equal(existsSync(join(dir, "reply.json")), false);
     assert.equal(existsSync(state.configDir), false);
-    assert.equal(readFileSync(join(dir, "usage.json"), "utf8"), '{"tokens":{"input":11,"output":8,"reasoning":5,"total":24},"costUsd":0}\n');
+    assert.equal(readFileSync(join(dir, "usage.json"), "utf8"), '{"inputTokens":11,"outputTokens":13,"costUsd":0}\n');
   });
 }
 
@@ -528,6 +542,6 @@ test("OpenCode 1.18.34/Muse API recording preserves the cut report, the reply-to
   assert.deepEqual(outcome.reply, { planProblem: "null" });
   assert.match(outcome.stdout, /"text":"Cut pass: no implementation mechanisms were added;/);
   assert.match(outcome.stdout, /"tool":"loop_reply".*"status":"completed"/);
-  assert.equal(outcome.usage, '{"tokens":{"total":36011,"input":17950,"output":102,"reasoning":822,"cache.write":0,"cache.read":17137},"costUsd":0.002014074}\n');
+  assert.equal(outcome.usage, '{"inputTokens":35087,"outputTokens":924,"costUsd":0.002014074}\n');
   cleaned(outcome);
 });

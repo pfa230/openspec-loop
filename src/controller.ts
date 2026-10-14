@@ -45,24 +45,23 @@ const STEP_ROLES: Record<string, Role> = {
   "implementation-review": "implementationReviewer",
 };
 
-// The report's usage block: each role's counters and cost summed over every worker step of the run, in every
+// The report's usage block: each role's input, output and cost summed over every worker step of the run, in every
 // advancement, with how many steps reported none. Every worker step leaves its prompt among the transcripts.
 function usageTotals(dir: string): string {
   const transcripts = join(dir, "transcripts");
-  const totals = new Map<Role, { steps: number; withoutUsage: number; tokens: Record<string, number>; costSteps: number; cost: number }>();
+  const totals = new Map<Role, { steps: number; withoutUsage: number; costSteps: number; sum: Usage }>();
   for (const file of existsSync(transcripts) ? readdirSync(transcripts) : []) {
     const role = STEP_ROLES[/^\d+-(.+)\.prompt\.md$/.exec(file)?.[1] ?? ""];
     if (role === undefined) continue;
-    const total = totals.get(role) ?? { steps: 0, withoutUsage: 0, tokens: Object.create(null) as Record<string, number>, costSteps: 0, cost: 0 };
+    const total = totals.get(role) ?? { steps: 0, withoutUsage: 0, costSteps: 0, sum: {} };
     totals.set(role, total);
     total.steps++;
     const read = readUsage(join(transcripts, file.replace(/\.prompt\.md$/, ".usage.json")));
     const usage = "usage" in read ? read.usage : undefined;
-    if (!hasTokens(usage?.tokens) && usage?.costUsd === undefined) total.withoutUsage++;
-    for (const [name, count] of Object.entries(usage?.tokens ?? {})) total.tokens[name] = (total.tokens[name] ?? 0) + count;
-    if (usage?.costUsd !== undefined) {
-      total.costSteps++;
-      total.cost += usage.costUsd;
+    if (!hasUsage(usage)) total.withoutUsage++;
+    if (usage?.costUsd !== undefined) total.costSteps++;
+    for (const key of ["inputTokens", "outputTokens", "costUsd"] as const) {
+      if (usage?.[key] !== undefined) total.sum[key] = (total.sum[key] ?? 0) + usage[key];
     }
   }
   if (totals.size === 0) return "";
@@ -71,8 +70,8 @@ function usageTotals(dir: string): string {
     if (total === undefined) return [];
     const missing = total.steps - total.costSteps;
     const steps = `${plural(total.steps, "step")}${total.withoutUsage > 0 ? `, ${total.withoutUsage} without usage` : ""}`;
-    const cost = total.costSteps === 0 ? "cost unavailable" : `cost $${total.cost}${missing > 0 ? `, ${plural(missing, "step")} without cost` : ""}`;
-    return [`  ${role}: ${steps}; ${tokensText(total.tokens)}, ${cost}\n`];
+    const cost = total.costSteps > 0 && missing > 0 ? `, ${plural(missing, "step")} without cost` : "";
+    return [`  ${role}: ${steps}; ${valuesText(total.sum)}${cost}\n`];
   });
   return `Usage by role:\n${lines.join("")}`;
 }
@@ -726,21 +725,18 @@ async function work<T>(
   return { cause: `execution failure of ${role} agent "${agent.alias}" in ${label}: ${problem}${where}` };
 }
 
-// A step's usage for its end line: its token counters and cost as the harness reported them.
+// A step's usage for its end line: its input, output and cost, each unavailable when the worker did not report it.
 function usageText(usage: Usage | undefined): string {
-  if (!hasTokens(usage?.tokens) && usage?.costUsd === undefined) return "usage unavailable";
-  return `${tokensText(usage?.tokens)}, ${usage?.costUsd === undefined ? "cost unavailable" : `cost $${usage.costUsd}`}`;
+  return hasUsage(usage) ? valuesText(usage) : "usage unavailable";
 }
 
-function hasTokens(tokens: Record<string, number> | undefined): tokens is Record<string, number> {
-  return tokens !== undefined && Object.keys(tokens).length > 0;
+function hasUsage(usage: Usage | undefined): usage is Usage {
+  return usage?.inputTokens !== undefined || usage?.outputTokens !== undefined || usage?.costUsd !== undefined;
 }
 
-function tokensText(tokens: Record<string, number> | undefined): string {
-  if (!hasTokens(tokens)) return "tokens unavailable";
-  return Object.entries(tokens)
-    .map(([name, count]) => `${name}=${count}`)
-    .join(", ");
+function valuesText({ inputTokens, outputTokens, costUsd }: Usage): string {
+  const count = (value: number | undefined) => (value === undefined ? "unavailable" : value.toLocaleString("en-US"));
+  return `input ${count(inputTokens)}, output ${count(outputTokens)}, cost ${costUsd === undefined ? "unavailable" : `$${costUsd.toFixed(2)}`}`;
 }
 
 function stop(dir: string, state: RunState, stage: Stage, halt: Halt): number {

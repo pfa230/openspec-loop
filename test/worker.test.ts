@@ -28,8 +28,9 @@ const failures: Record<string, [Turn, string]> = {
   "a reply that does not match the schema": [{ reply: { verdict: "APPROVE" } }, "the reply does not match the schema"],
   "a usage file that is not JSON": [{ usage: "{" }, "the usage file is not JSON"],
   "a usage file with an unknown key": [{ usage: { cost: 1 } }, "the usage file does not match the usage format"],
-  "a negative additional usage counter": [{ usage: { tokens: { new_requests: -1 } } }, "the usage file does not match the usage format"],
-  "a nonfinite additional usage counter": [{ usage: '{"tokens":{"new_requests":1e400}}' }, "the usage file does not match the usage format"],
+  "a leftover tokens map": [{ usage: { tokens: { input_tokens: 1 } } }, "the usage file does not match the usage format"],
+  "a negative token total": [{ usage: { inputTokens: -1 } }, "the usage file does not match the usage format"],
+  "a nonfinite token total": [{ usage: '{"outputTokens":1e400}' }, "the usage file does not match the usage format"],
 };
 
 for (const [name, [turn, problem]] of Object.entries(failures)) {
@@ -52,20 +53,20 @@ for (const [name, [turn, problem]] of Object.entries(failures)) {
 
 test("a worker step's end line shows its usage and cost as reported, or as unavailable", (t) => {
   const repo = makeRepo(t);
-  repo.queue("reviewer", { usage: { tokens: { input_tokens: 9, output_tokens: 183 }, costUsd: 0.069788 } });
-  repo.queue("verifier", { usage: { tokens: { input_tokens: 5 } } });
+  repo.queue("reviewer", { usage: { inputTokens: 332936, outputTokens: 2234, costUsd: 0.5728622 } });
+  repo.queue("verifier", { usage: { inputTokens: 5, outputTokens: 0 } });
   const result = runLoop(repo, ["run", "add-thing"]);
   assert.equal(result.status, 0, result.stdout);
-  assert.match(result.stdout, /\] proposal-review: review 1 of 3 APPROVE, 0 blocking, 0 minor \(reviewer; input_tokens=9, output_tokens=183, cost \$0\.069788\)\n/);
-  assert.match(result.stdout, /\] implementation: attempt 1 of 3, review APPROVE, 0 blocking, 0 minor \(verifier; input_tokens=5, cost unavailable\)\n/);
+  assert.match(result.stdout, /\] proposal-review: review 1 of 3 APPROVE, 0 blocking, 0 minor \(reviewer; input 332,936, output 2,234, cost \$0\.57\)\n/);
+  assert.match(result.stdout, /\] implementation: attempt 1 of 3, review APPROVE, 0 blocking, 0 minor \(verifier; input 5, output 0, cost unavailable\)\n/);
 });
 
 test("a failed worker's usage shows on its execution-failure line, and the cause names the step", (t) => {
   const repo = makeRepo(t);
-  repo.queue("reviewer", { usage: { tokens: { input_tokens: 7 } }, exit: 3 });
+  repo.queue("reviewer", { usage: { inputTokens: 7 }, exit: 3 });
   const result = runLoop(repo, ["run", "add-thing"]);
   assert.equal(result.status, 1);
-  assert.match(result.stdout, /\] proposal-review: review 1 of 3 execution failure, exit status 3 \(reviewer; input_tokens=7, cost unavailable\)\n/);
+  assert.match(result.stdout, /\] proposal-review: review 1 of 3 execution failure, exit status 3 \(reviewer; input 7, output unavailable, cost unavailable\)\n/);
   assert.match(result.stdout, /Cause: execution failure of proposalReviewer agent "reviewer" in review 1 of 3: exit status 3\n/);
 });
 

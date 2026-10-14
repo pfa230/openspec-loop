@@ -479,33 +479,30 @@ for (const [name, script] of [
 test("the reports total each role's usage and cost over every worker step of every advancement", (t) => {
   const repo = makeRepo(t);
   configure(repo, "attempts:\n  implementation: 1\n");
-  repo.queue("reviewer", { usage: { tokens: { in: 10 }, costUsd: 0.5 } });
-  repo.queue("implementer",
-    { usage: { tokens: { input_tokens: 10, cached_input_tokens: 4, total_tokens: 12, "output_tokens_details.thinking_tokens": 1, "iterations.0.output_tokens": 2, "server_tool_use.web_search_requests": 0 }, costUsd: 0.25 } },
-    { usage: { tokens: { input_tokens: 15, cached_input_tokens: 5, total_tokens: 18, "output_tokens_details.thinking_tokens": 2, "iterations.0.output_tokens": 3, "server_tool_use.web_search_requests": 1 } } },
-  );
+  repo.queue("reviewer", { usage: { inputTokens: 10, costUsd: 0.5 } });
+  repo.queue("implementer", { usage: { inputTokens: 332936, outputTokens: 2234, costUsd: 0.1 } }, { usage: { inputTokens: 1000, outputTokens: 0, costUsd: 0.2 } });
   repo.queue("verifier", { reply: { findings: [finding("blocking", "not done")] }, usage: { costUsd: 0 } }, { usage: {} });
   const stopped = runLoop(repo, ["run", "add-thing"]);
   assert.equal(stopped.status, 1, stopped.stdout);
-  assert.ok(stopped.stdout.includes("(implementer; input_tokens=10, cached_input_tokens=4, total_tokens=12, output_tokens_details.thinking_tokens=1, iterations.0.output_tokens=2, server_tool_use.web_search_requests=0, cost $0.25)"), stopped.stdout);
+  assert.ok(stopped.stdout.includes("(implementer; input 332,936, output 2,234, cost $0.10)"), stopped.stdout);
   assert.ok(
     stopped.stdout.endsWith(
       "Usage by role:\n" +
-        "  proposalReviewer: 1 step; in=10, cost $0.5\n" +
-        "  implementer: 1 step; input_tokens=10, cached_input_tokens=4, total_tokens=12, output_tokens_details.thinking_tokens=1, iterations.0.output_tokens=2, server_tool_use.web_search_requests=0, cost $0.25\n" +
-        "  implementationReviewer: 1 step; tokens unavailable, cost $0\n",
+        "  proposalReviewer: 1 step; input 10, output unavailable, cost $0.50\n" +
+        "  implementer: 1 step; input 332,936, output 2,234, cost $0.10\n" +
+        "  implementationReviewer: 1 step; input unavailable, output unavailable, cost $0.00\n",
     ),
     stopped.stdout,
   );
   const resumed = runLoop(repo, ["resume", "add-thing"]);
   assert.equal(resumed.status, 0, resumed.stdout);
-  assert.ok(resumed.stdout.includes("(implementer; input_tokens=15, cached_input_tokens=5, total_tokens=18, output_tokens_details.thinking_tokens=2, iterations.0.output_tokens=3, server_tool_use.web_search_requests=1, cost unavailable)"), resumed.stdout);
+  assert.ok(resumed.stdout.includes("(implementer; input 1,000, output 0, cost $0.20)"), resumed.stdout);
   assert.ok(
     resumed.stdout.endsWith(
       "Usage by role:\n" +
-        "  proposalReviewer: 1 step; in=10, cost $0.5\n" +
-        "  implementer: 2 steps; input_tokens=25, cached_input_tokens=9, total_tokens=30, output_tokens_details.thinking_tokens=3, iterations.0.output_tokens=5, server_tool_use.web_search_requests=1, cost $0.25, 1 step without cost\n" +
-        "  implementationReviewer: 2 steps, 1 without usage; tokens unavailable, cost $0, 1 step without cost\n",
+        "  proposalReviewer: 1 step; input 10, output unavailable, cost $0.50\n" +
+        "  implementer: 2 steps; input 333,936, output 2,234, cost $0.30\n" +
+        "  implementationReviewer: 2 steps, 1 without usage; input unavailable, output unavailable, cost $0.00, 1 step without cost\n",
     ),
     resumed.stdout,
   );

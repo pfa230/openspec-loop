@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { inspect } from "node:util";
 import { Agent, fetch, type Response } from "undici";
-import { counters, fail, invocation, usage, writeReply } from "./common.js";
+import { fail, invocation, total, usage, writeReply } from "./common.js";
 
 const { args, prompt, schema, replyPath, usagePath } = invocation();
 const selections: Record<string, string> = {};
@@ -50,7 +50,8 @@ if (process.env.OPENCODE_SERVER_PASSWORD) {
   headers.authorization = `Basic ${Buffer.from(`${process.env.OPENCODE_SERVER_USERNAME ?? "opencode"}:${process.env.OPENCODE_SERVER_PASSWORD}`).toString("base64")}`;
 }
 
-interface Part { id: string; sessionID: string; type: string; tokens?: unknown; cost?: unknown; tool?: string; state?: { status?: string; input?: unknown } }
+interface Tokens { input?: unknown; output?: unknown; reasoning?: unknown; cache?: { read?: unknown; write?: unknown } }
+interface Part { id: string; sessionID: string; type: string; tokens?: Tokens; cost?: unknown; tool?: string; state?: { status?: string; input?: unknown } }
 interface Event {
   type: string;
   properties: {
@@ -226,19 +227,12 @@ try {
   await streamed?.catch(() => {});
   process.off("SIGINT", onInt);
   process.off("SIGTERM", onTerm);
-  const tokens: Record<string, number> = Object.create(null);
-  let cost: number | undefined;
-  // Preserve invalid quantities for the worker's usage-file validation.
-  const add = (total: number | undefined, count: number): number => {
-    if (total !== undefined && (!Number.isFinite(total) || total < 0)) return total;
-    if (!Number.isFinite(count) || count < 0) return count;
-    return (total ?? 0) + count;
-  };
-  for (const part of steps.values()) {
-    for (const [name, count] of Object.entries(counters(part.tokens))) tokens[name] = add(tokens[name], count);
-    if (typeof part.cost === "number") cost = add(cost, part.cost);
-  }
-  const reported = usage(tokens, cost);
+  const parts = [...steps.values()];
+  const reported = usage(
+    total(...parts.flatMap(({ tokens }) => [tokens?.input, tokens?.cache?.read, tokens?.cache?.write])),
+    total(...parts.flatMap(({ tokens }) => [tokens?.output, tokens?.reasoning])),
+    total(...parts.map(({ cost }) => cost)),
+  );
   if (reported) writeFileSync(usagePath, `${JSON.stringify(reported)}\n`);
 }
 if (failure) fail(failure.message, failure.status);
