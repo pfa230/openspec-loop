@@ -27,9 +27,9 @@ Each adapter computes the two totals from its native fields:
 | Adapter | `inputTokens` | `outputTokens` | Evidence |
 |---|---|---|---|
 | `loop-claude` | `input_tokens + cache_creation_input_tokens + cache_read_input_tokens` | `output_tokens` | [verified] Anthropic counts cache reads and writes outside `input_tokens`; recording shows `output_tokens` 183 ≥ `thinking_tokens` 97 |
-| `loop-codex` | `input_tokens` | `output_tokens` | [verified] `input_tokens` includes `cached_input_tokens` (README). [assumption] `output_tokens` includes `reasoning_output_tokens`; verify in the Codex source before coding |
-| `loop-agy` | `input_tokens` | `output_tokens` | [verified] recording: `total_tokens` 13626 = `input_tokens` 12926 + `output_tokens` 700, so thinking is inside output. [assumption] `input_tokens` includes `cache_read_tokens`; verify with a recording that has cache reads |
-| `loop-opencode` | `input + cache.read + cache.write`, summed over model steps | `output + reasoning`, summed likewise | [verified] recording: `total` 24 = 11 + 8 + 5, so reasoning is outside output. [assumption] `input` excludes cache; verify in the OpenCode source before coding |
+| `loop-codex` | `input_tokens` | `output_tokens` | [verified] codex-rs/protocol/src/protocol.rs: `non_cached_input()` is `input_tokens - cached_input_tokens`, so input includes cached tokens; `blended_total()`, documented as "non-cached input + output", returns `non_cached_input() + output_tokens` with no reasoning term, so output includes `reasoning_output_tokens`. Recording agrees: output 59, reasoning 21 |
+| `loop-agy` | `input_tokens + cache_read_tokens` | `output_tokens` | [verified] recording: `total_tokens` 13626 = `input_tokens` 12926 + `output_tokens` 700, so thinking is inside output. A five-tool-call run on 2026-10-14 reported per-turn `input_tokens` 12623, 18328, 4922, 4924, 4871, 4927 with `cache_read_tokens` 0, 0, 18340, 23272, 28204, 33082; the third turn's prompt cannot shrink below the second's 18328, so `input_tokens` excludes cache reads. Its result summed both (`input_tokens` 50595, `cache_read_tokens` 102898) and kept `total_tokens` 52744 = 50595 + 2149 |
+| `loop-opencode` | `input + cache.read + cache.write`, summed over model steps | `output + reasoning`, summed likewise | [verified] recording: `total` 24 = 11 + 8 + 5, so reasoning is outside output. packages/core/src/session/usage.ts: `tokens()` sets `input` to `nonCachedInputTokens` (from `inputTokens.noCache` in aisdk.ts), `output` to `visibleOutputTokens`, and `reasoning`, `cache.read` and `cache.write` separately; `calculateCost` bills `input + cache.read + cache.write` as context and `output + reasoning` as output |
 
 A total sums the fields the harness reported and is written when at least one was reported; an absent field adds nothing. A component that is negative or nonfinite makes the total `NaN`, which `JSON.stringify` writes as `null`, which the existing usage validation rejects. That keeps the strict-validation behavior without a separate check. The OpenCode adapter keeps its existing "invalid stays invalid" accumulation for per-step sums. Claude Code and OpenCode keep their existing cost mapping; Codex and Antigravity report none.
 
@@ -46,7 +46,6 @@ End line: `(alias; input 332,936, output 2,234, cost $0.57)`. A value the file l
 ## Risks / Trade-offs
 
 - A run resumed across the upgrade reads its older usage files as malformed, so their steps count as "without usage" in the role totals. Accepted: totals are informational and old runs are short-lived.
-- An unverified mapping row double-counts or misses tokens. Tasks 1.1 verifies each `[assumption]` row before code depends on it.
 - A nonzero cost below half a cent shows as `$0.00`. Accepted for readability.
 
 ## Cut Pass
