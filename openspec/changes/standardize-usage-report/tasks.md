@@ -1,0 +1,9 @@
+# Tasks
+
+## 1. Standard usage totals
+
+- [ ] 1.1 Confirm each `[assumption]` row of the mapping table in `design.md` against the harness's source or a fresh recording: Codex `output_tokens` includes `reasoning_output_tokens`, Antigravity `input_tokens` includes `cache_read_tokens`, OpenCode `input` excludes `cache.read` and `cache.write`. Replace each tag with `[verified]` and its evidence; if a row is wrong, correct the mapping in `design.md` before coding. Done when no `[assumption]` remains in the table.
+- [ ] 1.2 Change the usage file to `{ inputTokens?, outputTokens?, costUsd? }` in `src/step.ts`, rejecting any other key, and change `usageText` and `usageTotals` in `src/controller.ts` to the standard form (`input 332,936, output 2,234, cost $0.57`, each value `unavailable` when absent, `usage unavailable` when all are). Update the existing worker, controller, stepping and implementation tests in place; cover a leftover `tokens` map as malformed usage and a role total that rounds summed cost to cents.
+- [ ] 1.3 Replace `counters` in `src/adapters/common.ts` with the per-adapter totals from the design table, where an invalid component yields an invalid total, and update all four adapters. Update `test/adapters.test.ts` so each recording's expected usage file holds the mapped totals and cost, and the existing invalid-quantity and OpenCode cancellation cases expect invalid `inputTokens`, `outputTokens` or `costUsd`.
+- [ ] 1.4 Update the README: the adapter usage table becomes the mapping to input and output, the custom-worker usage format names the three fields, the progress and "Usage by role" examples use the standard form, and the raw counters are said to stay in the step's transcript.
+- [ ] 1.5 Run `npm test` and `openspec validate standardize-usage-report --strict`; both pass.
