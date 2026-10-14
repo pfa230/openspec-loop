@@ -1,7 +1,9 @@
 #!/usr/bin/env node
-// OpenCode's prompt API decodes the native format; text stays in the transcript.
+// The model replies by calling a per-worker loop_reply tool; text stays in the transcript.
 import { spawn } from "node:child_process";
-import { writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { inspect } from "node:util";
 import { Agent, fetch, type Response } from "undici";
 import { counters, fail, invocation, usage, writeReply } from "./common.js";
@@ -30,29 +32,42 @@ for (let i = 0; i < args.length; i++) {
     else pure = value === "true";
   } else fail(`unsupported OpenCode argument ${arg}`);
 }
-const format = { type: "json_schema", schema: JSON.parse(schema) };
+// OpenCode reads a single OPENCODE_CONFIG_DIR, so an inherited one would be displaced.
+if (process.env.OPENCODE_CONFIG_DIR) fail("unsupported OpenCode setting OPENCODE_CONFIG_DIR");
+const properties = JSON.stringify(JSON.parse(schema).properties ?? {});
+const configDir = mkdtempSync(join(tmpdir(), "loop-opencode-"));
+mkdirSync(join(configDir, "tool"));
+writeFileSync(join(configDir, "tool", "loop_reply.js"), `export default {
+  description: "Submit the reply to the loop. Call this once, after the work and any required presentation are complete.",
+  args: ${properties},
+  async execute() {
+    return "Reply recorded.";
+  },
+};
+`);
 const headers: Record<string, string> = { "content-type": "application/json" };
 if (process.env.OPENCODE_SERVER_PASSWORD) {
   headers.authorization = `Basic ${Buffer.from(`${process.env.OPENCODE_SERVER_USERNAME ?? "opencode"}:${process.env.OPENCODE_SERVER_PASSWORD}`).toString("base64")}`;
 }
 
-interface StepPart { id: string; sessionID: string; type: string; tokens?: unknown; cost?: unknown }
+interface Part { id: string; sessionID: string; type: string; tokens?: unknown; cost?: unknown; tool?: string; state?: { status?: string; input?: unknown } }
 interface Event {
   type: string;
   properties: {
     sessionID?: string;
     info?: { id: string; parentID?: string };
-    part?: StepPart;
+    part?: Part;
     status?: { type: string };
     id?: string;
     error?: unknown;
   };
 }
-interface PromptResponse { info: { structured?: unknown; error?: unknown } }
+interface PromptResponse { info: { error?: unknown } }
 
 const controller = new AbortController();
 const dispatcher = new Agent({ headersTimeout: 0, bodyTimeout: 0 });
-const steps = new Map<string, StepPart>();
+const steps = new Map<string, Part>();
+let reply: unknown;
 let failure: { message: string; status: number } | undefined;
 let closing = false;
 function stop(error: string | Error, status = 1): void {
@@ -65,7 +80,7 @@ const failed = new Promise<never>((_, reject) => {
 });
 // Abort can precede the readiness race, or occur during final cleanup.
 void failed.catch(() => {});
-const child = spawn("opencode", ["serve", "--hostname", "127.0.0.1", "--port", "0", "--mdns=false", ...(pure === undefined ? [] : [`--pure=${pure}`])], { stdio: ["ignore", "pipe", "inherit"] });
+const child = spawn("opencode", ["serve", "--hostname", "127.0.0.1", "--port", "0", "--mdns=false", ...(pure === undefined ? [] : [`--pure=${pure}`])], { env: { ...process.env, OPENCODE_CONFIG_DIR: configDir }, stdio: ["ignore", "pipe", "inherit"] });
 child.once("error", (error) => stop(new Error(`cannot run opencode: ${error.message}`, { cause: error })));
 const exited = new Promise<void>((resolve) => {
   child.once("exit", (code, signal) => {
@@ -164,7 +179,10 @@ async function events(response: Response, sessionID: string): Promise<void> {
         if (event.type === "permission.asked" && props.sessionID && sessions.has(props.sessionID)) {
           await request(`/permission/${props.id}/reply`, { reply: auto ? "once" : "reject" });
         }
-        if (event.type === "message.part.updated" && props.part?.sessionID === sessionID && props.part.type === "step-finish") steps.set(props.part.id, props.part);
+        if (event.type === "message.part.updated" && props.part?.sessionID === sessionID) {
+          if (props.part.type === "step-finish") steps.set(props.part.id, props.part);
+          if (props.part.type === "tool" && props.part.tool === "loop_reply" && props.part.state?.status === "completed") reply = props.part.state.input;
+        }
         if (event.type === "session.error" && props.sessionID === sessionID) throw new Error(`opencode session error: ${JSON.stringify(props.error)}`);
         if (event.type === "session.status" && props.sessionID === sessionID && props.status?.type === "idle") return;
       }
@@ -175,7 +193,6 @@ async function events(response: Response, sessionID: string): Promise<void> {
   }
 }
 
-let response: PromptResponse | undefined;
 let streamed: Promise<void> | undefined;
 try {
   base = await Promise.race([ready, failed]);
@@ -184,16 +201,15 @@ try {
   const model = selections.model?.split("/");
   const result = (async () => {
     const returned = await json(`/session/${session.id}/message`, {
-      format,
       ...(model && { model: { providerID: model[0], modelID: model.slice(1).join("/") } }),
       ...(selections.agent && { agent: selections.agent }),
       ...(selections.variant && { variant: selections.variant }),
-      parts: [{ type: "text", text: `${prompt}\nAfter completing the work and any required presentation, finish by calling OpenCode's StructuredOutput tool with the reply matching the supplied schema. Text is kept in the transcript and cannot serve as the reply.` }],
+      parts: [{ type: "text", text: `${prompt}\nAfter completing the work and any required presentation, finish by calling the loop_reply tool with the reply's fields. Text is kept in the transcript and cannot serve as the reply.` }],
     }) as PromptResponse;
     process.stdout.write(`${JSON.stringify({ type: "prompt.response", response: returned })}\n`);
     return returned;
   })();
-  [response] = await Promise.all([result, streamed]);
+  const [response] = await Promise.all([result, streamed]);
   if (response.info.error) throw new Error(`opencode response error: ${JSON.stringify(response.info.error)}`);
 } catch (error) {
   process.stderr.write(`${inspect(error, { depth: null })}\n`);
@@ -206,6 +222,7 @@ try {
   const killTimer = setTimeout(() => child.kill("SIGKILL"), 3000);
   await exited;
   clearTimeout(killTimer);
+  rmSync(configDir, { recursive: true, force: true });
   await streamed?.catch(() => {});
   process.off("SIGINT", onInt);
   process.off("SIGTERM", onTerm);
@@ -225,5 +242,5 @@ try {
   if (reported) writeFileSync(usagePath, `${JSON.stringify(reported)}\n`);
 }
 if (failure) fail(failure.message, failure.status);
-if (response?.info.structured === undefined) fail("opencode gave no successful native structured output");
-writeReply(replyPath, response.info.structured);
+if (reply === undefined) fail("opencode completed without a loop_reply call in the root session");
+writeReply(replyPath, reply);

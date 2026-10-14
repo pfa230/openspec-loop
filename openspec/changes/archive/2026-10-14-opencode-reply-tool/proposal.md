@@ -21,7 +21,7 @@ None.
 
 ### Modified Capabilities
 
-- `loop-workflow`: the Shipped adapters requirement replaces OpenCode's native structured output and "harness's own schema enforcement" with the adapter's reply tool and the loop's reply validation.
+- `loop-workflow`: the Shipped adapters requirement replaces OpenCode's native structured output and "harness's own schema enforcement" with the adapter's reply tool and the loop's reply validation, and the OpenCode transport lifetime scenarios write the reply from the root session's reply-tool call instead of the native structured reply.
 
 ## Impact
 

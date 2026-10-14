@@ -506,26 +506,26 @@ The loop SHALL run an agent by appending four paths to the agent's command: a pr
 
 ### Requirement: Shipped adapters
 
-The loop SHALL ship worker commands for Claude Code, Codex, Antigravity and OpenCode. Each SHALL run its harness headless in the run's worktree and SHALL write the harness's final answer as the reply. Claude Code, Codex and Antigravity SHALL pass the agent's remaining arguments to the harness. OpenCode SHALL preserve model (`-m`/`--model`), agent, variant, explicit `--auto` permission approval and pure-mode selections through its supported API/server options, and SHALL name and reject unsupported arguments before starting the harness. Each adapter SHALL use its harness's own schema enforcement. The OpenCode adapter SHALL own one local harness process for one worker prompt, terminate it when the worker completes, fails or is interrupted, and SHALL request native structured output with the supplied worker schema and SHALL write only the successful native structured result as its reply, without parsing text messages for a reply. Enabling that format SHALL be scoped to the worker process, preserve existing configuration and restrictions, and require no persistent configuration edits. OpenCode SHALL retain headless denial of questions and plan-mode transitions, reject permission requests unless explicit auto approval is enabled, and preserve configured denies for both root and delegated sessions. Settings or arguments that cannot be honored SHALL fail explicitly rather than be discarded or weaken restrictions. An otherwise successful OpenCode prompt without a native result SHALL be reported as missing native output even when text contains a schema-conforming object. API or session errors and unexpected harness exits SHALL be execution failures; an unexpected nonzero harness exit SHALL preserve its status and reported usage. Expected shutdown of an owned server after a completed prompt SHALL NOT turn that prompt into a harness failure. The adapter SHALL NOT repair text or launch another worker turn. Each adapter SHALL write every numeric consumption counter from its harness's reported usage or token object and any explicitly reported USD cost to the usage file, under the harness's own names and nested paths, before it judges the harness's exit, and SHALL write no value the harness does not report. Counter collection SHALL NOT be restricted to a fixed list of names. An adapter SHALL preserve its harness's final-summary or per-step accounting boundary, without adding repeated cumulative snapshots together. When aggregating selected OpenCode model-step reports, the adapter SHALL preserve any negative or nonfinite numeric counter or reported USD cost as invalid in the usage file for existing worker validation; other model steps SHALL NOT cancel or hide it. Usage collection SHALL use the existing worker invocation's output, including its subscribed OpenCode event stream, and SHALL NOT add an auxiliary command, API lookup, pricing calculation or inference run. Unrelated event fields and nonnumeric metadata SHALL remain in the transcript rather than being treated as summable consumption counters.
+The loop SHALL ship worker commands for Claude Code, Codex, Antigravity and OpenCode. Each SHALL run its harness headless in the run's worktree and SHALL write the harness's final answer as the reply. Claude Code, Codex and Antigravity SHALL pass the agent's remaining arguments to the harness. OpenCode SHALL preserve model (`-m`/`--model`), agent, variant, explicit `--auto` permission approval and pure-mode selections through its supported API/server options, and SHALL name and reject unsupported arguments before starting the harness. Claude Code, Codex and Antigravity SHALL use their harness's own schema enforcement. The OpenCode adapter SHALL own one local harness process for one worker prompt, terminate it when the worker completes, fails or is interrupted, and SHALL offer the model a reply tool whose arguments are the supplied worker schema's properties, without forcing a tool choice, and SHALL write the arguments of the root session's last completed reply-tool call as its reply, without parsing text messages for a reply. The loop's reply validation SHALL be the check of those arguments. Supplying that tool SHALL be scoped to the worker process, preserve existing configuration and restrictions, and require no persistent configuration edits. OpenCode SHALL retain headless denial of questions and plan-mode transitions, reject permission requests unless explicit auto approval is enabled, and preserve configured denies for both root and delegated sessions. Settings or arguments that cannot be honored SHALL fail explicitly rather than be discarded or weaken restrictions. An otherwise successful OpenCode prompt without a root reply-tool call SHALL be reported as a missing reply even when text contains a schema-conforming object. API or session errors and unexpected harness exits SHALL be execution failures; an unexpected nonzero harness exit SHALL preserve its status and reported usage. Expected shutdown of an owned server after a completed prompt SHALL NOT turn that prompt into a harness failure. The adapter SHALL NOT repair text or launch another worker turn. Each adapter SHALL write every numeric consumption counter from its harness's reported usage or token object and any explicitly reported USD cost to the usage file, under the harness's own names and nested paths, before it judges the harness's exit, and SHALL write no value the harness does not report. Counter collection SHALL NOT be restricted to a fixed list of names. An adapter SHALL preserve its harness's final-summary or per-step accounting boundary, without adding repeated cumulative snapshots together. When aggregating selected OpenCode model-step reports, the adapter SHALL preserve any negative or nonfinite numeric counter or reported USD cost as invalid in the usage file for existing worker validation; other model steps SHALL NOT cancel or hide it. Usage collection SHALL use the existing worker invocation's output, including its subscribed OpenCode event stream, and SHALL NOT add an auxiliary command, API lookup, pricing calculation or inference run. Unrelated event fields and nonnumeric metadata SHALL remain in the transcript rather than being treated as summable consumption counters.
 
 #### Scenario: Harness arguments pass through
 - **WHEN** the proposal reviewer's agent is `loop-codex` with a model and a sandbox argument
 - **THEN** Codex runs with that model and sandbox, and its schema-conforming answer reaches the loop as the reply
 
 #### Scenario: OpenCode cut report stays out of the reply
-- **WHEN** a successful OpenCode turn emits a required cut report as text and returns a native structured result matching the worker schema
-- **THEN** the adapter writes only that structured result as the reply and keeps the cut report in the transcript
+- **WHEN** a successful OpenCode turn emits a required cut report as text and calls the reply tool with arguments matching the worker schema
+- **THEN** the adapter writes only those arguments as the reply and keeps the cut report in the transcript
 - **AND** the loop can continue its existing commit, required-check and review sequence
 
 #### Scenario: Harness without schema enforcement
-- **WHEN** OpenCode's prompt completes without an API/session error or a successful schema-enforced result, with optional text such as prose followed by JSON, a fenced JSON block or bare JSON
-- **THEN** the adapter reports missing native structured output, writes no reply and the run stops with an execution failure
-- **AND** the transcript distinguishes the completed OpenCode prompt from the adapter's missing-result failure and the worker's implementation edits remain available for resume
+- **WHEN** OpenCode's prompt completes without an API/session error or a root reply-tool call, with optional text such as prose followed by JSON, a fenced JSON block or bare JSON
+- **THEN** the adapter reports a missing reply, writes no reply and the run stops with an execution failure
+- **AND** the transcript distinguishes the completed OpenCode prompt from the adapter's missing-reply failure and the worker's implementation edits remain available for resume
 
 #### Scenario: Per-worker schema and inherited settings
 - **WHEN** an OpenCode worker starts with a supplied schema and existing user or project configuration, including inline configuration
-- **THEN** the worker's native output uses that schema, its configured model, agent, restrictions and unrelated settings are preserved, and no user or project configuration file is changed
-- **AND** delegated sessions are not assigned the root worker's reply schema
+- **THEN** the worker's reply tool takes that schema's properties, its configured model, agent, restrictions and unrelated settings are preserved, and no user or project configuration file is changed
+- **AND** a reply-tool call from a delegated session does not supply the reply
 
 #### Scenario: Unsupported OpenCode arguments
 - **WHEN** an OpenCode worker command supplies an unsupported argument, such as `--attach`, `--session`, `--continue`, `--command` or `--dir`
@@ -533,7 +533,19 @@ The loop SHALL ship worker commands for Claude Code, Codex, Antigravity and Open
 
 #### Scenario: Pure OpenCode still enforces its schema
 - **WHEN** pure mode is enabled through a supported argument or the environment
-- **THEN** OpenCode retains pure-mode behavior and the worker still receives native schema enforcement through the prompt API
+- **THEN** OpenCode retains pure-mode behavior and the worker can still reply through the reply tool, whose arguments the loop checks against the schema
+
+#### Scenario: Provider that accepts only automatic tool choice
+- **WHEN** the worker's model is served by a provider that rejects forced tool choices, such as Meta's Muse Spark
+- **THEN** the worker prompt carries no forced tool choice and the root session's reply-tool call supplies the reply
+
+#### Scenario: Reply-tool arguments that break the schema
+- **WHEN** the root session calls the reply tool with arguments that omit a required property of the worker schema
+- **THEN** the adapter writes those arguments as the reply and the loop's reply validation rejects them as an execution failure
+
+#### Scenario: Inherited OpenCode configuration directory
+- **WHEN** an OpenCode worker starts with `OPENCODE_CONFIG_DIR` set in its environment
+- **THEN** the adapter names that setting and fails before starting the harness rather than displacing the configuration it selects
 
 #### Scenario: Headless OpenCode permission behavior
 - **WHEN** OpenCode asks for a permission in the worker's root or delegated session
@@ -952,15 +964,15 @@ The OpenCode adapter SHALL explicitly disable client response-header and respons
 
 #### Scenario: Prompt delays response headers
 - **WHEN** an OpenCode prompt completes successfully after a delay longer than the HTTP client's default header timeout
-- **THEN** the adapter waits for completion and writes the successful native structured reply instead of failing on that default timeout
+- **THEN** the adapter waits for completion and writes the reply from the root session's reply-tool call instead of failing on that default timeout
 
 #### Scenario: Prompt pauses response-body delivery
 - **WHEN** the prompt response starts and then pauses longer than the HTTP client's default body inactivity timeout before delivering the remaining valid response
-- **THEN** the adapter waits for the remaining response and writes the successful native structured reply
+- **THEN** the adapter waits for the remaining response and writes the reply from the root session's reply-tool call
 
 #### Scenario: Event subscription is temporarily quiet
 - **WHEN** the event subscription emits no data for longer than the HTTP client's default body inactivity timeout while the prompt is still pending, then resumes and reports completion
-- **THEN** the adapter keeps the subscription open and completes with the native reply and the reported usage
+- **THEN** the adapter keeps the subscription open and completes with the reply from the root session's reply-tool call and the reported usage
 
 #### Scenario: Worker interrupted during an unbounded wait
 - **WHEN** the worker is interrupted while waiting for prompt headers, response-body data or event-stream data
