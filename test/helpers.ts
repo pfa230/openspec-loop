@@ -88,10 +88,14 @@ server.listen(0, "127.0.0.1", () => {
 process.on("SIGTERM", () => {
   if (process.env.STUB_MODE === "ignore-term") return;
   state.terminated = true;
-  if (events) events.end();
   save();
-  server.closeAllConnections();
-  server.close(() => process.exit(0));
+  // Exit only after the client closes its event stream, so the record cannot race the exit.
+  const exit = () => {
+    server.closeAllConnections();
+    server.close(() => process.exit(0));
+  };
+  if (events && !state.streamClosed) events.once("close", exit);
+  else exit();
 });
 `;
 
