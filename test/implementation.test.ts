@@ -402,19 +402,21 @@ for (const agent of ["implementer", "verifier"]) {
   });
 }
 
-for (const [label, info, expected] of [
-  ["cut report without native output", {}, "missing"],
-  ["cut report with native output", { structured: { planProblem: null } }, "success"],
-  ["native output with the wrong role shape", { structured: { findings: [] } }, "invalid"],
-  ["erroneous native output", { structured: { planProblem: null }, error: { name: "StructuredOutputError", data: { message: "native output failed", retries: 0 } } }, "error"],
+for (const [label, reply, info, expected] of [
+  ["cut report without a reply-tool call", undefined, {}, "missing"],
+  ["cut report with a reply-tool call", { planProblem: null }, {}, "success"],
+  ["reply-tool call missing a required property", {}, {}, "invalid"],
+  ["erroneous prompt response", { planProblem: null }, { error: { name: "APIError", data: { message: "prompt failed" } } }, "error"],
 ] as const) {
   test(`the real OpenCode adapter ${label} preserves edits and obeys commit/check/review progression`, (t) => {
     const repo = makeRepo(t);
     const before = repo.git("rev-parse", "main");
     const stream = join(repo.root, "opencode-stream.jsonl");
-    const cut = readFileSync(new URL("../../test/recordings/opencode-cut-report.jsonl", import.meta.url), "utf8");
-    writeFileSync(stream, cut);
-    const text = JSON.parse(cut.split("\n")[0]!).properties.part;
+    const cut = readFileSync(new URL("../../test/recordings/opencode-cut-report.jsonl", import.meta.url), "utf8").trim().split("\n").map(line => JSON.parse(line));
+    const rows = cut.filter(row => row.properties.part.tool !== "loop_reply");
+    if (reply) rows.push({ type: "message.part.updated", properties: { part: { id: "reply", sessionID: "root", type: "tool", tool: "loop_reply", state: { status: "completed", input: reply } } } });
+    writeFileSync(stream, rows.map(row => JSON.stringify(row)).join("\n"));
+    const text = cut[0].properties.part;
     const command = installOpencode(repo, stream, { "done.txt": "done\n", [TASKS]: "## 1. Work\n\n- [x] 1.1 Do the thing\n" }, { info, parts: [text] });
     configure(repo, `agents:\n  mimo: ${JSON.stringify(command)}\nroles:\n  implementer: mimo\nchecks:\n  - test -f done.txt\n`);
     const result = runLoop(repo, ["run", "add-thing"]);
@@ -444,7 +446,7 @@ for (const [label, info, expected] of [
       assert.equal(state(repo).stages.implementation, "pending");
       if (expected === "missing" || expected === "error") {
         assert.equal(existsSync(replyPath), false);
-        assert.match(readFileSync(log, "utf8"), expected === "missing" ? /no successful native structured output/ : /native output failed/);
+        assert.match(readFileSync(log, "utf8"), expected === "missing" ? /without a loop_reply call/ : /prompt failed/);
         assert.match(result.stdout, /execution failure of implementer agent "mimo".*exit status 1/);
       } else {
         assert.equal(existsSync(replyPath), true);

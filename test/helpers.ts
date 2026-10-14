@@ -16,7 +16,9 @@ const http = require("node:http");
 const path = require("node:path");
 const args = process.argv.slice(2);
 fs.appendFileSync(process.env.STUB_LOG, JSON.stringify(args) + "\\n");
-const state = { pid: process.pid, config: process.env.OPENCODE_CONFIG_CONTENT, pure: process.env.OPENCODE_PURE, streamClosed: false, terminated: false };
+const configDir = process.env.OPENCODE_CONFIG_DIR;
+const tool = configDir && path.join(configDir, "tool", "loop_reply.js");
+const state = { pid: process.pid, config: process.env.OPENCODE_CONFIG_CONTENT, pure: process.env.OPENCODE_PURE, configDir, tool: tool && fs.existsSync(tool) ? fs.readFileSync(tool, "utf8") : undefined, streamClosed: false, terminated: false };
 function save() { if (process.env.STUB_STATE_LOG) fs.writeFileSync(process.env.STUB_STATE_LOG, JSON.stringify(state)); }
 save();
 if (process.env.STUB_MODE === "early-exit") process.exit(Number(process.env.STUB_EXIT || 5));
@@ -108,6 +110,7 @@ export function installOpencode(repo: Repo, stream: string, edits: Record<string
   writeFileSync(responsePath, JSON.stringify(response ?? { info: {}, parts: [] }));
   Object.assign(repo.env, {
     OPENCODE_CONFIG_CONTENT: undefined,
+    OPENCODE_CONFIG_DIR: undefined,
     OPENCODE_PURE: undefined,
     OPENCODE_SERVER_PASSWORD: undefined,
     OPENCODE_SERVER_USERNAME: undefined,
