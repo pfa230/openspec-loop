@@ -101,3 +101,23 @@ The loop SHALL ship worker commands for Claude Code, Codex, Antigravity and Open
 #### Scenario: Latest OpenCode step report remains the accounting boundary
 - **WHEN** OpenCode updates one model step from a negative quantity to a valid final quantity and all selected latest reports contain finite non-negative quantities
 - **THEN** the adapter sums the latest reports once per distinct model step and does not retain the superseded quantity as an additional report or failure
+
+### Requirement: OpenCode transport lifetime
+
+The OpenCode adapter SHALL explicitly disable client response-header and response-body inactivity timeouts for its local HTTP requests and event subscription. Waiting for a prompt SHALL have no adapter-imposed elapsed-time limit. Worker interruption, transport or session failure and unexpected server exit SHALL still end the worker through the existing owned-server lifecycle.
+
+#### Scenario: Prompt delays response headers
+- **WHEN** an OpenCode prompt completes successfully after a delay longer than the HTTP client's default header timeout
+- **THEN** the adapter waits for completion and writes the reply from the root session's reply-tool call instead of failing on that default timeout
+
+#### Scenario: Prompt pauses response-body delivery
+- **WHEN** the prompt response starts and then pauses longer than the HTTP client's default body inactivity timeout before delivering the remaining valid response
+- **THEN** the adapter waits for the remaining response and writes the reply from the root session's reply-tool call
+
+#### Scenario: Event subscription is temporarily quiet
+- **WHEN** the event subscription emits no data for longer than the HTTP client's default body inactivity timeout while the prompt is still pending, then resumes and reports completion
+- **THEN** the adapter keeps the subscription open and completes with the reply from the root session's reply-tool call and the reported usage
+
+#### Scenario: Worker interrupted during an unbounded wait
+- **WHEN** the worker is interrupted while waiting for prompt headers, response-body data or event-stream data
+- **THEN** those waits are cancelled and the owned server is stopped without waiting for a response or an inactivity timeout
