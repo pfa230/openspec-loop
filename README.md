@@ -10,6 +10,7 @@ openspec-loop runs a proposed, committed OpenSpec change through proposal review
 - Bash, the shell workers run model-written commands in
 - A repository initialized with `openspec init` for the selected tools, with OpenSpec's skills and commands installed in the project
 - The CLI for each configured agent harness: `claude`, `codex`, `agy` or `opencode`
+- [ai-jail](https://github.com/akitaonrails/ai-jail), only for agents that use [`loop-jail`](#sandboxing)
 
 ## Installation
 
@@ -17,7 +18,7 @@ openspec-loop runs a proposed, committed OpenSpec change through proposal review
 npm install -g openspec-loop
 ```
 
-The package installs the `loop` command and four [agent adapters](#agents-and-adapters).
+The package installs the `loop` command, four [agent adapters](#agents-and-adapters) and the [`loop-jail`](#sandboxing) sandbox wrapper.
 
 For a system-wide Node installation whose npm global prefix belongs to root, configure a user-owned prefix with `npm config set prefix ~/.npm-global` and add `~/.npm-global/bin` to PATH. This allows installation without `sudo`.
 
@@ -136,7 +137,7 @@ Add the model flag of the harness (`--model`, `-m`) to choose a model. Without r
 
 The loop runs every worker with `SHELL` set to `bash`, because models write bash-shaped commands. Claude Code and OpenCode run commands in the shell `SHELL` names, but a harness's own setting takes precedence: Claude Code's `CLAUDE_CODE_SHELL` and OpenCode's `shell` configuration. Codex uses the account's login shell and ignores `SHELL`, and Antigravity ignores `SHELL` and uses bash.
 
-Claude Code's auto mode needs a model and account that support it. Without it, Claude Code starts in its default mode and denies the commands an implementer needs to run, such as the checks. In auto mode, a classifier judges every edit inside a `.git` directory and may refuse one, so an editing Claude agent whose `worktrees` directory lies inside the repository's Git directory can be refused edits there. `--permission-mode bypassPermissions` approves them all. To restrict an agent's access, prepend a sandbox command to the adapter command, for example `[ai-jail, --exec, ..., loop-claude, ...]`.
+Claude Code's auto mode needs a model and account that support it. Without it, Claude Code starts in its default mode and denies the commands an implementer needs to run, such as the checks. In auto mode, a classifier judges every edit inside a `.git` directory and may refuse one, so an editing Claude agent whose `worktrees` directory lies inside the repository's Git directory can be refused edits there. `--permission-mode bypassPermissions` approves them all. To restrict an agent's access, run it under [`loop-jail`](#sandboxing).
 
 `loop-opencode` starts one local OpenCode server in the worktree and offers the model a `loop_reply` tool whose arguments are the supplied schema's properties. The tool lives in a temporary configuration directory that the adapter passes through `OPENCODE_CONFIG_DIR` and removes when the worker ends; OpenCode adds it to the configuration, plugins and server authentication it already loads, and no configuration file changes. The adapter does not force a tool choice, so providers that accept only automatic tool choice, such as Meta's Muse Spark, can reply. Cut reports and other prose stay in the transcript; only the arguments of the root session's last completed `loop_reply` call supply the reply, and the loop's reply validation checks them against the schema. The tool rejects a call that omits a required top-level property with an error naming the missing properties; that call does not supply the reply, and the model can call the tool again within its turn. Text containing JSON cannot replace a missing call. Because OpenCode reads a single `OPENCODE_CONFIG_DIR`, the adapter refuses to start when one is already set. API/session failures and unexpected server exits fail the step with any reported usage preserved, and the adapter closes its event subscription and stops its server before exiting.
 
@@ -145,6 +146,40 @@ The adapter explicitly disables HTTP response-header and response-body inactivit
 Failure diagnostics stay in the worker's existing transcript. HTTP failures identify the method, API path and request or response-read operation; the transcript retains error names, codes, cause chains and available stacks before cleanup. It includes the originating transport reason behind generic messages such as `fetch failed` or `terminated`, without dumping request headers or prompt bodies. Reported usage is preserved when the worker fails.
 
 Supported OpenCode arguments are `-m`/`--model`, `--agent`, `--variant`, `--auto` and `--pure`, including equals/value forms and explicit boolean false or `--no-auto`/`--no-pure`. Pure mode from the environment is preserved and still loads the reply tool. Other run arguments, including `--attach` (even localhost), session continuation, file attachments and `--dir`, fail by name before OpenCode starts. Permission requests in root and delegated sessions are rejected by default; explicit `--auto` approves requested permissions once while configured denies remain in force. Questions and plan-mode transitions remain denied as in the headless CLI. With `--agent plan`, OpenCode rejects reads outside the repository without asking. A model that ends its turn without calling `loop_reply` fails the step; an explicit `loop resume` runs it again.
+
+#### Sandboxing
+
+`loop-jail` runs a worker command under ai-jail. Prepend it to an agent's command:
+
+```yaml
+agents:
+  deepseek: [loop-jail, loop-opencode, -m, deepseek/deepseek-v4, --auto]
+  opus: [loop-jail, loop-claude, --model, opus, --permission-mode, bypassPermissions]
+```
+
+Inside the jail, the worker can write only the worktree, a private `/tmp` and home directory discarded when it ends, and its harness's credential file. It keeps network access, so the checks, `openspec`, Git reads and a headless browser work. The repository's Git directory and the worktree's `.git` file are read-only: `git status`, `git diff` and `git log` work, and writes to hooks, configuration, the index and the worktree's metadata fail. The wrapper has the adapter write its reply and usage to a temporary host directory, outside the read-only Git directory, and copies them to the loop's paths when the adapter exits, whatever its status. It makes the wrapped command, its harness and `openspec` runnable by mapping read-only the directory of each symlink hop and the final file's directory, or its npm package directory. The wrapper exits with the wrapped command's status; without `ai-jail` on PATH, the worker fails with an error naming it.
+
+For the shipped adapters, the wrapper shares these files from the home directory. Everything else the harness writes is discarded when the worker ends.
+
+| Adapter | Writable | Read-only |
+|---|---|---|
+| `loop-claude` | `~/.claude/.credentials.json` | `~/.claude/settings.json`, `~/.claude/CLAUDE.md` |
+| `loop-codex` | `~/.codex/auth.json` | `~/.codex/config.toml` |
+| `loop-agy` | `~/.gemini/antigravity-cli/antigravity-oauth-token` | `~/.gemini/antigravity-cli/settings.json` |
+| `loop-opencode` | `~/.local/share/opencode/auth.json` | `~/.config/opencode` |
+
+Plugins, MCP logins and session history kept elsewhere in the harness's state directory are absent inside the jail. The wrapper uses each harness's default locations: a harness whose state moves by environment, such as `CLAUDE_CONFIG_DIR`, `CODEX_HOME` or `XDG_DATA_HOME`, starts unauthenticated and fails the step. Other commands get only the Git metadata and executable maps.
+
+To extend the jail, add a `[commands.<adapter>]` table to ai-jail's global configuration, `~/.ai-jail`, for example `[commands.loop-opencode]` with `env_pass` to pass a provider key, or `ro_maps` to map a toolchain under the home directory, such as a home-installed Node. The system's `node` and `git` are already visible. The wrapper has no options of its own.
+
+Headless Chrome aborts inside the jail unless started with `--no-sandbox`. Projects that drive a browser should state the flag in their agent instructions.
+
+The jail prevents accidents, not deliberate sabotage:
+
+- Credentials stay readable to the model. The harness calls its provider from the process that runs the model's commands, so its credential file and environment are readable inside the jail, and the network is open.
+- The loop's own commands run on the host. Required checks run code the implementer wrote, and the loop's commit runs a hook the worker edited when the repository's `core.hooksPath` points inside the worktree.
+
+`loop-jail` is verified with ai-jail 2.2.0 on Linux.
 
 #### Custom adapters
 
