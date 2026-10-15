@@ -9,7 +9,8 @@
     "loop-claude": "dist/src/adapters/claude.js",
     "loop-codex": "dist/src/adapters/codex.js",
     "loop-agy": "dist/src/adapters/agy.js",
-    "loop-opencode": "dist/src/adapters/opencode.js"
+    "loop-opencode": "dist/src/adapters/opencode.js",
+    "loop-jail": "dist/src/jail.js"
   },
   "files": [
     "dist/src",
