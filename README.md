@@ -157,7 +157,7 @@ agents:
   opus: [loop-jail, loop-claude, --model, opus, --permission-mode, bypassPermissions]
 ```
 
-Inside the jail, the worker can write only the worktree, a private `/tmp` and home directory discarded when it ends, and its harness's credential file. It keeps network access, so the checks, `openspec`, Git reads and a headless browser work. The repository's Git directory and the worktree's `.git` file are read-only: `git status`, `git diff` and `git log` work, and writes to hooks, configuration, the index and the worktree's metadata fail. The wrapper has the adapter write its reply and usage to a temporary host directory, outside the read-only Git directory, and copies them to the loop's paths when the adapter exits, whatever its status. It makes the wrapped command, its harness and `openspec` runnable by mapping read-only the directory of each symlink hop and the final file's directory, or its npm package directory. The wrapper exits with the wrapped command's status; without `ai-jail` on PATH, the worker fails with an error naming it.
+Inside the jail, the worker can write only the worktree, a private `/tmp` and home directory discarded when it ends, and its harness's credential file. `TMPDIR` inside the jail is `/tmp`, whatever the caller's. It keeps network access, so the checks, `openspec`, Git reads and a headless browser work. The repository's Git directory and the worktree's `.git` file are read-only: `git status`, `git diff` and `git log` work, and writes to hooks, configuration, the index and the worktree's metadata fail. The wrapper has the adapter write its reply and usage to a temporary host directory, outside the read-only Git directory, and copies them to the loop's paths when the adapter exits, whatever its status. It makes the wrapped command, its harness and `openspec` runnable by mapping read-only the directory of each symlink hop and the final file's directory, or its npm package directory. The wrapper exits with the wrapped command's status; without `ai-jail` on PATH, the worker fails with an error naming it.
 
 For the shipped adapters, the wrapper shares these files from the home directory. Everything else the harness writes is discarded when the worker ends.
 
@@ -170,7 +170,16 @@ For the shipped adapters, the wrapper shares these files from the home directory
 
 Plugins, MCP logins and session history kept elsewhere in the harness's state directory are absent inside the jail. The wrapper uses each harness's default locations: a harness whose state moves by environment, such as `CLAUDE_CONFIG_DIR`, `CODEX_HOME` or `XDG_DATA_HOME`, starts unauthenticated and fails the step. Other commands get only the Git metadata and executable maps.
 
-To extend the jail, add a `[commands.<adapter>]` table to ai-jail's global configuration, `~/.ai-jail`, for example `[commands.loop-opencode]` with `env_pass` to pass a provider key, or `ro_maps` to map a toolchain under the home directory, such as a home-installed Node. The system's `node` and `git` are already visible. The wrapper has no options of its own.
+To extend the jail, edit ai-jail's global configuration, `~/.ai-jail`. Its top-level keys apply to every command, so put what every worker needs there, such as a toolchain under the home directory and its build variables. For example, to let every adapter build a Rust project, with `CARGO_TARGET_DIR` set to `~/.cache/cargo-target` in the host's environment:
+
+```toml
+# ~/.ai-jail
+ro_maps = ["~/.cargo/bin", "~/.rustup"]
+rw_maps = ["~/.cargo/registry", "~/.cache/cargo-target"]
+env_pass = ["CARGO_TARGET_DIR"]
+```
+
+Map the registry writable rather than as an overlay, since ai-jail keeps an overlay's upper layer in the worktree. Keep a `[commands.<adapter>]` table for what one harness alone needs, for example `[commands.loop-opencode]` with `env_pass` to pass a provider key. The system's `node` and `git` are already visible. The wrapper has no options of its own.
 
 Headless Chrome aborts inside the jail unless started with `--no-sandbox`. Projects that drive a browser should state the flag in their agent instructions.
 

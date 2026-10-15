@@ -66,7 +66,7 @@ const relay = mkdtempSync(join(tmpdir(), "loop-jail-"));
 const writable = [relay, ...(shipped?.writable ?? []).map((file) => join(home, file))];
 const relayed = [join(relay, "reply.json"), join(relay, "usage.json")];
 const args = [
-  "--exec", "--network", "--no-save-config",
+  "--exec", "--network", "--no-save-config", "--env", "TMPDIR=/tmp",
   ...[...readOnly].flatMap((path) => ["--map", path]),
   ...writable.flatMap((path) => ["--rw-map", path]),
   "--", command, ...rest, ...relayed,
