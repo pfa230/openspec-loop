@@ -11,7 +11,7 @@ An editing worker runs with its harness's permissions, which either block work a
 - The repository's Git directory and the worktree's `.git` file are read-only to the worker. The wrapper has the adapter write its reply and usage outside the Git directory, then hands them to the loop at the paths it gave.
 - For the four shipped adapters, the wrapper shares the harness's credential file writable, and its executable and user configuration read-only. Everything else the harness writes is discarded when the worker ends.
 - A missing `ai-jail` fails the worker explicitly. The wrapper preserves the wrapped command's exit status.
-- The README documents the wrapper, ai-jail as its prerequisite, how to extend it through ai-jail's own configuration, and what the jail does not protect: credentials stay readable to the model on an open network, and checks run outside the jail.
+- The README documents the wrapper, ai-jail as its prerequisite, how to extend it through ai-jail's own configuration, and what the jail does not protect: it prevents accidents, not deliberate sabotage; credentials stay readable to the model on an open network; and checks, and hooks kept in the worktree, run outside the jail.
 
 ## Capabilities
 

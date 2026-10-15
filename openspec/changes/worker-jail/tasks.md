@@ -10,7 +10,7 @@
 
 ## 2. Documentation
 
-- [ ] 2.1 In the README, add ai-jail as a prerequisite for `loop-jail` only, name `loop-jail` among the installed commands, and replace the sandbox example in the agents section with a sandboxing section: the agent prefix, what the worker can and cannot write, the harness files shared per adapter, extending through `[commands.<adapter>]` in `~/.ai-jail`, Chrome's `--no-sandbox`, and what the jail does not protect (credentials on an open network, checks run on the host). Verify each documented agent command matches the bin and arguments in 1.1
+- [ ] 2.1 In the README, add ai-jail as a prerequisite for `loop-jail` only, name `loop-jail` among the installed commands, and replace the sandbox example in the agents section with a sandboxing section: the agent prefix, what the worker can and cannot write, the harness files shared per adapter, extending through `[commands.<adapter>]` in `~/.ai-jail`, Chrome's `--no-sandbox`, and what the jail does not protect: it prevents accidents, not deliberate sabotage (credentials on an open network, checks and hooks kept in the worktree run on the host). Verify each documented agent command matches the bin and arguments in 1.1
 
 ## 3. End-to-end check
 

@@ -22,11 +22,11 @@ The facts below were verified with ai-jail 2.2.0, Claude Code 2.1.300, Codex 0.1
 **Goals:**
 
 - One agent-command prefix that confines any worker, with no per-user setup for the shipped adapters.
-- No write from inside the jail can make the host run code: Git metadata, the worktree's `.git` file and harness configuration are read-only.
+- A worker cannot change the repository's Git metadata, the worktree's `.git` file or its harness configuration by mistake: they are read-only.
 
 **Non-Goals:**
 
-- Jailing the loop's own commands. Required checks, integration, archival and delivery run on the host as today, so a check runs code the implementer wrote. Prefixing checks is a separate change if wanted.
+- Stopping deliberate sabotage. The jail prevents accidents; it is not a wall against a worker set on running code on the host. The loop's own commands stay unjailed: required checks, integration, archival and delivery run on the host as today, so a check runs code the implementer wrote, and the loop's commit runs a hook the worker edited when the repository's `core.hooksPath` points inside the worktree.
 - Keeping credentials from the model. The harness calls its provider from the process that runs the model's commands, so its credential file and environment are readable inside the jail, and the network is open. ai-jail's `--secret` and `--allow-host` need a host list per project; not provided.
 - Harness state locations moved by environment, such as `CLAUDE_CONFIG_DIR`, `CODEX_HOME` or `XDG_DATA_HOME`. The wrapper uses each harness's default location; a moved location leaves the harness unauthenticated, which fails the worker visibly.
 - macOS. ai-jail supports it through `sandbox-exec`, but nothing here was verified there.
