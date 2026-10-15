@@ -25,9 +25,9 @@ export function nextStep(dir: string, name: string): string {
 }
 
 // Runs a step in its own process group, so stopping it ends everything it started.
-export function runStep(command: string, args: string[], cwd: string, transcript: string): Step {
+export function runStep(command: string, args: string[], cwd: string, transcript: string, env: NodeJS.ProcessEnv = process.env): Step {
   const fd = openSync(transcript, "a");
-  const child = spawn(command, args, { cwd, detached: true, stdio: ["ignore", fd, fd] });
+  const child = spawn(command, args, { cwd, env, detached: true, stdio: ["ignore", fd, fd] });
   closeSync(fd);
   const result = new Promise<StepResult>((resolve, reject) => {
     child.on("error", reject);
@@ -55,7 +55,8 @@ export interface WorkerFiles {
 }
 
 // Starts a worker: writes its prompt and schema, then runs its command with the paths of the prompt,
-// the schema, the reply and the usage appended, in the worktree with no input.
+// the schema, the reply and the usage appended, in the worktree with no input and with SHELL set to bash,
+// since harnesses that run model-written commands in $SHELL would otherwise use the operator's shell.
 export function startWorker(command: string[], cwd: string, base: string, prompt: string, schema: object): { step: Step; files: WorkerFiles } {
   const files = {
     prompt: `${base}.prompt.md`,
@@ -67,7 +68,7 @@ export function startWorker(command: string[], cwd: string, base: string, prompt
   writeFileSync(files.prompt, prompt);
   writeFileSync(files.schema, `${JSON.stringify(schema, null, 2)}\n`);
   const [executable, ...args] = command;
-  return { step: runStep(executable, [...args, files.prompt, files.schema, files.reply, files.usage], cwd, files.transcript), files };
+  return { step: runStep(executable, [...args, files.prompt, files.schema, files.reply, files.usage], cwd, files.transcript, { ...process.env, SHELL: "bash" }), files };
 }
 
 // What a worker reports its harness spent: every prompt token the model processed, cached or not, every token it
