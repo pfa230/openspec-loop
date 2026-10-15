@@ -1,6 +1,6 @@
 {
   "name": "openspec-loop",
-  "version": "0.7.1",
+  "version": "0.8.0",
   "description": "Runs a proposed OpenSpec change to a reviewed, tested and delivered result",
   "license": "MIT",
   "type": "module",
