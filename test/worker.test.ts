@@ -20,6 +20,14 @@ test("a worker gets the prompt, schema, reply and usage paths last and runs in t
   assert.match(readFileSync(`${base}.log`, "utf8"), /^stub reviewer turn/);
 });
 
+test("a worker runs with SHELL set to bash whatever shell the loop inherits", (t) => {
+  const repo = makeRepo(t);
+  repo.env.SHELL = "/usr/bin/zsh";
+  const result = runLoop(repo, ["run", "add-thing"]);
+  assert.equal(result.status, 0, result.stdout);
+  assert.equal(repo.calls("reviewer")[0].shell, "bash");
+});
+
 const failures: Record<string, [Turn, string]> = {
   "a nonzero exit": [{ exit: 3 }, "exit status 3"],
   "a signal": [{ kill: true }, "signal SIGKILL"],

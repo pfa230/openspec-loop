@@ -167,6 +167,7 @@ export interface Turn {
 export interface Call {
   args: string[];
   cwd: string;
+  shell: string;
 }
 
 export function finding(severity: "blocking" | "minor", problem: string, question: string | null = null) {
@@ -180,7 +181,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const args = process.argv.slice(2);
 const [, schema, reply, usage] = args.slice(-4);
-fs.appendFileSync(${JSON.stringify(log)}, JSON.stringify({ args, cwd: process.cwd() }) + "\\n");
+fs.appendFileSync(${JSON.stringify(log)}, JSON.stringify({ args, cwd: process.cwd(), shell: process.env.SHELL }) + "\\n");
 const queues = fs.existsSync(${JSON.stringify(queue)}) ? JSON.parse(fs.readFileSync(${JSON.stringify(queue)}, "utf8")) : {};
 const turn = (queues[args[0]] || []).shift() || {};
 fs.writeFileSync(${JSON.stringify(queue)}, JSON.stringify(queues));

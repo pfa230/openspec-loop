@@ -7,6 +7,7 @@ openspec-loop runs a proposed, committed OpenSpec change through proposal review
 - Node 24 or later, on Linux or macOS
 - OpenSpec 1.14.0 or later, as the `openspec` command on PATH
 - Git
+- Bash, the shell workers run model-written commands in
 - A repository initialized with `openspec init` for the selected tools, with OpenSpec's skills and commands installed in the project
 - The CLI for each configured agent harness: `claude`, `codex`, `agy` or `opencode`
 
@@ -133,6 +134,8 @@ A total adds the fields the harness reported and is left out when it reported no
 
 Add the model flag of the harness (`--model`, `-m`) to choose a model. Without restriction arguments, a harness runs with its own defaults; headless Claude Code and Codex cannot edit files by default.
 
+The loop runs every worker with `SHELL` set to `bash`, because models write bash-shaped commands. Claude Code and OpenCode run commands in the shell `SHELL` names, but a harness's own setting takes precedence: Claude Code's `CLAUDE_CODE_SHELL` and OpenCode's `shell` configuration. Codex uses the account's login shell and ignores `SHELL`, and Antigravity ignores `SHELL` and uses bash.
+
 Claude Code's auto mode needs a model and account that support it. Without it, Claude Code starts in its default mode and denies the commands an implementer needs to run, such as the checks. In auto mode, a classifier judges every edit inside a `.git` directory and may refuse one, so an editing Claude agent whose `worktrees` directory lies inside the repository's Git directory can be refused edits there. `--permission-mode bypassPermissions` approves them all. To restrict an agent's access, prepend a sandbox command to the adapter command, for example `[ai-jail, --exec, ..., loop-claude, ...]`.
 
 `loop-opencode` starts one local OpenCode server in the worktree and offers the model a `loop_reply` tool whose arguments are the supplied schema's properties. The tool lives in a temporary configuration directory that the adapter passes through `OPENCODE_CONFIG_DIR` and removes when the worker ends; OpenCode adds it to the configuration, plugins and server authentication it already loads, and no configuration file changes. The adapter does not force a tool choice, so providers that accept only automatic tool choice, such as Meta's Muse Spark, can reply. Cut reports and other prose stay in the transcript; only the arguments of the root session's last completed `loop_reply` call supply the reply, and the loop's reply validation checks them against the schema. Text containing JSON cannot replace a missing call. Because OpenCode reads a single `OPENCODE_CONFIG_DIR`, the adapter refuses to start when one is already set. API/session failures and unexpected server exits fail the step with any reported usage preserved, and the adapter closes its event subscription and stops its server before exiting.
@@ -147,7 +150,7 @@ Supported OpenCode arguments are `-m`/`--model`, `--agent`, `--variant`, `--auto
 
 Additional tools require an adapter that implements the worker interface. The loop appends four paths to the configured agent arguments, in order: prompt file, JSON schema file, reply file and usage file. Adapters must read these paths from the last four arguments.
 
-The command runs in the run's worktree without standard input. Its output becomes the step transcript. Success requires exit status 0 and a reply file containing a JSON object that matches the supplied schema. Any other outcome stops the run as an execution failure.
+The command runs in the run's worktree without standard input and with `SHELL` set to `bash`. Its output becomes the step transcript. Success requires exit status 0 and a reply file containing a JSON object that matches the supplied schema. Any other outcome stops the run as an execution failure.
 
 The command may also write what its harness reported spending to the usage file, as a JSON object with three optional keys, each a finite non-negative number: `inputTokens`, every prompt token the model processed, cached or not; `outputTokens`, every token it generated, reasoning included; and `costUsd`, a cost in US dollars. Without a usage file, the step's usage shows as unavailable. A usage file that is not such an object, including any other key or a negative or nonfinite value, stops the run as an execution failure.
 
