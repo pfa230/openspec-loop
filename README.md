@@ -336,22 +336,4 @@ The loop's contract is `openspec/specs/loop-workflow/spec.md`.
 
 ### Releasing
 
-Set the version on the release change's branch, then include `package.json` and `package-lock.json` in the change's commit:
-
-```sh
-npm version <version> --no-git-tag-version
-```
-
-After that change merges, release from a worktree detached at the default branch's tip:
-
-```sh
-npm ci
-npm test                                   # also builds dist/src, which the package ships
-npm pack
-npm publish openspec-loop-<version>.tgz
-git tag v<version>
-git push origin v<version>
-npm install -g openspec-loop@<version>
-```
-
-Verify that `loop status <any name>` refuses a missing run and that the packaged skills are installed under `$(npm root -g)/openspec-loop/skills/`.
+Release as the Releasing section of `AGENTS.md` describes.
