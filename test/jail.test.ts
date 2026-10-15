@@ -79,6 +79,7 @@ test("loop-jail maps the Git metadata and executables read-only and delivers the
   assert.equal(reply, '{"ok":true}\n');
   assert.equal(usage, '{"inputTokens":1}\n');
   assert.deepEqual(flags.slice(0, 3), ["--exec", "--network", "--no-save-config"]);
+  assert.ok(flags.some((arg, i) => flags[i - 1] === "--env" && arg === "TMPDIR=/tmp"), "TMPDIR is the jail's /tmp");
   for (const path of [join(repo, ".git"), join(worktree, ".git"), join(base, "local"), join(base, "npm", "bin"), join(base, "npm", "lib", "node_modules", "@scope", "openspec")]) {
     assert.ok(readOnly.includes(path), `${path} is mapped read-only`);
   }
