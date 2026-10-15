@@ -7,6 +7,7 @@ openspec-loop runs a committed OpenSpec change unattended to a delivered result.
 - **Cut before presenting.** After the last artifact or edit and before any summary, run a cut pass, even when a skill's own steps end earlier. List each mechanism, option, check, state field, record and task on its own line, and name the contract clause, as the change amends it, or the user's explicit request it serves where the contract is silent, such as docs or tooling. Remove whatever names neither, and whatever duplicates what the repository already has. For each item that stays, name its simpler version and the concrete failure that version causes; when there is none, use the simpler version. The presentation includes the cut list: what was removed, and why each kept item stayed.
 - **`npm test` is the check.** It builds the package and runs the tests. Run it before claiming work is done.
 - **Edit in a worktree.** Several sessions share the main checkout, and a dirty main checkout blocks delivery. Make every edit in a worktree under `.worktrees/` on its own branch, never in the main checkout and never with `main` checked out in the extra worktree.
+- **Clean up after merge.** Once a pull request merges, remove the worktrees and local branches it was delivered from, a loop run's included.
 
 ## Releasing
 
