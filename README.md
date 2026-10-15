@@ -150,12 +150,12 @@ Supported OpenCode arguments are `-m`/`--model`, `--agent`, `--variant`, `--auto
 
 OpenCode has no sandbox of its own, so `--auto` lets an editing agent read and write anything its user can. Running the adapter under [ai-jail](https://github.com/akitaonrails/ai-jail) confines it to the worktree while it still runs the checks, `openspec`, Git reads and a headless browser. Verified with ai-jail 2.2.0 and OpenCode 1.18.34.
 
-A short wrapper on `PATH`, here `loop-jail`, keeps the repository's Git hooks and configuration read-only, because a hook or `core.fsmonitor` written there would run on the host at the next Git command. Workers never commit, so they lose nothing:
+A short wrapper on `PATH`, here `loop-opencode-jail`, runs the adapter in the jail and keeps the repository's Git hooks and configuration read-only, because a hook or `core.fsmonitor` written there would run on the host at the next Git command. Workers never commit, so they lose nothing:
 
 ```sh
 #!/bin/sh
 git=$(git rev-parse --path-format=absolute --git-common-dir) || exit
-exec ai-jail --exec --map "$git/hooks" --map "$git/config" "$@"
+exec ai-jail --exec --map "$git/hooks" --map "$git/config" loop-opencode "$@"
 ```
 
 The harness's mounts go in ai-jail's global configuration, `~/.ai-jail`, under a table named after the adapter. Adjust the paths to where the npm global prefix and OpenCode are installed:
@@ -170,7 +170,7 @@ ro_maps = ["~/.local/bin", "~/.npm-global", "~/.opencode", "~/.config/opencode"]
 rw_maps = ["~/.local/share/opencode"]
 ```
 
-The agent then reads `opencode: [loop-jail, loop-opencode, --auto]`. Inside the jail, `/tmp` and the home directory are private and discarded when the worker ends, and Chrome needs `--no-sandbox` because its own sandbox cannot start there; say so in the project's agent instructions. OpenCode's configuration stays read-only, so the agent cannot add a plugin that later runs outside the jail.
+The agent then reads `opencode: [loop-opencode-jail, --auto]`. Inside the jail, `/tmp` and the home directory are private and discarded when the worker ends, and Chrome needs `--no-sandbox` because its own sandbox cannot start there; say so in the project's agent instructions. OpenCode's configuration stays read-only, so the agent cannot add a plugin that later runs outside the jail.
 
 The jail does not protect OpenCode's credentials. OpenCode calls the model provider from the same process that runs the agent's commands, so `auth.json` and any provider key in the environment are readable inside the jail, and the network is open. ai-jail's `--secret` and `--allow-host` can keep an environment key out of the jail at the cost of listing every host the agent reaches; an OAuth login stored in `auth.json` has no such option. A dedicated provider key with a spending limit bounds the exposure instead.
 
