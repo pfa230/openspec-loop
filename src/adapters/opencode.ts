@@ -34,13 +34,15 @@ for (let i = 0; i < args.length; i++) {
 }
 // OpenCode reads a single OPENCODE_CONFIG_DIR, so an inherited one would be displaced.
 if (process.env.OPENCODE_CONFIG_DIR) fail("unsupported OpenCode setting OPENCODE_CONFIG_DIR");
-const properties = JSON.stringify(JSON.parse(schema).properties ?? {});
+const { properties = {}, required = [] } = JSON.parse(schema);
 const configDir = mkdtempSync(join(tmpdir(), "loop-opencode-"));
 mkdirSync(join(configDir, "tool"));
 writeFileSync(join(configDir, "tool", "loop_reply.js"), `export default {
   description: "Submit the reply to the loop. Call this once, after the work and any required presentation are complete.",
-  args: ${properties},
-  async execute() {
+  args: ${JSON.stringify(properties)},
+  async execute(args) {
+    const missing = ${JSON.stringify(required)}.filter(name => !(name in args));
+    if (missing.length) throw new Error("loop_reply is missing required properties: " + missing.join(", ") + ". Call loop_reply again with every required property.");
     return "Reply recorded.";
   },
 };

@@ -235,7 +235,8 @@ test("OpenCode offers the schema's properties through its reply tool in one fres
   writeFileSync(toolFile, outcome.state.tool!);
   const tool = (await import(pathToFileURL(toolFile).href)).default;
   assert.deepEqual(tool.args, schema.properties);
-  assert.equal(typeof await tool.execute(), "string");
+  assert.equal(typeof await tool.execute({ findings: [] }), "string");
+  await assert.rejects(tool.execute({}), /missing required properties: findings\./);
   assert.deepEqual(outcome.requests.find(request => request.path === "/session")!.body.permission, [
     { permission: "question", pattern: "*", action: "deny" },
     { permission: "plan_enter", pattern: "*", action: "deny" },
