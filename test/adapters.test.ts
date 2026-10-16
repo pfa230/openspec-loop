@@ -358,6 +358,21 @@ test("issue #54: cut report plus JSON stays in transcript and a missing reply-to
   assert.match(outcome.stdout, /Cut pass:/);
   assert.equal(outcome.usage, '{"inputTokens":11,"outputTokens":13,"costUsd":0}\n');
   assert.equal(outcome.calls, 1);
+  assert.equal(outcome.requests.filter(request => request.path === "/session/root/message").length, 2);
+  cleaned(outcome);
+});
+
+test("OpenCode sends one same-session follow-up prompt when a completed prompt has no reply-tool call", (t) => {
+  const outcome = adapter(t, "opencode", {
+    STUB_STREAM: eventFile(t, [nativeEvent({ id: "text", type: "text", text: "Done." })]),
+    STUB_FOLLOW_UP_STREAM: eventFile(t, [replyEvent()]),
+  }, ["-m", "meta/muse-spark-1.3-contributor"]);
+  assert.equal(outcome.status, 0, outcome.stderr);
+  assert.deepEqual(outcome.reply, REPLY);
+  const prompts = outcome.requests.filter(request => request.path === "/session/root/message");
+  assert.equal(prompts.length, 2);
+  for (const prompt of prompts) assert.deepEqual(prompt.body.model, { providerID: "meta", modelID: "muse-spark-1.3-contributor" });
+  assert.match(prompts[1].body.parts[0].text, /without calling loop_reply/);
   cleaned(outcome);
 });
 
