@@ -120,7 +120,7 @@ An agent's command is an adapter followed by arguments for its harness. The pack
 | `loop-claude` | Claude Code 2.1.293 | `--permission-mode plan` | `--permission-mode auto` |
 | `loop-codex` | Codex 0.160.0 | `-s read-only` | `-s workspace-write` |
 | `loop-agy` | Antigravity 1.2.17 | none | `--dangerously-skip-permissions` |
-| `loop-opencode` | OpenCode 1.18.34 | `--agent plan` | none |
+| `loop-opencode` | OpenCode 1.19.1 | `--agent plan` | none |
 
 Each adapter writes its harness's reported usage to the usage file as two token totals and any reported cost, even when the harness then fails. Input tokens are every prompt token the model processed, cached or not; output tokens are every token it generated, reasoning included. The harnesses count differently, so each adapter adds the native fields that make up those totals:
 
