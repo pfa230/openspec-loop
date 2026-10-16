@@ -2,47 +2,23 @@
 
 ## ADDED Requirements
 
-### Requirement: Bundled worker command resolution
+### Requirement: CLI launch directory
 
-Bare `loop-claude`, `loop-codex`, `loop-agy`, `loop-opencode` and `loop-jail` worker commands SHALL select the executing package's files independently of PATH, the current directory and npm's global prefix. Other bare commands SHALL use PATH; commands containing `/` SHALL use the specified absolute path or resolve relative to the invoking checkout. An unavailable bundled file SHALL fail naming its path without selecting a different installation.
+Before resolving or running commands, the CLI SHALL append the directory used to launch its executable to the inherited PATH, preserving existing entries and their order. Workers SHALL inherit that PATH. The launch directory SHALL refer to the invoked path rather than its symlink target. An unset PATH SHALL become the launch directory alone.
 
-#### Scenario: Installed adapters absent from PATH
-- **WHEN** a running installed `loop` resolves roles using bundled commands while its installation's bin directory is absent from PATH and external prerequisites are available as required by their existing contracts
-- **THEN** each bundled command resolves to that executing package's installed file
+#### Scenario: Installation bin directory missing from PATH
+- **WHEN** the installed `loop` is invoked by path from a linked worktree, its installation bin directory is absent from PATH, and external prerequisites are available
+- **THEN** sibling adapter commands are found through the existing PATH lookup and workers inherit the augmented PATH
 
-#### Scenario: PATH contains another installation
-- **WHEN** PATH contains a command with a bundled worker name from a different installation
-- **THEN** the bare name still selects the executing package's file
+#### Scenario: Existing PATH command takes precedence
+- **WHEN** an earlier inherited PATH entry supplies a configured command also present beside the invoked `loop`
+- **THEN** the earlier command remains selected
 
-#### Scenario: Explicit custom command
-- **WHEN** an agent names an absolute command path or a relative command containing `/`, including a different installation's adapter
-- **THEN** the specified command is used and relative paths resolve against the invoking checkout
+#### Scenario: Symlink invocation
+- **WHEN** the invoked `loop` is a link from an installation bin directory to a JavaScript file inside its package
+- **THEN** the appended directory is the installation bin directory
 
-#### Scenario: Custom command on PATH
-- **WHEN** an agent names a bare command other than the five bundled worker names
-- **THEN** it resolves through PATH in order, including relative and empty PATH entries, and an unavailable command receives the existing refusal naming its role and alias
-
-#### Scenario: Executing package relocated
-- **WHEN** the executing package is outside the invoking repository and npm's current global prefix names another installation
-- **THEN** bundled worker commands resolve from the executing package's location
-
-#### Scenario: Bundled file unavailable
-- **WHEN** the executing package's selected worker file is missing or is not executable, even though PATH contains a command with the same name
-- **THEN** role resolution refuses naming the role, alias and unavailable package file without running the PATH command
-
-### Requirement: Bundled commands inside the sandbox wrapper
-
-`loop-jail` SHALL resolve a wrapped bare bundled worker name from its own executing package before mapping and invoking it. It SHALL retain the shipped adapter's harness identification, credential sharing and executable maps. Other wrapped commands SHALL retain their existing PATH or explicit-path semantics. An unavailable bundled file SHALL fail naming its path without selecting a PATH alternative.
-
-#### Scenario: Jailed adapter absent from PATH
-- **WHEN** an agent uses `[loop-jail, loop-opencode, --auto]` and the package's bin directory is absent from PATH while external prerequisites are available
-- **THEN** the wrapper invokes its own packaged OpenCode adapter by absolute path with its arguments preserved
-- **AND** it maps that adapter's package and the harness and OpenSpec executable chains read-only and retains OpenCode's existing credential and configuration shares
-
-#### Scenario: Wrapped bundled file unavailable
-- **WHEN** the wrapper's packaged adapter file is unavailable but PATH contains the same adapter name
-- **THEN** the wrapper fails naming the package file without invoking the PATH command
-
-#### Scenario: Custom wrapped command
-- **WHEN** the wrapped command is a custom bare name or an explicit path
-- **THEN** the wrapper retains the existing command lookup, executable mapping, reply relay and exit-status behavior
+#### Scenario: Wrapped adapter retains its command name
+- **WHEN** an agent uses `[loop-jail, loop-opencode, --auto]` after the CLI adds its launch directory to PATH
+- **THEN** the wrapper receives the inherited PATH and continues passing `loop-opencode` to ai-jail with its existing arguments and mapping behavior
+- **AND** ai-jail's existing `[commands.loop-opencode]` settings continue to apply
