@@ -1,7 +1,21 @@
 import assert from "node:assert/strict";
-import { existsSync } from "node:fs";
+import { execFileSync, spawnSync } from "node:child_process";
+import { chmodSync, existsSync, mkdirSync, symlinkSync, writeFileSync } from "node:fs";
+import { delimiter, join } from "node:path";
 import { test } from "node:test";
-import { loop, makeRepo, runLoop, writeFile } from "./helpers.js";
+import { BIN, loop, makeRepo, type Repo, runLoop, writeFile } from "./helpers.js";
+
+// An npm-style installation: the loop symlink beside its sibling commands in the fixture bin.
+function siblingLoop(repo: Repo): string {
+  const link = join(repo.root, "bin", "loop");
+  symlinkSync(BIN, link);
+  return link;
+}
+
+// The inherited PATH a shell supplies when it launches loop by path without its bin directory.
+function withoutBin(repo: Repo): string {
+  return repo.env.PATH!.split(delimiter).filter((dir) => dir !== join(repo.root, "bin")).join(delimiter);
+}
 
 test("loop prints usage and exits 2", (t) => {
   const repo = makeRepo(t);
@@ -68,3 +82,51 @@ for (const command of ["run", "step"]) {
     assert.match(result.stderr, /role planReviser uses agent "ghost", whose command no-such-adapter is not an executable file on PATH/);
   });
 }
+
+test("a loop invoked by path finds its sibling commands when its bin directory is absent from PATH", (t) => {
+  const repo = makeRepo(t);
+  const link = siblingLoop(repo);
+  const worktree = join(repo.root, "linked");
+  repo.git("worktree", "add", "--quiet", "-b", "linked", worktree);
+  const result = spawnSync(process.execPath, [link, "step", "add-thing"], {
+    cwd: worktree,
+    env: { ...repo.env, PATH: withoutBin(repo) },
+    encoding: "utf8",
+  });
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  const [call] = repo.calls("reviewer");
+  assert.equal(call.cwd, worktree);
+});
+
+test("an earlier PATH entry keeps precedence over a command beside the invoked loop", (t) => {
+  const repo = makeRepo(t);
+  const link = siblingLoop(repo);
+  const earlier = join(repo.root, "earlier");
+  mkdirSync(earlier);
+  const marker = join(repo.root, "earlier-stub-ran");
+  const stub = join(earlier, "stub-agent");
+  writeFileSync(stub, `#!/bin/sh\ntouch "${marker}"\nexit 7\n`);
+  chmodSync(stub, 0o755);
+  const result = spawnSync(process.execPath, [link, "step", "add-thing"], {
+    cwd: repo.top,
+    env: { ...repo.env, PATH: [earlier, withoutBin(repo)].join(delimiter) },
+    encoding: "utf8",
+  });
+  assert.equal(result.status, 1, result.stderr || result.stdout);
+  assert.match(result.stdout, /exit status 7/);
+  assert.ok(existsSync(marker));
+  assert.equal(repo.calls("reviewer").length, 0);
+});
+
+test("with PATH removed the launch directory alone still finds a sibling command", (t) => {
+  const repo = makeRepo(t);
+  const link = siblingLoop(repo);
+  // PATH becomes the launch directory alone, so it also carries the external prerequisites.
+  symlinkSync(process.execPath, join(repo.root, "bin", "node"));
+  symlinkSync(execFileSync("sh", ["-c", "command -v git"], { encoding: "utf8" }).trim(), join(repo.root, "bin", "git"));
+  const env = { ...repo.env };
+  delete env.PATH;
+  const result = spawnSync(process.execPath, [link, "step", "add-thing"], { cwd: repo.top, env, encoding: "utf8" });
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  assert.equal(repo.calls("reviewer").length, 1);
+});
