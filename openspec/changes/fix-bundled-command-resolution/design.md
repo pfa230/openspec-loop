@@ -30,7 +30,7 @@ Always selecting the package is a deliberate compatibility decision: PATH no lon
 
 ### Resolve the nested command at the wrapper boundary
 
-Have `src/jail.ts` use the same resolver for its wrapped command before executable mapping and construction of ai-jail's command arguments. Retain the original adapter name for the existing harness lookup before replacing the command with its absolute package path; otherwise `opencode.js` would lose the `loop-opencode` credential and configuration shares. Pass the resolved file through the existing executable-chain mapper so the package is visible inside the jail. Leave the harness, `openspec` and `ai-jail` lookup rules unchanged.
+Have `src/jail.ts` use the same resolver for its wrapped command before executable mapping and construction of ai-jail's command arguments. Retain the original adapter name for the existing harness lookup before replacing the command with its absolute package path; otherwise `opencode.js` would lose the `loop-opencode` credential and configuration shares. For a bundled command, map the executing package root already known by the shared resolver directly and read-only, including when that package lies outside `node_modules`. This exposes the adapter, its sibling modules and its package-local dependencies. Keep the existing executable-chain mapper for custom commands and external executable chains; do not extend it to discover package roots. Leave the harness, `openspec` and `ai-jail` lookup rules unchanged.
 
 Resolving only the first token in `src/config.ts` is insufficient for `[loop-jail, loop-opencode, ...]`. Adding the installation's bin directory to PATH would also change lookup for unrelated tools and would still depend on a particular npm link layout. Do not scan or rewrite arbitrary worker arguments; only the wrapper knows which argument is a command.
 
@@ -42,7 +42,6 @@ Use the existing custom-command tests for PATH order, relative paths and refusal
 
 ## Risks / Trade-offs
 
-- **Unresolved blocking review finding:** The recorded decision to pass the resolved adapter file through the existing executable-chain mapper does not satisfy the package-map requirement outside `node_modules`. `chain()` maps only the file's directory in that layout; the real path anchored by `import.meta.url` in the relocated fixture and an `npm link` checkout therefore yields `dist/src/adapters`, leaving package dependencies such as `undici` unavailable inside a real jail. The recording ai-jail fixture executes outside a jail, so successful execution there cannot establish dependency visibility; task 2.1 must still assert the package-root map. Mapping the shared resolver's package root directly, or extending the chain mapper to handle that layout, would require revising or adding a recorded decision. Neither is authorized in this revision, so the finding and task 2.1 remain blocked.
 - Users overriding bundled names via PATH will select a different command after upgrading. Document the breaking precedence change and move intentional overrides to explicit paths in local configuration.
 - Packaged adapters run as executable files, whereas TypeScript compilation alone need not set executable bits. Model npm's executable permissions in relocated fixtures; do not add runtime chmod or interpreter-wrapper behavior.
 - Converting an adapter name to a JavaScript filename can lose jail harness identity. Preserve the original identification and assert its existing credential/configuration maps.
@@ -54,7 +53,7 @@ Implement and validate locally, then sync and archive through the repository wor
 
 ## Cut Pass
 
-Removed the separate relocated-package integration task: its direct execution check belongs with task 1.1, and its jailed execution check belongs with task 2.1. Removed the additional temporary-install check because the relocated fixture models the installed layout and npm executable permissions. This revision removes the external-prerequisite outcome clause and puts it in the scenario precondition. No runtime options, state fields or persistent records are added.
+Removed the separate relocated-package integration task: its direct execution check belongs with task 1.1, and its jailed execution check belongs with task 2.1. Removed the additional temporary-install check because the relocated fixture models the installed layout and npm executable permissions. This revision removes the external-prerequisite outcome clause and puts it in the scenario precondition. The user accepted direct mapping of the known package root; remove the superseded blocker notes. No runtime options, state fields or persistent records are added.
 
 | Kept item | Contract or request served | Simpler alternative and concrete failure |
 | --- | --- | --- |
@@ -69,7 +68,7 @@ Removed the separate relocated-package integration task: its direct execution ch
 | Competing installation and relocated-prefix checks | Bundled worker command resolution | A single installation on a normal PATH conceals version mixing and prefix-dependent resolution. |
 | Custom lookup and unavailable-file checks | Bundled worker command resolution | Testing only successful bundled lookup misses broken custom overrides and unintended fallback. |
 | Nested adapter execution and mapping checks | Bundled commands inside the sandbox wrapper | Direct-only coverage misses the wrapper's second lookup and harness-identity loss. |
-| Unresolved package-mapping finding and task 2.1 blocker | User's request to leave findings requiring a decision change unresolved | Omitting the blocker would imply that the existing mapper can meet the package-root assertion in the relocated layout. |
+| Direct read-only map of the known package root | Bundled commands inside the sandbox wrapper; user-accepted mapping decision | Mapping only the adapter directory hides sibling modules and dependencies outside `node_modules`. Reuse the known root instead of adding package discovery to `chain()`. |
 | Task 1.1: resolver, direct execution and focused tests | Bundled worker command resolution | Omitting it leaves the original defect. |
 | Task 1.2: lookup and migration documentation | User's installation-operability request | Omitting it leaves existing PATH overrides with an unexplained behavior change. |
 | Task 2.1: wrapper integration and focused tests | Bundled commands inside the sandbox wrapper | Omitting it leaves the same defect for jailed agents. |
