@@ -34,14 +34,23 @@ for (let i = 0; i < args.length; i++) {
 }
 // OpenCode reads a single OPENCODE_CONFIG_DIR, so an inherited one would be displaced.
 if (process.env.OPENCODE_CONFIG_DIR) fail("unsupported OpenCode setting OPENCODE_CONFIG_DIR");
-const { properties = {}, required = [] } = JSON.parse(schema);
+const { required = [] } = JSON.parse(schema);
 const configDir = mkdtempSync(join(tmpdir(), "loop-opencode-"));
 mkdirSync(join(configDir, "tool"));
+const toolArgs = { reply: { type: "string", description: `The reply as a JSON-encoded object matching the supplied worker schema: ${schema.trim()}. Call loop_reply with this string.` } };
 writeFileSync(join(configDir, "tool", "loop_reply.js"), `export default {
   description: "Submit the reply to the loop. Call this once, after the work and any required presentation are complete.",
-  args: ${JSON.stringify(properties)},
+  args: ${JSON.stringify(toolArgs).replace(/\$\{/g, "\\${")},
   async execute(args) {
-    const missing = ${JSON.stringify(required)}.filter(name => !(name in args));
+    if (typeof args.reply !== "string") throw new Error("loop_reply requires a string reply containing a JSON-encoded object. Call loop_reply again.");
+    let decoded;
+    try {
+      decoded = JSON.parse(args.reply);
+    } catch {
+      throw new Error("loop_reply reply is not valid JSON. Call loop_reply again with a JSON-encoded object.");
+    }
+    if (decoded === null || typeof decoded !== "object" || Array.isArray(decoded)) throw new Error("loop_reply reply must decode to a JSON object. Call loop_reply again.");
+    const missing = ${JSON.stringify(required)}.filter(name => !(name in decoded));
     if (missing.length) throw new Error("loop_reply is missing required properties: " + missing.join(", ") + ". Call loop_reply again with every required property.");
     return "Reply recorded.";
   },
@@ -184,7 +193,7 @@ async function events(response: Response, sessionID: string): Promise<void> {
         }
         if (event.type === "message.part.updated" && props.part?.sessionID === sessionID) {
           if (props.part.type === "step-finish") steps.set(props.part.id, props.part);
-          if (props.part.type === "tool" && props.part.tool === "loop_reply" && props.part.state?.status === "completed") reply = props.part.state.input;
+          if (props.part.type === "tool" && props.part.tool === "loop_reply" && props.part.state?.status === "completed") reply = decodeReply(props.part.state.input);
         }
         if (event.type === "session.error" && props.sessionID === sessionID) throw new Error(`opencode session error: ${JSON.stringify(props.error)}`);
         if (event.type === "session.status" && props.sessionID === sessionID && props.status?.type === "idle") return;
@@ -194,6 +203,20 @@ async function events(response: Response, sessionID: string): Promise<void> {
     await reader.cancel().catch(() => {});
     reader.releaseLock();
   }
+}
+
+// The adapter obtains every reply through the tool's single string argument, never through text.
+function decodeReply(input: unknown): unknown {
+  const encoded = (input as { reply?: unknown } | undefined)?.reply;
+  if (typeof encoded !== "string") throw new Error("opencode loop_reply event has no string reply");
+  let decoded: unknown;
+  try {
+    decoded = JSON.parse(encoded);
+  } catch (error) {
+    throw new Error("opencode loop_reply event reply is not valid JSON", { cause: error });
+  }
+  if (decoded === null || typeof decoded !== "object" || Array.isArray(decoded)) throw new Error("opencode loop_reply event reply is not a JSON object");
+  return decoded;
 }
 
 let streamed: Promise<void> | undefined;
@@ -207,7 +230,7 @@ try {
       ...(model && { model: { providerID: model[0], modelID: model.slice(1).join("/") } }),
       ...(selections.agent && { agent: selections.agent }),
       ...(selections.variant && { variant: selections.variant }),
-      parts: [{ type: "text", text: `${prompt}\nAfter completing the work and any required presentation, finish by calling the loop_reply tool with the reply's fields. Text is kept in the transcript and cannot serve as the reply.` }],
+      parts: [{ type: "text", text: `${prompt}\nAfter completing the work and any required presentation, finish by calling the loop_reply tool with its single reply string containing the reply's fields JSON-encoded as an object. Text is kept in the transcript and cannot serve as the reply.` }],
     }) as PromptResponse;
     process.stdout.write(`${JSON.stringify({ type: "prompt.response", response: returned })}\n`);
     return returned;

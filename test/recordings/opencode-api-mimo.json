@@ -1,0 +1,329 @@
+{
+  "events": [
+    {
+      "id": "evt_14368cd63001Vgb6wccX3aTb1D",
+      "type": "message.part.updated",
+      "properties": {
+        "sessionID": "root",
+        "part": {
+          "type": "text",
+          "text": "This is an adapter verification probe. Do not run any commands and do not read any files. Write a short cut report as text starting with exactly \"Cut pass:\". Then call the loop_reply tool with planProblem set to null.\n\nAfter completing the work and any required presentation, finish by calling the loop_reply tool with its single reply string containing the reply's fields JSON-encoded as an object. Text is kept in the transcript and cannot serve as the reply.",
+          "messageID": "msg_14368cd56001cbmlCQROnZHh0x",
+          "sessionID": "root",
+          "id": "prt_14368cd5e001Plzuyz9NOh99F8"
+        },
+        "time": 1792132304227
+      }
+    },
+    {
+      "id": "evt_14368e488001zWQ3dzL9RUQdSj",
+      "type": "message.part.updated",
+      "properties": {
+        "sessionID": "root",
+        "part": {
+          "id": "prt_14368e488001HRjMMQqkozDahi",
+          "messageID": "msg_14368d148001UBKM8pP47e5X3a",
+          "sessionID": "root",
+          "type": "step-start"
+        },
+        "time": 1792132310152
+      }
+    },
+    {
+      "id": "evt_14368e48e001hOQjY2U8UdHOzu",
+      "type": "message.part.updated",
+      "properties": {
+        "sessionID": "root",
+        "part": {
+          "id": "prt_14368e48d001TKE33T6IV2altQ",
+          "messageID": "msg_14368d148001UBKM8pP47e5X3a",
+          "sessionID": "root",
+          "type": "text",
+          "text": "",
+          "time": {
+            "start": 1792132310158
+          }
+        },
+        "time": 1792132310158
+      }
+    },
+    {
+      "id": "evt_14368e4dd00186yPrQCmzeb4EH",
+      "type": "message.part.updated",
+      "properties": {
+        "sessionID": "root",
+        "part": {
+          "id": "prt_14368e4dd001mmcOYvtb3YxFcA",
+          "messageID": "msg_14368d148001UBKM8pP47e5X3a",
+          "sessionID": "root",
+          "type": "tool",
+          "tool": "loop_reply",
+          "callID": "chatcmpl-tool-81263d3ea5216b7a",
+          "state": {
+            "status": "pending",
+            "input": {},
+            "raw": ""
+          }
+        },
+        "time": 1792132310237
+      }
+    },
+    {
+      "id": "evt_14368e4fb001vReP4zBY1lu0S0",
+      "type": "message.part.updated",
+      "properties": {
+        "sessionID": "root",
+        "part": {
+          "type": "tool",
+          "tool": "loop_reply",
+          "callID": "chatcmpl-tool-81263d3ea5216b7a",
+          "state": {
+            "status": "running",
+            "input": {
+              "reply": "{\"planProblem\": null}"
+            },
+            "time": {
+              "start": 1792132310267
+            }
+          },
+          "id": "prt_14368e4dd001mmcOYvtb3YxFcA",
+          "sessionID": "root",
+          "messageID": "msg_14368d148001UBKM8pP47e5X3a",
+          "metadata": {
+            "openrouter": {
+              "reasoning_details": []
+            }
+          }
+        },
+        "time": 1792132310267
+      }
+    },
+    {
+      "id": "evt_14368e503001PdEIZJgqdSd71y",
+      "type": "message.part.updated",
+      "properties": {
+        "sessionID": "root",
+        "part": {
+          "type": "tool",
+          "tool": "loop_reply",
+          "callID": "chatcmpl-tool-81263d3ea5216b7a",
+          "state": {
+            "status": "completed",
+            "input": {
+              "reply": "{\"planProblem\": null}"
+            },
+            "output": "Reply recorded.",
+            "metadata": {
+              "truncated": false
+            },
+            "title": "",
+            "time": {
+              "start": 1792132310267,
+              "end": 1792132310275
+            }
+          },
+          "metadata": {
+            "openrouter": {
+              "reasoning_details": []
+            }
+          },
+          "id": "prt_14368e4dd001mmcOYvtb3YxFcA",
+          "sessionID": "root",
+          "messageID": "msg_14368d148001UBKM8pP47e5X3a"
+        },
+        "time": 1792132310275
+      }
+    },
+    {
+      "id": "evt_14368e506001KXqNBeEdH0vkWS",
+      "type": "message.part.updated",
+      "properties": {
+        "sessionID": "root",
+        "part": {
+          "id": "prt_14368e48d001TKE33T6IV2altQ",
+          "messageID": "msg_14368d148001UBKM8pP47e5X3a",
+          "sessionID": "root",
+          "type": "text",
+          "text": "Cut pass: No commands run; no files read. Probe accepted as specified.",
+          "time": {
+            "start": 1792132310158,
+            "end": 1792132310278
+          }
+        },
+        "time": 1792132310278
+      }
+    },
+    {
+      "id": "evt_14368e50d00160RDbHNHBONdqr",
+      "type": "message.part.updated",
+      "properties": {
+        "sessionID": "root",
+        "part": {
+          "id": "prt_14368e50d001gHK141W7bjqaQr",
+          "reason": "tool-calls",
+          "messageID": "msg_14368d148001UBKM8pP47e5X3a",
+          "sessionID": "root",
+          "type": "step-finish",
+          "tokens": {
+            "total": 7410,
+            "input": 5068,
+            "output": 38,
+            "reasoning": 0,
+            "cache": {
+              "write": 0,
+              "read": 2304
+            }
+          },
+          "cost": 0.0007266112
+        },
+        "time": 1792132310285
+      }
+    },
+    {
+      "id": "evt_14368e7790017FrFTFyJOHRJS2",
+      "type": "message.part.updated",
+      "properties": {
+        "sessionID": "root",
+        "part": {
+          "id": "prt_14368e779001XlOtNK2T8b2c1w",
+          "messageID": "msg_14368e520001j5XycSmTXyag8G",
+          "sessionID": "root",
+          "type": "step-start"
+        },
+        "time": 1792132310905
+      }
+    },
+    {
+      "id": "evt_14368e77c001kbPtlB66e8PSku",
+      "type": "message.part.updated",
+      "properties": {
+        "sessionID": "root",
+        "part": {
+          "id": "prt_14368e77c001ZHjb4H4Zpq6vIG",
+          "messageID": "msg_14368e520001j5XycSmTXyag8G",
+          "sessionID": "root",
+          "type": "text",
+          "text": "",
+          "time": {
+            "start": 1792132310908
+          }
+        },
+        "time": 1792132310908
+      }
+    },
+    {
+      "id": "evt_14368e786001e7iZsQN8hyXc0Q",
+      "type": "message.part.updated",
+      "properties": {
+        "sessionID": "root",
+        "part": {
+          "id": "prt_14368e77c001ZHjb4H4Zpq6vIG",
+          "messageID": "msg_14368e520001j5XycSmTXyag8G",
+          "sessionID": "root",
+          "type": "text",
+          "text": "Done.",
+          "time": {
+            "start": 1792132310908,
+            "end": 1792132310918
+          }
+        },
+        "time": 1792132310918
+      }
+    },
+    {
+      "id": "evt_14368e789001sgFTTXk3xHtRKk",
+      "type": "message.part.updated",
+      "properties": {
+        "sessionID": "root",
+        "part": {
+          "id": "prt_14368e789001OUHV6xGDho82M6",
+          "reason": "stop",
+          "messageID": "msg_14368e520001j5XycSmTXyag8G",
+          "sessionID": "root",
+          "type": "step-finish",
+          "tokens": {
+            "total": 7425,
+            "input": 126,
+            "output": 3,
+            "reasoning": 0,
+            "cache": {
+              "write": 0,
+              "read": 7296
+            }
+          },
+          "cost": 0.0000389088
+        },
+        "time": 1792132310921
+      }
+    }
+  ],
+  "response": {
+    "info": {
+      "parentID": "msg_14368cd56001cbmlCQROnZHh0x",
+      "role": "assistant",
+      "mode": "build",
+      "agent": "build",
+      "path": {
+        "cwd": "/tmp/opencode/probe1",
+        "root": "/"
+      },
+      "cost": 0.0000389088,
+      "tokens": {
+        "total": 7425,
+        "input": 126,
+        "output": 3,
+        "reasoning": 0,
+        "cache": {
+          "write": 0,
+          "read": 7296
+        }
+      },
+      "modelID": "xiaomi/mimo-v2.6-flash",
+      "providerID": "openrouter",
+      "time": {
+        "created": 1792132310304,
+        "completed": 1792132310927
+      },
+      "finish": "stop",
+      "id": "msg_14368e520001j5XycSmTXyag8G",
+      "sessionID": "root"
+    },
+    "parts": [
+      {
+        "type": "step-start",
+        "id": "prt_14368e779001XlOtNK2T8b2c1w",
+        "sessionID": "root",
+        "messageID": "msg_14368e520001j5XycSmTXyag8G"
+      },
+      {
+        "type": "text",
+        "text": "Done.",
+        "time": {
+          "start": 1792132310908,
+          "end": 1792132310918
+        },
+        "id": "prt_14368e77c001ZHjb4H4Zpq6vIG",
+        "sessionID": "root",
+        "messageID": "msg_14368e520001j5XycSmTXyag8G"
+      },
+      {
+        "reason": "stop",
+        "type": "step-finish",
+        "tokens": {
+          "total": 7425,
+          "input": 126,
+          "output": 3,
+          "reasoning": 0,
+          "cache": {
+            "write": 0,
+            "read": 7296
+          }
+        },
+        "cost": 0.0000389088,
+        "id": "prt_14368e789001OUHV6xGDho82M6",
+        "sessionID": "root",
+        "messageID": "msg_14368e520001j5XycSmTXyag8G"
+      }
+    ]
+  }
+}
