@@ -7,9 +7,8 @@
 Bare `loop-claude`, `loop-codex`, `loop-agy`, `loop-opencode` and `loop-jail` worker commands SHALL select the executing package's files independently of PATH, the current directory and npm's global prefix. Other bare commands SHALL use PATH; commands containing `/` SHALL use the specified absolute path or resolve relative to the invoking checkout. An unavailable bundled file SHALL fail naming its path without selecting a different installation.
 
 #### Scenario: Installed adapters absent from PATH
-- **WHEN** a running installed `loop` resolves roles using bundled commands while its installation's bin directory is absent from PATH
+- **WHEN** a running installed `loop` resolves roles using bundled commands while its installation's bin directory is absent from PATH and external prerequisites are available as required by their existing contracts
 - **THEN** each bundled command resolves to that executing package's installed file
-- **AND** external prerequisites must still be available as required by their existing contracts
 
 #### Scenario: PATH contains another installation
 - **WHEN** PATH contains a command with a bundled worker name from a different installation
