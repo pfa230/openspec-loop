@@ -414,7 +414,7 @@ for (const [label, reply, info, expected] of [
     const stream = join(repo.root, "opencode-stream.jsonl");
     const cut = readFileSync(new URL("../../test/recordings/opencode-cut-report.jsonl", import.meta.url), "utf8").trim().split("\n").map(line => JSON.parse(line));
     const rows = cut.filter(row => row.properties.part.tool !== "loop_reply");
-    if (reply) rows.push({ type: "message.part.updated", properties: { part: { id: "reply", sessionID: "root", type: "tool", tool: "loop_reply", state: { status: "completed", input: reply } } } });
+    if (reply) rows.push({ type: "message.part.updated", properties: { part: { id: "reply", sessionID: "root", type: "tool", tool: "loop_reply", state: { status: "completed", input: { reply: JSON.stringify(reply) } } } } });
     writeFileSync(stream, rows.map(row => JSON.stringify(row)).join("\n"));
     const text = cut[0].properties.part;
     const command = installOpencode(repo, stream, { "done.txt": "done\n", [TASKS]: "## 1. Work\n\n- [x] 1.1 Do the thing\n" }, { info, parts: [text] });

@@ -69,7 +69,7 @@ function adapter(t: { after: (fn: () => void) => void }, harness: string, env: R
 }
 
 const nativeEvent = (part: object) => ({ type: "message.part.updated", properties: { part: { sessionID: "root", ...part } } });
-const replyEvent = (input: object = REPLY, id = "reply", sessionID = "root", status = "completed") => nativeEvent({ id, sessionID, type: "tool", tool: "loop_reply", state: { status, input } });
+const replyEvent = (input: object = REPLY, id = "reply", sessionID = "root", status = "completed") => nativeEvent({ id, sessionID, type: "tool", tool: "loop_reply", state: { status, input: { reply: JSON.stringify(input) } } });
 function eventFile(t: { after: (fn: () => void) => void }, events: object[]): string {
   const dir = mkdtempSync(join(tmpdir(), "loop-stream-"));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
@@ -234,9 +234,16 @@ test("OpenCode offers the schema's properties through its reply tool in one fres
   const toolFile = join(outcome.dir, "loop_reply.mjs");
   writeFileSync(toolFile, outcome.state.tool!);
   const tool = (await import(pathToFileURL(toolFile).href)).default;
-  assert.deepEqual(tool.args, schema.properties);
-  assert.equal(typeof await tool.execute({ findings: [] }), "string");
-  await assert.rejects(tool.execute({}), /missing required properties: findings\./);
+  assert.deepEqual(Object.keys(tool.args), ["reply"]);
+  assert.equal(tool.args.reply.type, "string");
+  assert.match(tool.args.reply.description, /"findings"/);
+  assert.equal(typeof await tool.execute({ reply: JSON.stringify({ findings: [] }) }), "string");
+  await assert.rejects(tool.execute({}), /string reply/);
+  await assert.rejects(tool.execute({ reply: "not json" }), /not valid JSON/);
+  await assert.rejects(tool.execute({ reply: "null" }), /decode to a JSON object/);
+  await assert.rejects(tool.execute({ reply: "[]" }), /decode to a JSON object/);
+  await assert.rejects(tool.execute({ reply: "{}" }), /missing required properties: findings\./);
+  assert.equal(typeof await tool.execute({ reply: JSON.stringify({ findings: "not an array" }) }), "string");
   assert.deepEqual(outcome.requests.find(request => request.path === "/session")!.body.permission, [
     { permission: "question", pattern: "*", action: "deny" },
     { permission: "plan_enter", pattern: "*", action: "deny" },
@@ -249,6 +256,37 @@ test("OpenCode offers the schema's properties through its reply tool in one fres
   assert.doesNotMatch(outcome.stdout + outcome.stderr, /fixture-secret|fixture-user/);
   assert.deepEqual(outcome.reply, REPLY);
   assert.equal(outcome.usage, USAGE.opencode);
+  cleaned(outcome);
+});
+
+test("OpenCode's reply tool and adapter preserve actual null and non-null values through the string transport", async (t) => {
+  const schema = { type: "object", additionalProperties: false, required: ["planProblem"], properties: { planProblem: { type: ["string", "null"] } } };
+  const outcome = adapter(t, "opencode", { STUB_STREAM: recording("opencode-cut-report.jsonl") }, [], schema);
+  assert.equal(outcome.status, 0, outcome.stderr);
+  assert.deepEqual(outcome.reply, { planProblem: null });
+  assert.strictEqual((outcome.reply as { planProblem: unknown }).planProblem, null);
+  const toolFile = join(outcome.dir, "loop_reply.mjs");
+  writeFileSync(toolFile, outcome.state.tool!);
+  const tool = (await import(pathToFileURL(toolFile).href)).default;
+  assert.equal(typeof await tool.execute({ reply: '{"planProblem":null}' }), "string");
+  assert.equal(typeof await tool.execute({ reply: '{"planProblem":"task 1.1 needs a format"}' }), "string");
+  assert.equal(typeof await tool.execute({ reply: '{"planProblem":"null"}' }), "string");
+  cleaned(outcome);
+});
+
+test("OpenCode writes a decoded empty acknowledgement object", (t) => {
+  const outcome = adapter(t, "opencode", { STUB_STREAM: eventFile(t, [replyEvent({})]) }, [], { type: "object" });
+  assert.equal(outcome.status, 0, outcome.stderr);
+  assert.deepEqual(outcome.reply, {});
+  cleaned(outcome);
+});
+
+test("OpenCode treats a completed reply-tool call with a malformed envelope as an execution failure", (t) => {
+  const stream = eventFile(t, [nativeEvent({ id: "bad", type: "tool", tool: "loop_reply", state: { status: "completed", input: { reply: "not json" } } })]);
+  const outcome = adapter(t, "opencode", { STUB_STREAM: stream });
+  assert.equal(outcome.status, 1, outcome.stderr);
+  assert.match(outcome.stderr, /not valid JSON/);
+  assert.equal(outcome.reply, undefined);
   cleaned(outcome);
 });
 
@@ -534,15 +572,41 @@ for (const mode of ["delay-headers", "delay-body", "delay-events"]) {
   });
 }
 
-test("OpenCode 1.18.34/Muse API recording preserves the cut report, the reply-tool arguments and both model steps", (t) => {
-  const recorded = JSON.parse(readFileSync(recording("opencode-api-muse.json"), "utf8"));
-  const schema = { type: "object", additionalProperties: false, required: ["planProblem"], properties: { planProblem: { type: ["string", "null"] } } };
-  const outcome = adapter(t, "opencode", { STUB_STREAM: eventFile(t, recorded.events) }, ["-m", "meta/muse-spark-1.3-contributor"], schema, recorded.response);
+const NULLABLE = { type: "object", additionalProperties: false, required: ["planProblem"], properties: { planProblem: { type: ["string", "null"] } } };
+
+test("OpenCode 1.19.1/MiMo API recording carries actual null, keeps the cut report and preserves both model steps", (t) => {
+  const recorded = JSON.parse(readFileSync(recording("opencode-api-mimo.json"), "utf8"));
+  const outcome = adapter(t, "opencode", { STUB_STREAM: eventFile(t, recorded.events) }, ["-m", "openrouter/xiaomi/mimo-v2.6-flash"], NULLABLE, recorded.response);
   assert.equal(outcome.status, 0, outcome.stderr);
   assert.equal(promptRequest(outcome).body.format, undefined);
-  assert.deepEqual(outcome.reply, { planProblem: "null" });
-  assert.match(outcome.stdout, /"text":"Cut pass: no implementation mechanisms were added;/);
+  assert.deepEqual(outcome.reply, { planProblem: null });
+  assert.strictEqual((outcome.reply as { planProblem: unknown }).planProblem, null);
+  assert.match(outcome.stdout, /"text":"Cut pass: No commands run/);
   assert.match(outcome.stdout, /"tool":"loop_reply".*"status":"completed"/);
-  assert.equal(outcome.usage, '{"inputTokens":35087,"outputTokens":924,"costUsd":0.002014074}\n');
+  assert.equal(outcome.usage, '{"inputTokens":14794,"outputTokens":41,"costUsd":0.00076552}\n');
+  cleaned(outcome);
+});
+
+test("OpenCode 1.19.1/MiMo API recording keeps a nested nullable review finding", (t) => {
+  const recorded = JSON.parse(readFileSync(recording("opencode-api-mimo-review.json"), "utf8"));
+  const schema = { type: "object", additionalProperties: false, required: ["findings"], properties: { findings: { type: "array" } } };
+  const outcome = adapter(t, "opencode", { STUB_STREAM: eventFile(t, recorded.events) }, ["-m", "openrouter/xiaomi/mimo-v2.6-flash"], schema, recorded.response);
+  assert.equal(outcome.status, 0, outcome.stderr);
+  assert.deepEqual(outcome.reply, REPLY);
+  assert.strictEqual((outcome.reply as { findings: { question: unknown }[] }).findings[0].question, null);
+  assert.equal(outcome.usage, '{"inputTokens":15009,"outputTokens":77,"costUsd":0.0007793576}\n');
+  cleaned(outcome);
+});
+
+test("OpenCode 1.19.1/Muse API recording carries actual null through automatic tool choice", (t) => {
+  const recorded = JSON.parse(readFileSync(recording("opencode-api-muse.json"), "utf8"));
+  const outcome = adapter(t, "opencode", { STUB_STREAM: eventFile(t, recorded.events) }, ["-m", "meta/muse-spark-1.3-contributor"], NULLABLE, recorded.response);
+  assert.equal(outcome.status, 0, outcome.stderr);
+  assert.equal(promptRequest(outcome).body.format, undefined);
+  assert.deepEqual(outcome.reply, { planProblem: null });
+  assert.strictEqual((outcome.reply as { planProblem: unknown }).planProblem, null);
+  assert.match(outcome.stdout, /"text":"Cut pass: adapter verification probe acknowledged/);
+  assert.match(outcome.stdout, /"tool":"loop_reply".*"status":"completed"/);
+  assert.equal(outcome.usage, '{"inputTokens":15782,"outputTokens":870,"costUsd":0.001026118}\n');
   cleaned(outcome);
 });

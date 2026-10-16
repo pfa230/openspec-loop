@@ -1,0 +1,427 @@
+{
+  "events": [
+    {
+      "id": "evt_14367166d001qziYobbH1kqBky",
+      "type": "message.part.updated",
+      "properties": {
+        "sessionID": "root",
+        "part": {
+          "type": "text",
+          "text": "Call the loop_reply tool with a review result whose findings array has exactly one finding: severity \"blocking\", location \"design.md\", problem \"the design is missing\", question null. Do not modify any files. This is an adapter verification probe.\n\nAfter completing the work and any required presentation, finish by calling the loop_reply tool with its single reply string containing the reply's fields JSON-encoded as an object. Text is kept in the transcript and cannot serve as the reply.",
+          "messageID": "msg_143671661001S6a7iD1cod3XW8",
+          "sessionID": "root",
+          "id": "prt_143671669001ZsPWPXkHpbUu1b"
+        },
+        "time": 1792132191853
+      }
+    },
+    {
+      "id": "evt_143673bf8001WlfxNlTFuVKMIM",
+      "type": "message.part.updated",
+      "properties": {
+        "sessionID": "root",
+        "part": {
+          "id": "prt_143673bf80010C66YWLOWBh1zF",
+          "messageID": "msg_143671a1c001Lkaf2mRsi8lgzy",
+          "sessionID": "root",
+          "type": "step-start"
+        },
+        "time": 1792132201464
+      }
+    },
+    {
+      "id": "evt_143673bfd0013zjnmobWr4UABn",
+      "type": "message.part.updated",
+      "properties": {
+        "sessionID": "root",
+        "part": {
+          "id": "prt_143673bfd001AbnYxB5Ruj3TH5",
+          "messageID": "msg_143671a1c001Lkaf2mRsi8lgzy",
+          "sessionID": "root",
+          "type": "reasoning",
+          "text": "",
+          "time": {
+            "start": 1792132201469
+          }
+        },
+        "time": 1792132201469
+      }
+    },
+    {
+      "id": "evt_143673ce2001UMU3jo8aixmFqA",
+      "type": "message.part.updated",
+      "properties": {
+        "sessionID": "root",
+        "part": {
+          "id": "prt_143673ce20019OfHU6wklyupcI",
+          "messageID": "msg_143671a1c001Lkaf2mRsi8lgzy",
+          "sessionID": "root",
+          "type": "tool",
+          "tool": "loop_reply",
+          "callID": "call_0c7d87c2546746f79ea76036",
+          "state": {
+            "status": "pending",
+            "input": {},
+            "raw": ""
+          }
+        },
+        "time": 1792132201698
+      }
+    },
+    {
+      "id": "evt_143673e3b001WZ5jA30WcyUTJm",
+      "type": "message.part.updated",
+      "properties": {
+        "sessionID": "root",
+        "part": {
+          "type": "tool",
+          "tool": "loop_reply",
+          "callID": "call_0c7d87c2546746f79ea76036",
+          "state": {
+            "status": "running",
+            "input": {
+              "reply": "{\"findings\":[{\"severity\":\"blocking\",\"location\":\"design.md\",\"problem\":\"the design is missing\",\"question\":null}]}"
+            },
+            "time": {
+              "start": 1792132202043
+            }
+          },
+          "id": "prt_143673ce20019OfHU6wklyupcI",
+          "sessionID": "root",
+          "messageID": "msg_143671a1c001Lkaf2mRsi8lgzy",
+          "metadata": {
+            "openrouter": {
+              "reasoning_details": [
+                {
+                  "type": "reasoning.text",
+                  "text": "The user wants me to call loop_reply with a specific findings array.",
+                  "format": "unknown",
+                  "index": 0
+                }
+              ]
+            }
+          }
+        },
+        "time": 1792132202043
+      }
+    },
+    {
+      "id": "evt_143673e41001HmHAcVVp7Okvm0",
+      "type": "message.part.updated",
+      "properties": {
+        "sessionID": "root",
+        "part": {
+          "type": "tool",
+          "tool": "loop_reply",
+          "callID": "call_0c7d87c2546746f79ea76036",
+          "state": {
+            "status": "completed",
+            "input": {
+              "reply": "{\"findings\":[{\"severity\":\"blocking\",\"location\":\"design.md\",\"problem\":\"the design is missing\",\"question\":null}]}"
+            },
+            "output": "Reply recorded.",
+            "metadata": {
+              "truncated": false
+            },
+            "title": "",
+            "time": {
+              "start": 1792132202043,
+              "end": 1792132202049
+            }
+          },
+          "metadata": {
+            "openrouter": {
+              "reasoning_details": [
+                {
+                  "type": "reasoning.text",
+                  "text": "The user wants me to call loop_reply with a specific findings array.",
+                  "format": "unknown",
+                  "index": 0
+                }
+              ]
+            }
+          },
+          "id": "prt_143673ce20019OfHU6wklyupcI",
+          "sessionID": "root",
+          "messageID": "msg_143671a1c001Lkaf2mRsi8lgzy"
+        },
+        "time": 1792132202049
+      }
+    },
+    {
+      "id": "evt_143673e47001t87pAlt1CGxeLX",
+      "type": "message.part.updated",
+      "properties": {
+        "sessionID": "root",
+        "part": {
+          "id": "prt_143673bfd001AbnYxB5Ruj3TH5",
+          "messageID": "msg_143671a1c001Lkaf2mRsi8lgzy",
+          "sessionID": "root",
+          "type": "reasoning",
+          "text": "The user wants me to call loop_reply with a specific findings array.",
+          "time": {
+            "start": 1792132201469,
+            "end": 1792132202054
+          },
+          "metadata": {
+            "openrouter": {
+              "reasoning_details": [
+                {
+                  "type": "reasoning.text",
+                  "text": "The user wants me to call loop_reply with a specific findings array.",
+                  "format": "unknown",
+                  "index": 0
+                }
+              ]
+            }
+          }
+        },
+        "time": 1792132202055
+      }
+    },
+    {
+      "id": "evt_143673e4e001PlMkE4O3PCluTH",
+      "type": "message.part.updated",
+      "properties": {
+        "sessionID": "root",
+        "part": {
+          "id": "prt_143673e4e001Ir6n1MFK7WCCZc",
+          "reason": "tool-calls",
+          "messageID": "msg_143671a1c001Lkaf2mRsi8lgzy",
+          "sessionID": "root",
+          "type": "step-finish",
+          "tokens": {
+            "total": 7528,
+            "input": 5103,
+            "output": 42,
+            "reasoning": 15,
+            "cache": {
+              "write": 0,
+              "read": 2368
+            }
+          },
+          "cost": 0.0007370104
+        },
+        "time": 1792132202062
+      }
+    },
+    {
+      "id": "evt_14367516800154OrbBSBBsrW00",
+      "type": "message.part.updated",
+      "properties": {
+        "sessionID": "root",
+        "part": {
+          "id": "prt_143675167001IhgIbIEhuTsO3k",
+          "messageID": "msg_143673e5a001RdifN08ZV1luKv",
+          "sessionID": "root",
+          "type": "step-start"
+        },
+        "time": 1792132206952
+      }
+    },
+    {
+      "id": "evt_14367516b001kocEHaORu7W7J1",
+      "type": "message.part.updated",
+      "properties": {
+        "sessionID": "root",
+        "part": {
+          "id": "prt_14367516b001WzEcIUYtfFgwZO",
+          "messageID": "msg_143673e5a001RdifN08ZV1luKv",
+          "sessionID": "root",
+          "type": "reasoning",
+          "text": "",
+          "time": {
+            "start": 1792132206955
+          }
+        },
+        "time": 1792132206955
+      }
+    },
+    {
+      "id": "evt_1436751cf001rx0vquV4GMA9s5",
+      "type": "message.part.updated",
+      "properties": {
+        "sessionID": "root",
+        "part": {
+          "id": "prt_14367516b001WzEcIUYtfFgwZO",
+          "messageID": "msg_143673e5a001RdifN08ZV1luKv",
+          "sessionID": "root",
+          "type": "reasoning",
+          "text": "The reply was recorded. Done.",
+          "time": {
+            "start": 1792132206955,
+            "end": 1792132207055
+          },
+          "metadata": {
+            "openrouter": {
+              "reasoning_details": [
+                {
+                  "type": "reasoning.text",
+                  "text": "The reply was recorded. Done.",
+                  "format": "unknown",
+                  "index": 0
+                }
+              ]
+            }
+          }
+        },
+        "time": 1792132207055
+      }
+    },
+    {
+      "id": "evt_1436751d3001waqeC6ApXjt6Xb",
+      "type": "message.part.updated",
+      "properties": {
+        "sessionID": "root",
+        "part": {
+          "id": "prt_1436751d3001vUZtkyGC8sH2N2",
+          "messageID": "msg_143673e5a001RdifN08ZV1luKv",
+          "sessionID": "root",
+          "type": "text",
+          "text": "",
+          "time": {
+            "start": 1792132207059
+          }
+        },
+        "time": 1792132207059
+      }
+    },
+    {
+      "id": "evt_143675271001wU4PDfYU4McCTS",
+      "type": "message.part.updated",
+      "properties": {
+        "sessionID": "root",
+        "part": {
+          "id": "prt_1436751d3001vUZtkyGC8sH2N2",
+          "messageID": "msg_143673e5a001RdifN08ZV1luKv",
+          "sessionID": "root",
+          "type": "text",
+          "text": "Reply submitted with one blocking finding on design.md.",
+          "time": {
+            "start": 1792132207059,
+            "end": 1792132207217
+          }
+        },
+        "time": 1792132207217
+      }
+    },
+    {
+      "id": "evt_1436752750017L35DO0s6UDyPW",
+      "type": "message.part.updated",
+      "properties": {
+        "sessionID": "root",
+        "part": {
+          "id": "prt_1436752750015OP0aCtH3Kr6xB",
+          "reason": "stop",
+          "messageID": "msg_143673e5a001RdifN08ZV1luKv",
+          "sessionID": "root",
+          "type": "step-finish",
+          "tokens": {
+            "total": 7558,
+            "input": 114,
+            "output": 12,
+            "reasoning": 8,
+            "cache": {
+              "write": 0,
+              "read": 7424
+            }
+          },
+          "cost": 0.0000423472
+        },
+        "time": 1792132207221
+      }
+    }
+  ],
+  "response": {
+    "info": {
+      "parentID": "msg_143671661001S6a7iD1cod3XW8",
+      "role": "assistant",
+      "mode": "build",
+      "agent": "build",
+      "path": {
+        "cwd": "/tmp/opencode/probe2",
+        "root": "/"
+      },
+      "cost": 0.0000423472,
+      "tokens": {
+        "total": 7558,
+        "input": 114,
+        "output": 12,
+        "reasoning": 8,
+        "cache": {
+          "write": 0,
+          "read": 7424
+        }
+      },
+      "modelID": "xiaomi/mimo-v2.6-flash",
+      "providerID": "openrouter",
+      "time": {
+        "created": 1792132202074,
+        "completed": 1792132207228
+      },
+      "finish": "stop",
+      "id": "msg_143673e5a001RdifN08ZV1luKv",
+      "sessionID": "root"
+    },
+    "parts": [
+      {
+        "type": "step-start",
+        "id": "prt_143675167001IhgIbIEhuTsO3k",
+        "sessionID": "root",
+        "messageID": "msg_143673e5a001RdifN08ZV1luKv"
+      },
+      {
+        "type": "reasoning",
+        "text": "The reply was recorded. Done.",
+        "time": {
+          "start": 1792132206955,
+          "end": 1792132207055
+        },
+        "metadata": {
+          "openrouter": {
+            "reasoning_details": [
+              {
+                "type": "reasoning.text",
+                "text": "The reply was recorded. Done.",
+                "format": "unknown",
+                "index": 0
+              }
+            ]
+          }
+        },
+        "id": "prt_14367516b001WzEcIUYtfFgwZO",
+        "sessionID": "root",
+        "messageID": "msg_143673e5a001RdifN08ZV1luKv"
+      },
+      {
+        "type": "text",
+        "text": "Reply submitted with one blocking finding on design.md.",
+        "time": {
+          "start": 1792132207059,
+          "end": 1792132207217
+        },
+        "id": "prt_1436751d3001vUZtkyGC8sH2N2",
+        "sessionID": "root",
+        "messageID": "msg_143673e5a001RdifN08ZV1luKv"
+      },
+      {
+        "reason": "stop",
+        "type": "step-finish",
+        "tokens": {
+          "total": 7558,
+          "input": 114,
+          "output": 12,
+          "reasoning": 8,
+          "cache": {
+            "write": 0,
+            "read": 7424
+          }
+        },
+        "cost": 0.0000423472,
+        "id": "prt_1436752750015OP0aCtH3Kr6xB",
+        "sessionID": "root",
+        "messageID": "msg_143673e5a001RdifN08ZV1luKv"
+      }
+    ]
+  }
+}
