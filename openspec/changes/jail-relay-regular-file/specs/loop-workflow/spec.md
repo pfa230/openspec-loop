@@ -17,5 +17,5 @@ A jailed worker SHALL be able to read the repository's Git metadata but SHALL NO
 - **THEN** the loop reads them at the reply and usage paths it appended, even when the adapter exits nonzero
 
 #### Scenario: Relayed file is not a regular file
-- **WHEN** a jailed worker replaces its reply with a symlink to a host file or its usage with a FIFO, and exits 0
+- **WHEN** a jailed worker replaces its reply with a symlink to a host file and its usage with a FIFO, and exits 0
 - **THEN** neither is delivered, the wrapper exits nonzero with an error naming both
