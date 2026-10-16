@@ -14,7 +14,7 @@ The facts below were verified with ai-jail 2.2.0, Claude Code 2.1.300, Codex 0.1
 - A host directory mapped writable, outside the worktree, keeps what the jailed command writes there.
 - Node resolves an npm bin through every symlink hop: with only `~/.local/bin` and the package directory mapped, `openspec` fails because `~/.npm-global/bin`, the middle hop, is missing.
 - Killing the process group that contains `ai-jail` ends the jailed command (bwrap runs with `--die-with-parent`).
-- Each harness runs with only its credential file writable and its executable and configuration read-only; Codex's own `-s read-only` sandbox works inside the jail. Antigravity rewrites `bin/agentapi` under its state directory on every start, so that directory cannot be read-only.
+- Each harness runs with only its credential file writable and its executable and configuration read-only; Codex's own sandbox cannot run commands inside the jail on hosts that restrict unprivileged user namespaces, such as Ubuntu 24.04 and later, so Codex runs there with `-s danger-full-access` (#88). Antigravity rewrites `bin/agentapi` under its state directory on every start, so that directory cannot be read-only.
 - Headless Chrome aborts inside the jail unless started with `--no-sandbox`.
 
 ## Goals / Non-Goals
