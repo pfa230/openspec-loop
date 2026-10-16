@@ -9,7 +9,7 @@ Source issue: https://github.com/pfa230/openspec-loop/issues/13
 ## What Changes
 
 - Before starting, the skill reads each named change's plan, flags changes that need work not yet on the default branch, including another named change, and proposes dropping them. Runs start once the user confirms the list; if nothing is flagged, they start immediately.
-- The `openspec-loop` supervision skill accepts several named changes. It starts `loop run` for each of them at once, so each runs in its own worktree, and supervises all of them in one session.
+- The `openspec-loop` supervision skill accepts several named changes when invoked from the default branch, and on any other branch refuses the batch and starts no run. It starts `loop run` for each of them at once, so each runs in its own worktree, and supervises all of them in one session.
 - Each relayed progress line names its change, since the loop's progress lines do not.
 - A run that stops, is refused or completes does not hold up the others. The skill shows that run's report and handles it as it does a single run, while the others keep advancing.
 - When every run has ended, the skill gives one summary listing each change it ran, in the order the user named them, with its outcome.
