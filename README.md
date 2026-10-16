@@ -20,6 +20,8 @@ npm install -g openspec-loop
 
 The package installs the `loop` command, four [agent adapters](#agents-and-adapters) and the [`loop-jail`](#sandboxing) sandbox wrapper.
 
+At startup the CLI appends the directory it was invoked from to PATH, so the adapters and `loop-jail` installed beside `loop` are found even when `loop` is launched by path and that directory is not on PATH; commands already on PATH keep precedence. This makes only those sibling commands available: Node, Git, OpenSpec, the CLI for each configured agent harness and, for agents that use it, ai-jail remain external prerequisites that must be installed and authenticated.
+
 For a system-wide Node installation whose npm global prefix belongs to root, configure a user-owned prefix with `npm config set prefix ~/.npm-global` and add `~/.npm-global/bin` to PATH. This allows installation without `sudo`.
 
 To upgrade, run `npm update -g openspec-loop`, then run `loop setup` in each project and commit the refreshed skills.

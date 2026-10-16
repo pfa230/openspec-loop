@@ -1,8 +1,15 @@
 #!/usr/bin/env node
+import { delimiter, dirname, resolve } from "node:path";
 import { resume, run, status, step, stop } from "./commands.js";
 import { Refusal } from "./refusal.js";
 import { finishScope, startScope } from "./scope.js";
 import { setup } from "./setup.js";
+
+// Sibling installed commands, such as the adapters, stay findable when a shell launches loop by path
+// without its installation's bin directory on PATH. The invoked path is used as is, so a symlinked
+// launch appends its own directory rather than the package's, and existing PATH entries keep precedence.
+const launchDirectory = dirname(resolve(process.argv[1]!));
+process.env.PATH = process.env.PATH === undefined ? launchDirectory : `${process.env.PATH}${delimiter}${launchDirectory}`;
 
 const COMMANDS = { run, step, status, stop, resume };
 const USAGE = "Usage: loop <status|stop> <change>\n       loop <run|step> <change> [<proposalReviewer> <planReviser> <implementer> <implementationReviewer>]\n       loop resume <change> [<the four agents>] [--attempts <n>] [--implement]\n       loop scope <start|finish> <session>\n       loop setup\n";
