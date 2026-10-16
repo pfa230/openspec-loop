@@ -4,7 +4,7 @@
 // read-only. Since the run directory lies inside the read-only Git directory, the wrapped command writes its reply and
 // usage to a writable host directory, and the wrapper copies them to the loop's paths after it exits.
 import { spawn } from "node:child_process";
-import { accessSync, constants, copyFileSync, existsSync, lstatSync, mkdtempSync, readlinkSync, rmSync } from "node:fs";
+import { accessSync, constants, copyFileSync, lstatSync, mkdtempSync, readlinkSync, rmSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { basename, delimiter, dirname, join, resolve, sep } from "node:path";
 import { fail } from "./adapters/common.js";
@@ -77,9 +77,15 @@ const { code, error } = await new Promise<{ code: number | null; error?: Error }
   child.once("error", (error) => done({ code: null, error }));
   child.once("close", (code) => done({ code }));
 });
+// A relayed file is copied only when it is a regular file; anything else is refused without being opened.
+const refused: string[] = [];
 relayed.forEach((path, i) => {
-  if (existsSync(path)) copyFileSync(path, [replyPath, usagePath][i]);
+  const stats = lstatSync(path, { throwIfNoEntry: false });
+  if (!stats) return;
+  if (stats.isFile()) copyFileSync(path, [replyPath, usagePath][i]);
+  else refused.push(basename(path));
 });
 rmSync(relay, { recursive: true, force: true });
 if (error) fail(`cannot run ai-jail: ${error.message}`);
+if (refused.length > 0) fail(`relayed files are not regular files: ${refused.join(", ")}`);
 process.exit(code ?? 1);
