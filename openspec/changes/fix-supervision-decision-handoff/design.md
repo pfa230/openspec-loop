@@ -28,7 +28,7 @@ Automatically adopting recommendations would change the existing user-decision c
 
 ### Update the bundle and existing installed copies together
 
-Make the bundled skill authoritative, refresh only its two tracked project copies to match, and update the README supervision paragraph to explain the new handoff. Leaving only the named `.agents` copy changed loses the fix on the next setup refresh and leaves Claude users behind. No installer changes are needed.
+Make the bundled skill authoritative, refresh only its two tracked project copies to match, and update the README supervision paragraph to explain the new handoff. Changing only the `.agents` copy would lose the fix on the next setup refresh and leave Claude users behind. No installer changes are needed.
 
 ### Validate prose behavior directly
 
