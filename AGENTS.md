@@ -12,6 +12,7 @@ openspec-loop runs a committed OpenSpec change unattended to a delivered result.
 - **Deliver through the loop.** A change is implemented by running its committed proposal with `loop run <change>`, as the README's "Running a change" describes, not by applying it by hand. A proposal ends with its committed artifacts: start the loop, or apply the change by hand, only when the user asks for that.
 - **`npm test` is the check.** It builds the package and runs the tests. Run it before claiming work is done.
 - **Edit in a worktree.** Several sessions share the main checkout, and a dirty main checkout blocks delivery. Make every edit in a worktree under `.worktrees/` on its own branch, never in the main checkout and never with `main` checked out in the extra worktree.
+- **Clean up after merging.** Once a pull request merges, remove its worktree and delete its branch locally and on `origin`. Git does not count a squash-merged branch as merged, so delete it with `git branch -D` once the pull request shows as merged.
 
 ## Releasing
 
