@@ -23,6 +23,7 @@ function save() { if (process.env.STUB_STATE_LOG) fs.writeFileSync(process.env.S
 save();
 if (process.env.STUB_MODE === "early-exit") process.exit(Number(process.env.STUB_EXIT || 5));
 let events;
+let messages = 0;
 const send = event => { if (events && !events.writableEnded) events.write("data: " + JSON.stringify(event) + "\\n\\n"); };
 function stream(file) {
   if (file) for (const line of fs.readFileSync(file, "utf8").split("\\n").filter(Boolean)) send(JSON.parse(line));
@@ -38,6 +39,7 @@ const server = http.createServer(async (req, res) => {
     res.writeHead(200, { "content-type": "text/event-stream" });
     res.flushHeaders();
     send({ type: "server.connected", properties: {} });
+    state.streamClosed = false;
     res.on("close", () => { state.streamClosed = true; save(); });
     return;
   }
@@ -50,7 +52,8 @@ const server = http.createServer(async (req, res) => {
       fs.mkdirSync(path.dirname(target), { recursive: true });
       fs.writeFileSync(target, content);
     }
-    stream(process.env.STUB_STREAM);
+    messages++;
+    stream(messages > 1 && process.env.STUB_FOLLOW_UP_STREAM || process.env.STUB_STREAM);
     if (process.env.STUB_EXIT) return setTimeout(() => process.exit(Number(process.env.STUB_EXIT)), 30);
     if (process.env.STUB_MODE === "stream-close") { events.end(); return; }
     if (process.env.STUB_MODE === "hold-headers") return;

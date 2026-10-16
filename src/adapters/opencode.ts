@@ -223,20 +223,27 @@ let streamed: Promise<void> | undefined;
 try {
   base = await Promise.race([ready, failed]);
   const session = await json("/session", { permission: ["question", "plan_enter", "plan_exit"].map(permission => ({ permission, pattern: "*", action: "deny" })) }) as { id: string };
-  streamed = events(await request("/event"), session.id);
   const model = selections.model?.split("/");
-  const result = (async () => {
-    const returned = await json(`/session/${session.id}/message`, {
-      ...(model && { model: { providerID: model[0], modelID: model.slice(1).join("/") } }),
-      ...(selections.agent && { agent: selections.agent }),
-      ...(selections.variant && { variant: selections.variant }),
-      parts: [{ type: "text", text: `${prompt}\nAfter completing the work and any required presentation, finish by calling the loop_reply tool with its single reply string containing the reply's fields JSON-encoded as an object. Text is kept in the transcript and cannot serve as the reply.` }],
-    }) as PromptResponse;
-    process.stdout.write(`${JSON.stringify({ type: "prompt.response", response: returned })}\n`);
-    return returned;
-  })();
-  const [response] = await Promise.all([result, streamed]);
-  if (response.info.error) throw new Error(`opencode response error: ${JSON.stringify(response.info.error)}`);
+  // A model that ends its turn without the reply-tool call gets one follow-up prompt in the same session.
+  for (const text of [
+    `${prompt}\nAfter completing the work and any required presentation, finish by calling the loop_reply tool with its single reply string containing the reply's fields JSON-encoded as an object. Text is kept in the transcript and cannot serve as the reply.`,
+    "You ended the turn without calling loop_reply. Call loop_reply now with the reply; do not repeat the work.",
+  ]) {
+    streamed = events(await request("/event"), session.id);
+    const result = (async () => {
+      const returned = await json(`/session/${session.id}/message`, {
+        ...(model && { model: { providerID: model[0], modelID: model.slice(1).join("/") } }),
+        ...(selections.agent && { agent: selections.agent }),
+        ...(selections.variant && { variant: selections.variant }),
+        parts: [{ type: "text", text }],
+      }) as PromptResponse;
+      process.stdout.write(`${JSON.stringify({ type: "prompt.response", response: returned })}\n`);
+      return returned;
+    })();
+    const [response] = await Promise.all([result, streamed]);
+    if (response.info.error) throw new Error(`opencode response error: ${JSON.stringify(response.info.error)}`);
+    if (reply !== undefined) break;
+  }
 } catch (error) {
   process.stderr.write(`${inspect(error, { depth: null })}\n`);
   stop(error instanceof Error ? error : String(error));

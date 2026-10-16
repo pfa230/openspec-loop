@@ -424,7 +424,7 @@ for (const [label, reply, info, expected] of [
     assert.equal(readFileSync(join(repo.worktree, "done.txt"), "utf8"), "done\n");
     assert.equal(readFileSync(repo.env.STUB_LOG!, "utf8").trim().split("\n").length, 1);
     const requests = readFileSync(repo.env.STUB_API_LOG!, "utf8").trim().split("\n").map(line => JSON.parse(line));
-    assert.equal(requests.filter(request => request.method === "POST" && request.path === "/session/root/message").length, 1);
+    assert.equal(requests.filter(request => request.method === "POST" && request.path === "/session/root/message").length, expected === "missing" ? 2 : 1);
     const [log] = transcripts(repo, "-implementation.log");
     assert.ok(readFileSync(log, "utf8").includes("Cut pass:"));
     const [prompt] = transcripts(repo, "-implementation.prompt.md");
