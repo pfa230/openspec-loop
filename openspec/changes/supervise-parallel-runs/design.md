@@ -18,9 +18,9 @@ Runs of different changes already share no state: each has its own run directory
 
 The user chose to have the supervisor run and supervise every change. The alternatives were a CLI batch command, which would add a command, a combined report and possibly batch state, and a documented shell loop, which gives neither labeled progress nor diagnosis.
 
-### Runs start in parallel, each in its own worktree (user decision)
+### Runs start in parallel from the default branch (user decision)
 
-The skill starts `loop run <change>` for every named change from the invoking checkout, without waiting for one to end. Enrollment from the default branch already gives each change its own branch and worktree. Twelve concurrent `git worktree add -b` calls against one repository all succeeded in a local test, so the runs need no staggered start.
+The skill starts a batch only when the invoking checkout is on the configured default branch, where `loop run <change>` creates each change's own branch and worktree, so the runs share no files or branch. On any other branch enrollment would reuse the invoking worktree for every run, so the skill refuses the batch, names the branch and the default branch, and starts no run. It starts `loop run <change>` for every change it runs without waiting for one to end. Twelve concurrent `git worktree add -b` calls against one repository all succeeded in a local test, so the runs need no staggered start.
 
 ### Explicit list, in the order given (user decision)
 
