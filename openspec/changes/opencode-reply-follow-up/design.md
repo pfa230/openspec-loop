@@ -2,7 +2,7 @@
 
 ## Context
 
-See `proposal.md` for the failure. This plan is based on `origin/main` at `b7cc55f`, whose adapter code matches 0.8.3. `src/adapters/opencode.ts` creates one root session, subscribes to `GET /event`, posts the worker prompt to `POST /session/:id/message` with the worker's selections, and waits for both the prompt response and the root session's `idle` status. `events()` returns on that idle event and cancels its subscription. A completed prompt without a root `loop_reply` call fails with "opencode completed without a loop_reply call in the root session".
+See `proposal.md` for the failure. This plan is based on `origin/main` at `5c9851d`, whose adapter code matches 0.8.3. `src/adapters/opencode.ts` creates one root session, subscribes to `GET /event`, posts the worker prompt to `POST /session/:id/message` with the worker's selections, and waits for both the prompt response and the root session's `idle` status. `events()` returns on that idle event and cancels its subscription. A completed prompt without a root `loop_reply` call fails with "opencode completed without a loop_reply call in the root session".
 
 [Verified] A disposable copy of the 0.8.3 adapter that resubscribed and posted one more message to the same session, "You ended the turn without calling loop_reply. Call loop_reply now with the reply; do not repeat the work.", succeeded in three of three Muse runs that had failed without it.
 
