@@ -36,11 +36,15 @@ Each run writes its own log. In Claude Code the skill starts one background comm
 
 ### Summary when the last run ends (default)
 
-The summary lists one line per change, in the order the user named them: `completed`, `stopped at <stage>` or `refused`, as that run's report states it. Each run's report and diagnosis were already shown when the run ended, so the summary repeats neither.
+The summary lists one line per change it ran, in the order the user named them: `completed`, `stopped at <stage>` or `refused`, as that run's report states it. Each run's report and diagnosis were already shown when the run ended, so the summary repeats neither.
 
-### No dependency handling and no concurrency limit (default)
+### Dependency check before start (user decision)
 
-The user lists changes that can run independently. A change that needs another's work runs after that work lands. Every named change starts at once. Provider rate limits that this triggers surface as ordinary execution failures, which the skill diagnoses as usual.
+The skill reads each named change's proposal, design and tasks for work the change needs, such as a requirement, file, command or change it names, and checks whether the default branch holds it, from the main spec, the archived changes and the default branch's files. Another named change counts as unlanded, because parallel runs do not see each other's work. For each change that needs unlanded work, the skill names the missing work and the evidence by file and line, proposes dropping the change and waits for the user's list of changes to run. With nothing flagged, it starts at once. Only direct dependencies are checked: the skill builds no dependency tree and does not order changes. The alternatives were no check and a full tree with ordering; the user asked for the check without the tree.
+
+### No concurrency limit (default)
+
+Every change to run starts at once. Provider rate limits that this triggers surface as ordinary execution failures, which the skill diagnoses as usual.
 
 ### Merge-mode collisions use the existing stops (default)
 
@@ -49,4 +53,5 @@ In `merge` mode two runs deliver to the same default branch. When one delivers w
 ## Risks / Trade-offs
 
 - [The batch depends on a live session] → Each change is an ordinary run: `loop status` and `loop resume` work without the session, and a session that dies leaves every run recoverable.
+- [The check is a judgment from plan text, so it can miss a dependency or flag a false one] → The user confirms the list, and a missed dependency surfaces as a failing check or review in that run, which the skill diagnoses.
 - [Merge-mode runs that end close together stop at delivery] → The stop names its recovery. Its likelihood grows with the number of runs, and the skill's summary shows which runs need it.

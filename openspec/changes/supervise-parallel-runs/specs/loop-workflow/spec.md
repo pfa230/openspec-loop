@@ -2,7 +2,12 @@
 
 ### Requirement: Supervising several runs
 
-When the user names several changes, the supervision skill SHALL start `loop run` for each of them without waiting for another to end. Each progress line it forwards SHALL name its change. A run that completes, stops or is refused SHALL NOT pause or delay the others. Once every run has ended, the skill SHALL list each change, in the order the user named them, with its outcome.
+When the user names several changes, the supervision skill SHALL first read each change's plan and flag each change that needs work the default branch does not yet hold, such as another named change, with the evidence. When it flags any change, it SHALL propose dropping it and start no run until the user confirms which changes to run. It SHALL start `loop run` for each change to run without waiting for another to end. Each progress line it forwards SHALL name its change. A run that completes, stops or is refused SHALL NOT pause or delay the others. Once every run has ended, the skill SHALL list each change it ran, in the order the user named them, with its outcome.
+
+#### Scenario: Change that needs unlanded work
+- **WHEN** the user names `add-a`, `add-b` and `add-c`, and the plan of `add-b` relies on a requirement that `add-a` adds and the default branch does not hold
+- **THEN** the skill names `add-b`, cites `add-a` and the plan text that shows the dependency, proposes dropping `add-b`, and starts no run until the user confirms
+- **AND** once the user confirms dropping `add-b`, it starts `add-a` and `add-c`
 
 #### Scenario: Several changes run at once
 - **WHEN** the user asks the skill to run `add-a`, `add-b` and `add-c`
