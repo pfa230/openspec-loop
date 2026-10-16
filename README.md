@@ -370,6 +370,8 @@ The `openspec-loop` skill installed during [project setup](#project-setup) allow
 
 For a stopped run, the skill diagnoses the cause from the report, transcripts, effective agent command and findings. Execution-failure diagnosis traces the failed operation and, when necessary, reads the invoked adapter and its helper to distinguish a harness failure from reply rejection. The diagnosis describes committed and uncommitted work, completed and pending validation, and uncertainty before recommending recovery. Investigation is read-only; repairs and continuation require the user's agreement.
 
+For a decision stop, the skill follows the unchanged report with its own message listing every question, numbered and quoted exactly. Under each, it explains the decision, the choices and their tradeoff, and recommends an answer grounded in the plan and review findings, or names the evidence a recommendation would need. The user replies by question number or approves all recommendations. Recommendations stay proposals until the user answers or approves them. The skill then records the decisions in the design, commits them and resumes under authorization the user has already given, and asks only for whatever authorization is missing.
+
 `loop` writes the repository's Git directory and starts workers, so supervision commands run outside the session's sandbox. Codex requests escalated permissions for each `loop` command.
 
 ## Development
