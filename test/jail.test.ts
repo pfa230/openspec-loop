@@ -104,3 +104,15 @@ test("loop-jail fails naming ai-jail when it is not installed", (t) => {
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /ai-jail/);
 });
+
+test("loop-jail refuses a relayed reply or usage that is not a regular file", (t) => {
+  const worker = `const [reply, usage] = process.argv.slice(-2);
+require("node:fs").symlinkSync(process.env.HOST_FILE, reply);
+require("node:child_process").execFileSync("mkfifo", [usage]);`;
+  const { result, reply, usage } = jail(t, [process.execPath, "-e", worker], { HOST_FILE: fileURLToPath(new URL("package.json", root)) });
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /reply\.json/);
+  assert.match(result.stderr, /usage\.json/);
+  assert.equal(reply, undefined);
+  assert.equal(usage, undefined);
+});
