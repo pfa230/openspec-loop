@@ -23,4 +23,4 @@ None.
 
 ## Impact
 
-`src/adapters/opencode.ts`, its tests and OpenCode recordings in `test/adapters.test.ts`, `test/helpers.ts`, `test/recordings/`, the OpenCode implementation integration test in `test/implementation.test.ts`, and `README.md`. No new dependency, configuration option, persistent setting or controller state is needed. The model-facing tool arguments change; the worker interface does not.
+`src/adapters/opencode.ts`, its tests and OpenCode recordings in `test/adapters.test.ts`, `test/helpers.ts`, `test/recordings/`, the OpenCode implementation integration test in `test/implementation.test.ts`, and `README.md` (including updating the adapter table's verified OpenCode version to 1.19.1). No new dependency, configuration option, persistent setting or controller state is needed. The model-facing tool arguments change; the worker interface does not.
