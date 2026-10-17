@@ -32,6 +32,19 @@ The loop runs a committed OpenSpec change unattended. Supervision uses only thes
 
 Verified with Codex CLI 0.160.0. Start the command with `exec_command` and a short `yield_time_ms` such as 1000. While the command runs, the call returns the lines printed so far and a session id. Poll that session with `write_stdin`, passing empty `chars`, and relay the new lines from each poll. The poll that returns the exit status also carries the report.
 
+## Supervising several runs
+
+When the user names several changes, run them at once, each as an ordinary run in its own worktree. Only the named changes run.
+
+1. **Check the branch.** Compare `git branch --show-current` in the invoking checkout with the configured `defaultBranch`, merged as under Diagnosing a stop. On any other branch, every run would share the invoking worktree: name that branch and the default branch, and start no run.
+2. **Check dependencies.** Read each named change's `proposal.md`, `design.md` and `tasks.md` under `openspec/changes/<change>/` for work it needs, such as a requirement, file, command or change it names. Check whether the default branch holds that work, from `openspec/specs/`, the archived changes under `openspec/changes/archive/` and the default branch's files. Another named change counts as unlanded, because parallel runs do not see each other's work. Check only direct dependencies; do not trace further or order the changes. For each change that needs unlanded work, name the missing work and the evidence by file and line, propose dropping the change, and wait for the user's list of changes to run. When nothing is flagged, start at once.
+3. **Start every run.** Start `loop run <change>` for each change to run without waiting for any to end.
+4. **Relay each run's progress.** Forward each progress line as `<change>: <line>`; the label is the only change to the line.
+   - In Claude Code, give each run its own background Bash command, log, Monitor and relayed-line count, and watch each as under Watching a run in Claude Code. Re-arm an expired monitor from that run's own count.
+   - In Codex, give each run its own `exec_command` session and poll the sessions in turn with `write_stdin`.
+5. **Handle each run as it ends.** Show its report unchanged and handle it as a single run: diagnose a stop, and resume only after the user agrees. Meanwhile keep relaying the other runs. Watch a resumed run alongside the rest.
+6. **Summarize.** When every run has ended, list each change you ran, in the order the user named them, one per line with its outcome as its last report states it: `completed`, `stopped at <stage>` or `refused`. Do not repeat the reports or diagnoses.
+
 ## Stopping and resuming
 
 To stop, run `loop stop <change>` from any checkout of the repository; the watched advancement prints the stop report and exits 1. To continue, start `loop resume <change>` and watch it the same way. For one successful stage at a time, use `loop step <change>` and watch it the same way; the report names the stage completed and what can run next. Returning between stages is different from a stopped run and from whole-run completion. After resolving a stop, `step` follows the same recovery as `resume`, within its single-stage limit. If `loop status` shows the run as interrupted, the process advancing it died; `loop resume` takes the run over and redoes the interrupted step.
