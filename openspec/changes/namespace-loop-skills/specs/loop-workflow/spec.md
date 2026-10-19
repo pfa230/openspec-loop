@@ -113,7 +113,7 @@ The loop SHALL provide `loop setup`, accepting no arguments or options, to insta
 
 #### Scenario: Initial installation
 - **WHEN** `loop setup` runs in an OpenSpec-initialized Git checkout with no bundled skill copies
-- **THEN** both tool directories contain every skill from the executing package, including `loop-propose`, `loop-run` and `loop-scope`, with the packaged contents
+- **THEN** both tool directories contain every skill from the executing package, including `loop-propose`, `loop-proposals`, `loop-run` and `loop-scope`, with the packaged contents
 - **AND** the command prints their destination paths and exits 0
 
 #### Scenario: Subdirectory invocation
@@ -134,11 +134,11 @@ The loop SHALL provide `loop setup`, accepting no arguments or options, to insta
 
 ### Requirement: Bundled skill refresh
 
-Rerunning `loop setup` SHALL replace existing bundled skill directories with the executing package's copies and add missing bundled skills. Replacement SHALL remove obsolete contents within those package-owned directories and overwrite local edits there. Setup SHALL preserve unrelated skill directories, native OpenSpec skills and files outside the current and retired bundled skill destinations. Setup SHALL remove the retired package-owned `openspec-loop` and `openspec-scope` skill directories after installing their replacements. Repeated setup with the same package SHALL leave the same file contents.
+Rerunning `loop setup` SHALL replace existing bundled skill directories with the executing package's copies and add missing bundled skills. Replacement SHALL remove obsolete contents within those package-owned directories and overwrite local edits there. Setup SHALL preserve unrelated skill directories, native OpenSpec skills and files outside the current and retired bundled skill destinations. Setup SHALL remove the retired package-owned `openspec-loop`, `openspec-scope` and `openspec-proposals` skill directories after installing their replacements. Repeated setup with the same package SHALL leave the same file contents.
 
 #### Scenario: Upgrade adds the missing scoping skill
-- **WHEN** a project has an `openspec-loop` or `openspec-scope` skill directory and setup runs from the new package
-- **THEN** both tool directories receive `loop-propose`, `loop-run` and `loop-scope`, and the retired directories are removed
+- **WHEN** a project has an `openspec-loop`, `openspec-scope` or `openspec-proposals` skill directory and setup runs from the new package
+- **THEN** both tool directories receive `loop-propose`, `loop-proposals`, `loop-run` and `loop-scope`, and the retired directories are removed
 - **AND** unrelated skills and native OpenSpec instructions remain unchanged
 
 #### Scenario: Obsolete bundled files removed
@@ -175,3 +175,16 @@ Setup SHALL require a Git working tree, without loading loop configuration, requ
 - **WHEN** setup succeeds in a configured project
 - **THEN** loop configuration, OpenSpec configuration, ignore files, Git refs, the index and existing run state remain unchanged
 - **AND** only the invoking checkout's current and retired bundled skill destinations are changed
+
+### Requirement: Proposal listing skill
+
+The loop SHALL ship a read-only `loop-proposals` skill for Claude Code and Codex. It SHALL list every active change in the invoking checkout's resolved OpenSpec root or explicitly selected store, showing its name, date, summary and recorded source issue. It SHALL group bugs first and remaining proposals by repository area, using source issue metadata where available and marking inferred classifications. It SHALL recommend an order with reasons based on proposal dependencies, correctness and scope.
+
+#### Scenario: Overview after batch scoping
+- **WHEN** the selected root contains several proposals created through `loop-scope`
+- **THEN** the skill shows one row per change under counted groups, bugs first and other proposals by area, with change names, dates, summaries and their source issues
+- **AND** it recommends which proposals to take first and explains the order from their plans
+
+#### Scenario: Drafts and proposals without source issues
+- **WHEN** the active changes include a draft without a proposal file or a proposal without a source issue
+- **THEN** each remains in the listing by change name, missing information is identified, and any classification inferred from available artifacts is marked
