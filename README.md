@@ -40,7 +40,7 @@ In an OpenSpec-initialized repository:
 
    Store uncommitted configuration overrides in the main checkout's `openspec/loop.local.yaml`. Linked worktrees read these overrides automatically.
 
-3. Install the bundled supervision and scoping skills for Claude Code and Codex, then commit the installed files:
+3. Install the bundled supervision, scoping and proposal-listing skills for Claude Code and Codex, then commit the installed files:
 
    ```sh
    loop setup
@@ -245,6 +245,12 @@ git merge --no-edit origin/main       # if not already an ancestor of HEAD
 Resolve and commit any conflicts before retrying `loop scope finish planning` from the original invoking checkout. Both the published tip and current base must be ancestors of the session tip; finish then avoids another rebase and can push without force. Resetting only to the published tip would repeat the rebase and rejection.
 
 After proposals land, explicitly run `loop run <change>` or `loop step <change>` from the default branch. In `pr` mode, merge the proposal PR there first. Enrolling from the multi-proposal session branch includes sibling proposal commits in the selected change's patch. Finishing scoping leaves proposals unarchived and unenrolled, and keeps the session checkout for inspection or manual Git cleanup.
+
+## Proposal backlog
+
+The read-only `openspec-proposals` skill shows the active proposals in the resolved OpenSpec root, grouped and ordered. Invoke it as `/openspec-proposals` in Claude Code or `$openspec-proposals` in Codex, inside a scoping session or after its proposals land in the default checkout. It uses the invoking checkout's resolved root, or an explicitly selected store, and shows which one it used.
+
+It lists every active change native OpenSpec returns, including a draft without a proposal and a proposal without a source issue. Each row shows the change name, date, source issue when recorded and a title or summary; missing information is identified. Bugs are grouped first and the remaining proposals by repository area, with inferred classifications marked. From the proposals' dependencies, correctness and scope it recommends an order of attack with a reason each. It reads only, does not enroll a change and needs no finished scoping session.
 
 ## Running a change
 

@@ -37,7 +37,7 @@ test("setup installs every bundled skill for both tools and reports each destina
   const result = runLoop(repo, ["setup"]);
   assert.equal(result.status, 0, result.stderr);
   installed(repo.top);
-  const destinations = tools.flatMap(tool => ["openspec-loop", "openspec-scope"].map(skill => `Installed ${join(repo.top, tool, "skills", skill)}`));
+  const destinations = tools.flatMap(tool => ["openspec-loop", "openspec-proposals", "openspec-scope"].map(skill => `Installed ${join(repo.top, tool, "skills", skill)}`));
   assert.deepEqual(result.stdout.trim().split("\n"), destinations);
 });
 
@@ -83,7 +83,7 @@ test("setup refuses every extra argument before writing files", (t) => {
   }
 });
 
-test("setup refreshes old supervision copies, adds missing scope skills and preserves unrelated skills", (t) => {
+test("setup refreshes old supervision copies, adds missing scoping and proposal skills and preserves unrelated skills", (t) => {
   const repo = makeRepo(t);
   for (const tool of tools) {
     writeFile(repo.top, `${tool}/skills/openspec-loop/SKILL.md`, "old locally edited supervision");
@@ -95,7 +95,7 @@ test("setup refreshes old supervision copies, adds missing scope skills and pres
   const result = runLoop(repo, ["setup"]);
   assert.equal(result.status, 0, result.stderr);
   for (const tool of tools) {
-    for (const skill of ["openspec-loop", "openspec-scope"]) {
+    for (const skill of ["openspec-loop", "openspec-proposals", "openspec-scope"]) {
       assert.deepEqual(contents(join(repo.top, tool, "skills", skill)), contents(join(bundled, skill)));
     }
     assert.equal(readFileSync(join(repo.top, tool, "skills", "openspec-propose", "SKILL.md"), "utf8"), "native OpenSpec skill");
