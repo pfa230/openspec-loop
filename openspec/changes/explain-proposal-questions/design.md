@@ -2,19 +2,19 @@
 
 ## Context
 
-See `proposal.md` for the reported problem. Native proposing's tracked instructions in `.agents/skills/openspec-propose/`, `.claude/skills/openspec-propose/` and `.claude/commands/opsx/propose.md` ask for clarification but do not require contextual explanations. The bundled `skills/openspec-scope/SKILL.md` invokes native proposing and later asks about unresolved decisions. The supervision skill already explains decision questions after a run stops, but that guidance does not cover proposal authoring.
+See `proposal.md` for the reported problem. Current `main` provides `skills/loop-propose/SKILL.md`, which loads and follows native OpenSpec proposing before summarizing its artifacts. Its first step leaves clarification to native proposing without requiring context, tradeoffs or recommendations. `skills/loop-scope/SKILL.md` already invokes this wrapper. The existing supervision guidance concerns decision stops after enrollment rather than questions during proposing.
 
 ## Goals / Non-Goals
 
-Cover direct proposing in this repository and native proposing nested inside the bundled scoping skill. Editing upstream OpenSpec generation, changing question-tool interfaces, and changing unattended review recovery are outside this change.
+Apply the explanation rule throughout native proposing reached through `loop-propose`. Native proposing retains responsibility for when clarification is needed, root and schema selection, artifact creation and the planning boundary. Direct invocation of native proposing without the wrapper is outside this change.
 
 ## Decisions
 
-- Add one proposal-question rule to repository `AGENTS.md` for direct native proposing. Do not patch generated native skills: regeneration would overwrite that patch, and repository instructions are already loaded by the proposing workflow.
-- Add the same guidance to the bundled scoping skill before its native-proposing invocation so it applies while that invocation runs as well as during the later decision sweep. Other projects do not inherit this repository's `AGENTS.md`, so the bundled instruction is also necessary. Refresh only its project copies through existing `loop setup`.
-- Require ordinary explanatory prose before a compact picker. Short option labels can still be used for selection, while the preceding explanation supplies context, consequences, tradeoffs and the recommendation's rationale. Keep the detail proportional to the decision.
+- Add a question-presentation instruction in `skills/loop-propose/SKILL.md` before it loads native proposing. State that the instruction applies to decision questions throughout the delegated workflow, including initial clarification and questions encountered while creating artifacts. Adding it only to the final summary would miss the point at which the user must choose.
+- Before any compact picker, explain the relevant context, what the answer changes, the options' practical tradeoffs and the recommended option with its reason in ordinary user-facing prose. Keep the explanation proportional to the decision; retain short option labels for selection.
+- Maintain the guidance in this one bundled wrapper. Existing `loop-scope` delegation already reaches it, and existing `loop setup` distributes it to `.agents/skills/loop-propose/` and `.claude/skills/loop-propose/`. No repository-wide AGENTS rule, scoping-specific copy or upstream OpenSpec edit is needed.
 
 ## Risks / Trade-offs
 
-- Native proposing outside this repository and outside bundled scoping does not inherit this guidance; extending upstream OpenSpec is separate work.
+- Direct `openspec-propose` calls bypass the wrapper and receive no added guidance; use `loop-propose` for the enhanced workflow.
 - Instruction changes rely on agent compliance. Review a sample question against the spec scenario; string-matching tests would establish only that wording exists.

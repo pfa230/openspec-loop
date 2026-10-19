@@ -8,7 +8,7 @@ During proposing, the agent presents short questions and option labels without e
 
 - Require proposal decision questions to explain the relevant context, what the answer changes, the available options and their practical tradeoffs, and the recommendation with its rationale.
 - Put that explanation in user-facing prose before any compact question picker so the user can answer without opening artifacts or tool output.
-- Apply this guidance to native proposing in this repository and to the bundled scoping workflow, including questions raised while native proposing is running.
+- Put the guidance in `loop-propose`, applying it while the wrapper follows native proposing, both when invoked directly and through `loop-scope`.
 
 ## Capabilities
 
@@ -18,10 +18,10 @@ None.
 
 ### Modified Capabilities
 
-- `loop-workflow`: Make attended proposal decision questions self-contained and explain the recommendation.
+- `loop-workflow`: Make decision questions during `loop-propose` self-contained and explain the recommendation.
 
 ## Impact
 
-- Add proposal-question guidance to repository `AGENTS.md` and `skills/openspec-scope/SKILL.md`; refresh the bundled scoping copies through existing `loop setup`.
-- Keep native OpenSpec's generated proposing instructions intact; repository instructions cover direct proposing here, while the bundled skill covers scoping in other projects.
+- Update `skills/loop-propose/SKILL.md` and refresh its project copies through existing `loop setup`.
+- `loop-scope` already invokes `loop-propose`, so it inherits the guidance without a separate scoping rule. Direct native `openspec-propose` invocation outside the wrapper is outside this change.
 - No runtime, question-tool schema, configuration, dependency or new automated check is needed.
