@@ -1,5 +1,5 @@
 ---
-name: openspec-proposals
+name: loop-proposals
 description: Show the active OpenSpec proposals in the selected root, grouped and ordered for choosing what to take next. Use after batch scoping or when the user asks to list proposed changes or proposed issues.
 ---
 

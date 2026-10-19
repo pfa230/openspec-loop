@@ -1,5 +1,5 @@
 ---
-name: openspec-loop
+name: loop-run
 description: Supervise an openspec-loop run of a committed OpenSpec change. Use when the user asks to run, step, watch, stop or resume a change with the loop, or asks what a loop run is doing.
 ---
 

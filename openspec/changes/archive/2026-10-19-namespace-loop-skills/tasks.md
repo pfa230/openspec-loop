@@ -1,0 +1,7 @@
+# Tasks
+
+## 1. Loop skill namespace and proposing wrapper
+
+- [x] 1.1 Reconcile the existing local implementation with current `main`, including the proposal-listing skill introduced in `8ac0600`. Rename all three existing source directories and frontmatter to `loop-run`, `loop-scope` and `loop-proposals`, preserve the listing's read-only behavior, add the short `loop-propose` wrapper from design.md, and route scoping drafts through it. Update README setup, scoping, proposal-backlog, proposing and upgrade guidance alongside the skills; verify the diff preserves the existing workflows, native delegation, summary-before-inventory instruction and return to scoping without starting implementation.
+- [x] 1.2 Extend `src/setup.ts` to preflight and retire all three old names in both tool directories after installing the four skills. Adapt current `main`'s setup tests and fixtures for the four names and sorted output, migration from all three retired names, current/retired obstruction paths including proposal listing, and preservation of native/custom skills; build and run `node --test dist/test/setup.test.js` to verify filesystem behavior and existing setup guarantees.
+- [x] 1.3 Build and run the implementation worktree's setup command to refresh its checked-in bundled skill copies, inspect the diff to verify native OpenSpec files are untouched and both tool directories match the packaged four skills, then run `npm test` for the integrated result.
