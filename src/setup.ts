@@ -20,12 +20,13 @@ export function setup(cwd = process.cwd()): number {
   try {
     const skills = readdirSync(source, { withFileTypes: true }).filter(entry => entry.isDirectory()).map(entry => entry.name).sort();
     const tools = [".agents", ".claude"];
+    const retired = ["openspec-loop", "openspec-scope"];
     // Check both tools before changing either one's copies.
     for (const tool of tools) {
       checkDirectory(join(top, tool));
       const parent = join(top, tool, "skills");
       checkDirectory(parent);
-      for (const skill of skills) checkDirectory(join(parent, skill));
+      for (const skill of [...skills, ...retired]) checkDirectory(join(parent, skill));
     }
     for (const tool of tools) {
       const parent = join(top, tool, "skills");
@@ -36,6 +37,9 @@ export function setup(cwd = process.cwd()): number {
         cpSync(join(source, skill), destination, { recursive: true });
         process.stdout.write(`Installed ${destination}\n`);
       }
+    }
+    for (const tool of tools) {
+      for (const skill of retired) rmSync(join(top, tool, "skills", skill), { recursive: true, force: true });
     }
     return 0;
   } catch (error) {
