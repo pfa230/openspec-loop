@@ -6,7 +6,7 @@ The proposing workflow's final response currently requires an artifact inventory
 
 ## What Changes
 
-- Require a concise summary of the proposed design and concrete changes in the final response of this repository's native proposing skills and command, grounded in the completed artifacts and presented before the artifact inventory.
+- Require a concise summary of the proposed design and concrete changes in OpenSpec's source templates for the proposing skill and command, grounded in the completed artifacts and presented before the artifact inventory. Native generation and `openspec update` will carry this instruction into project files.
 
 ## Capabilities
 
@@ -16,12 +16,11 @@ None.
 
 ### Modified Capabilities
 
-None. This is a local planning-tool instruction change outside the loop's run behavior; the loop-workflow contract leaves native proposing outside its enforcement. The change sets `skip_specs: true`.
+None in openspec-loop. The target is OpenSpec's planning-tool instructions, outside the loop's run behavior, so this planning change retains `skip_specs: true`. OpenSpec's own specification requirements must be reconciled in its source checkout before implementation.
 
 ## Impact
 
-- `.agents/skills/openspec-propose/SKILL.md`: Codex output instructions.
-- `.claude/skills/openspec-propose/SKILL.md`: Claude skill output instructions.
-- `.claude/commands/opsx/propose.md`: Claude command output instructions.
+- OpenSpec's source module defining `getOpsxProposeSkillTemplate()` and `getOpsxProposeCommandTemplate()`, observed in the installed package as `dist/core/templates/workflows/propose.js`.
+- Generated proposing skills and commands receive the new instruction through the existing generator, including Codex and Claude installations.
 
-The scope is these checked-in copies. Updating OpenSpec's generator or other repositories is outside this change.
+Implementation belongs in the OpenSpec source repository. This openspec-loop worktree holds the corrected plan for review, not an executable loop change for this repository. No OpenSpec source checkout was found in the inspected project and repository directories; installed package code supplied the implementation evidence.
