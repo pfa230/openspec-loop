@@ -2,22 +2,20 @@
 
 ## Context
 
-See proposal.md for motivation and target. The installed OpenSpec package defines separate skill and command templates in `dist/core/templates/workflows/propose.js`. Both have an `Output` section requiring an artifact inventory and readiness message. OpenSpec's update code generates project files from those templates and writes over existing content.
+See proposal.md for motivation. OpenSpec owns and regenerates the proposing skills and commands. This repository owns `AGENTS.md`, which already defines how agents plan changes and present their results.
 
 ## Goals / Non-Goals
 
-Change the source of the generated instructions so regeneration retains the summary requirement. Use the existing final-response format.
+Express the reporting preference in the repository's existing agent instructions, independently of the installed OpenSpec version.
 
 ## Decisions
 
-In the OpenSpec source module defining `getOpsxProposeSkillTemplate()` and `getOpsxProposeCommandTemplate()`, add the same bullet immediately after the change name and location in each template's `Output` section:
+Add one bullet in `AGENTS.md` next to the existing planning and presentation rules:
 
-> A concise summary of the proposed design and concrete changes, grounded in the completed artifacts and placed before the artifact list.
+> **Explain proposals.** After completing a proposal, summarize the proposed design and concrete changes in the final response, grounded in the completed artifacts and before the artifact list.
 
-Use the existing generation and update paths to distribute the instruction. Hand-editing generated project files or the installed package would lose the correction on a later refresh or package upgrade. No override mechanism is needed.
-
-Implement in an OpenSpec source worktree after reconciling this plan with that repository's instructions and specs. Do not run this plan through openspec-loop in the current repository: its implementation target is elsewhere.
+The existing skill supplies artifact creation and the rest of the final response; this rule adds only the missing explanation. Editing generated files loses the preference on refresh. Editing OpenSpec's source would require maintaining an upstream change or fork for a local preference.
 
 ## Risks / Trade-offs
 
-- The installed distribution establishes the two template functions and generation behavior, but the source checkout and its tests were unavailable for inspection. Exact source and test paths must be confirmed in that checkout before implementation; this plan does not claim readiness for an unattended run here.
+- Agents must follow the repository's instructions for the rule to take effect; this is a prose instruction, like the existing reporting rules, rather than CLI enforcement.

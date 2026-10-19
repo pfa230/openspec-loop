@@ -1,5 +1,5 @@
 # Tasks
 
-## 1. OpenSpec proposing templates
+## 1. Repository proposing instructions
 
-- [ ] 1.1 In an OpenSpec source worktree, after reconciling its repository instructions and specs, add the summary bullet from design.md to the `Output` sections returned by `getOpsxProposeSkillTemplate()` and `getOpsxProposeCommandTemplate()`; review the source diff and run that repository's required checks. Build the CLI and use its native generation/update flow in a disposable project configured for Codex skills and Claude skills/commands, then run `openspec update --force` again and verify the summary instruction remains before the artifact list in the generated proposing files.
+- [ ] 1.1 Add the `Explain proposals` bullet from design.md to this repository's `AGENTS.md`; review the diff to verify it requires the design and change summary before the artifact list and changes only repository-owned instructions, then run `npm test` as required by the repository.
