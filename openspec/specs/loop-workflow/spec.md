@@ -64,7 +64,7 @@ After enrollment through `loop run` or `loop step`, one deterministic controller
 
 ### Requirement: Supervision skill
 
-The loop SHALL ship a skill for Claude and Codex that supervises a run through the loop's commands, including `step`. The skill SHALL start the run and forward each progress line to the user as it arrives. When the run completes, stops or returns control between stages, the skill SHALL show the user its report unchanged. When the run stops, the skill SHALL diagnose the stop with the user from the report, the transcripts, the failing agent's configured command, the review and check findings and the changes between attempts: the likely cause, the evidence that is missing, why attempts did not converge when they ran out, and a recovery. For an execution failure, the skill SHALL identify the specific failed operation and the evidence establishing it before proposing recovery; the stage, agent alias and exit status alone SHALL NOT constitute a causal diagnosis. When needed to distinguish a harness failure from an adapter's reply rejection, the skill SHALL inspect the invoked adapter and its relevant helper through targeted reads. For an execution failure, the diagnosis SHALL distinguish committed from uncommitted work and completed from pending validation using the available run records and Git evidence. When the evidence cannot establish a cause or part of that work state, the skill SHALL state that uncertainty rather than infer it from the exit status. The skill SHALL change nothing while diagnosing. A successful stage boundary SHALL be presented for inspection without failure diagnosis or automatic continuation, and a stop the user requested SHALL stay stopped.
+The loop SHALL ship a `loop-run` skill for Claude and Codex that supervises a run through the loop's commands, including `step`. The skill SHALL start the run and forward each progress line to the user as it arrives. When the run completes, stops or returns control between stages, the skill SHALL show the user its report unchanged. When the run stops, the skill SHALL diagnose the stop with the user from the report, the transcripts, the failing agent's configured command, the review and check findings and the changes between attempts: the likely cause, the evidence that is missing, why attempts did not converge when they ran out, and a recovery. For an execution failure, the skill SHALL identify the specific failed operation and the evidence establishing it before proposing recovery; the stage, agent alias and exit status alone SHALL NOT constitute a causal diagnosis. When needed to distinguish a harness failure from an adapter's reply rejection, the skill SHALL inspect the invoked adapter and its relevant helper through targeted reads. For an execution failure, the diagnosis SHALL distinguish committed from uncommitted work and completed from pending validation using the available run records and Git evidence. When the evidence cannot establish a cause or part of that work state, the skill SHALL state that uncertainty rather than infer it from the exit status. The skill SHALL change nothing while diagnosing. A successful stage boundary SHALL be presented for inspection without failure diagnosis or automatic continuation, and a stop the user requested SHALL stay stopped.
 
 After diagnosing any other stop, the skill SHALL state the cause and its recovery, apply the recovery and resume, without waiting for the user. Its recoveries SHALL be edits to the change's plan committed on the run's branch and the loop's resume commands. The skill SHALL hand the stop to the user instead when no such recovery addresses the cause without a decision that neither the user's instructions, the source issue, the plan nor the repository's rules settle, and when the stop repeats a cause the skill already recovered from.
 
@@ -908,7 +908,7 @@ Scoping commands SHALL report external effects and retain the session branch and
 
 ### Requirement: Scoping skill
 
-The loop SHALL ship an `openspec-scope` skill for Claude Code and Codex. It SHALL rank open issues following repository instructions, explain the order, await the user's selection, and propose selected issues through native OpenSpec in the session worktree. Before separately committing each finished proposal, it SHALL record its source issue, resolve required decisions or record explicit design defaults, and trim scope, filing omitted requested work as linked follow-up issues and non-goals.
+The loop SHALL ship a `loop-scope` skill for Claude Code and Codex. It SHALL rank open issues following repository instructions, explain the order, await the user's selection, and propose selected issues through `loop-propose` in the session worktree. Before separately committing each finished proposal, it SHALL record its source issue, resolve required decisions or record explicit design defaults, and trim scope, filing omitted requested work as linked follow-up issues and non-goals.
 
 #### Scenario: Issue choice stays attended
 - **WHEN** the user invokes the scoping skill
@@ -936,7 +936,7 @@ The loop SHALL provide `loop setup`, accepting no arguments or options, to insta
 
 #### Scenario: Initial installation
 - **WHEN** `loop setup` runs in an OpenSpec-initialized Git checkout with no bundled skill copies
-- **THEN** both tool directories contain every skill from the executing package, including `openspec-loop` and `openspec-scope`, with the packaged contents
+- **THEN** both tool directories contain every skill from the executing package, including `loop-propose`, `loop-proposals`, `loop-run` and `loop-scope`, with the packaged contents
 - **AND** the command prints their destination paths and exits 0
 
 #### Scenario: Subdirectory invocation
@@ -957,11 +957,11 @@ The loop SHALL provide `loop setup`, accepting no arguments or options, to insta
 
 ### Requirement: Bundled skill refresh
 
-Rerunning `loop setup` SHALL replace existing bundled skill directories with the executing package's copies and add missing bundled skills. Replacement SHALL remove obsolete contents within those package-owned directories and overwrite local edits there. Setup SHALL preserve unrelated skill directories, native OpenSpec skills and files outside the bundled skill destinations. Repeated setup with the same package SHALL leave the same file contents.
+Rerunning `loop setup` SHALL replace existing bundled skill directories with the executing package's copies and add missing bundled skills. Replacement SHALL remove obsolete contents within those package-owned directories and overwrite local edits there. Setup SHALL preserve unrelated skill directories, native OpenSpec skills and files outside the current and retired bundled skill destinations. Setup SHALL remove the retired package-owned `openspec-loop`, `openspec-scope` and `openspec-proposals` skill directories after installing their replacements. Repeated setup with the same package SHALL leave the same file contents.
 
 #### Scenario: Upgrade adds the missing scoping skill
-- **WHEN** a project has an older supervision skill and no scoping skill, and setup runs from a package bundling both
-- **THEN** both tool directories receive the current supervision and scoping skills
+- **WHEN** a project has an `openspec-loop`, `openspec-scope` or `openspec-proposals` skill directory and setup runs from the new package
+- **THEN** both tool directories receive `loop-propose`, `loop-proposals`, `loop-run` and `loop-scope`, and the retired directories are removed
 - **AND** unrelated skills and native OpenSpec instructions remain unchanged
 
 #### Scenario: Obsolete bundled files removed
@@ -974,7 +974,7 @@ Rerunning `loop setup` SHALL replace existing bundled skill directories with the
 
 ### Requirement: Setup boundaries and failures
 
-Setup SHALL require a Git working tree, without loading loop configuration, requiring an OpenSpec root or resolving workers. It SHALL refuse with exit 2 before writing when the project is unsuitable or a destination directory path is a file or symlink, naming the problem. A source or copy failure SHALL exit 1 and name the failing path. Setup SHALL change no configuration, Git refs, index, run state or user-level skill directories, and SHALL enroll no run.
+Setup SHALL require a Git working tree, without loading loop configuration, requiring an OpenSpec root or resolving workers. It SHALL refuse with exit 2 before writing when the project is unsuitable or a path needed for a current or retired bundled skill directory is a file or symlink, naming the problem. A source or copy failure SHALL exit 1 and name the failing path. Setup SHALL change no configuration, Git refs, index, run state or user-level skill directories, and SHALL enroll no run.
 
 #### Scenario: Project setup not yet complete
 - **WHEN** setup runs in a Git checkout without an OpenSpec root, `openspec/loop.yaml` or configured worker executables
@@ -985,7 +985,7 @@ Setup SHALL require a Git working tree, without loading loop configuration, requ
 - **THEN** it refuses with exit 2, identifies the missing prerequisite and creates no files
 
 #### Scenario: Obstructed destination
-- **WHEN** a path needed for a tool's skill directory or a bundled skill directory is occupied by a file or symlink
+- **WHEN** a path needed for a tool's skill directory or a current or retired bundled skill directory is occupied by a file or symlink
 - **THEN** setup refuses before changing any destination and names the obstructing path
 - **AND** it leaves the object and any symlink target untouched
 
@@ -997,7 +997,7 @@ Setup SHALL require a Git working tree, without loading loop configuration, requ
 #### Scenario: Project configuration preserved
 - **WHEN** setup succeeds in a configured project
 - **THEN** loop configuration, OpenSpec configuration, ignore files, Git refs, the index and existing run state remain unchanged
-- **AND** only the invoking checkout's bundled skill destinations are installed or refreshed
+- **AND** only the invoking checkout's current and retired bundled skill destinations are changed
 
 ### Requirement: Role agents on the command
 
@@ -1170,13 +1170,21 @@ When the user names several changes, the supervision skill SHALL first read each
 
 ### Requirement: Proposal listing skill
 
-The loop SHALL ship a read-only `openspec-proposals` skill for Claude Code and Codex. It SHALL list every active change in the invoking checkout's resolved OpenSpec root or explicitly selected store, showing its name, date, summary and recorded source issue. It SHALL group bugs first and remaining proposals by repository area, using source issue metadata where available and marking inferred classifications. It SHALL recommend an order with reasons based on proposal dependencies, correctness and scope.
+The loop SHALL ship a read-only `loop-proposals` skill for Claude Code and Codex. It SHALL list every active change in the invoking checkout's resolved OpenSpec root or explicitly selected store, showing its name, date, summary and recorded source issue. It SHALL group bugs first and remaining proposals by repository area, using source issue metadata where available and marking inferred classifications. It SHALL recommend an order with reasons based on proposal dependencies, correctness and scope.
 
 #### Scenario: Overview after batch scoping
-- **WHEN** the selected root contains several proposals created through `openspec-scope`
+- **WHEN** the selected root contains several proposals created through `loop-scope`
 - **THEN** the skill shows one row per change under counted groups, bugs first and other proposals by area, with change names, dates, summaries and their source issues
 - **AND** it recommends which proposals to take first and explains the order from their plans
 
 #### Scenario: Drafts and proposals without source issues
 - **WHEN** the active changes include a draft without a proposal file or a proposal without a source issue
 - **THEN** each remains in the listing by change name, missing information is identified, and any classification inferred from available artifacts is marked
+
+### Requirement: Proposing skill
+
+The loop SHALL ship a `loop-propose` skill for Claude Code and Codex that delegates artifact creation to the project's installed native OpenSpec proposing workflow with the same request, working directory and selected store. On completion it SHALL summarize the proposed design and concrete changes from the completed artifacts before presenting the artifact inventory and readiness handoff.
+
+#### Scenario: Native proposal with a design summary
+- **WHEN** the user invokes `loop-propose` in a project with native OpenSpec proposing installed
+- **THEN** it follows that installed workflow to create the planning artifacts and presents their proposed design and changes before the artifact inventory and readiness handoff
