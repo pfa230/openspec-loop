@@ -2,7 +2,7 @@ import { existsSync, mkdirSync } from "node:fs";
 import { setTimeout as sleep } from "node:timers/promises";
 import { join, resolve } from "node:path";
 import { type Config, readConfig, resolveRoles, ROLES, writeLocalRoles } from "./config.js";
-import { advance, continuation, locations, progress, type Setup } from "./controller.js";
+import { advance, continuation, locations, progress, reopenPlan, type Setup } from "./controller.js";
 import { deliveryBase, git, gitMessage, gitSucceeds, topLevel } from "./git.js";
 import { checkOpenSpec } from "./openspec.js";
 import { changeDir } from "./plan.js";
@@ -27,13 +27,13 @@ export async function step(change: string, roles?: string[]): Promise<number> {
   return start(change, "step", roles);
 }
 
-export async function resume(change: string, roles?: string[], attempts?: number, implement = false): Promise<number> {
-  return start(change, "resume", roles, attempts, implement);
+export async function resume(change: string, roles?: string[], attempts?: number, implement = false, review = false): Promise<number> {
+  return start(change, "resume", roles, attempts, implement, review);
 }
 
 // Every advancement prepares and takes the same lock before enrolling or loading the run.
 // Agent aliases named on the command replace the configured roles, in role order.
-async function start(change: string, command: "run" | "step" | "resume", roles?: string[], attempts?: number, implement = false): Promise<number> {
+async function start(change: string, command: "run" | "step" | "resume", roles?: string[], attempts?: number, implement = false, review = false): Promise<number> {
   const top = topLevel(process.cwd());
   const setup = prepare(top, attempts, roles);
   const dir = runDir(top, change);
@@ -45,6 +45,7 @@ async function start(change: string, command: "run" | "step" | "resume", roles?:
       : command === "step" ? readState(dir) ?? enroll(top, dir, change, setup.config)
       : existingState(dir, change);
     if (implement) reimplement(state);
+    if (review) rereview(state);
     if (roles) writeLocalRoles(state.worktree, setup.config.roles);
     if (deadPid !== undefined) progress(`took over run ${change} from process ${deadPid}, which died`);
     return await advance(dir, state, setup, command === "step");
@@ -109,6 +110,18 @@ function reimplement(state: RunState): void {
     throw new Refusal(`${state.change} is archived in worktree ${state.worktree}; \`--implement\` reopens implementation only before archival`);
   }
   for (const stage of STAGES.slice(STAGES.indexOf("implementation"))) state.stages[stage] = "pending";
+}
+
+// Makes proposal review and every later stage incomplete, so the current plan is reviewed before implementing on.
+// A proposal revision still owed to an earlier plan is dropped: the first worker must review the plan as it stands.
+// advance() persists the reopened stages, the cleared revision and the findings reopenPlan() already drops.
+function rereview(state: RunState): void {
+  // Once OpenSpec has moved the change, no plan is left to review; archive() uses the same test.
+  if (!existsSync(join(state.worktree, changeDir(state.change)))) {
+    throw new Refusal(`${state.change} is archived in worktree ${state.worktree}; \`--review\` reopens proposal review only before archival`);
+  }
+  reopenPlan(state);
+  state.owedReview = null;
 }
 
 export async function stop(change: string): Promise<number> {

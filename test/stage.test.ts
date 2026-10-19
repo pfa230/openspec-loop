@@ -259,6 +259,58 @@ test("resume --implement before the plan is approved reviews the plan first", (t
   assert.deepEqual(repo.calls().slice(before, before + 2).map((call) => call.args[0]), ["reviewer", "implementer"]);
 });
 
+test("resume --review after a plan edit while stopped during implementation reviews the plan again and keeps the branch's work", (t) => {
+  const repo = makeRepo(t);
+  repo.queue("implementer", { exit: 1 });
+  assert.equal(runLoop(repo, ["run", "add-thing"]).status, 1);
+  writeFile(repo.worktree, TASKS, "## 1. Work\n\n- [ ] 1.1 Do another thing\n");
+  repo.gitIn(repo.worktree, "commit", "--quiet", "-am", "rework tasks");
+  const edited = repo.git("rev-parse", "loop/add-thing");
+
+  const resumed = runLoop(repo, ["resume", "add-thing", "--review"]);
+  assert.equal(resumed.status, 0, resumed.stdout);
+  assert.equal(lines(resumed.stdout)[0], "proposal-review: review 1 of 3 started (reviewer)");
+  assert.equal(repo.calls("reviewer").length, 2);
+  assert.ok(repo.git("log", "--format=%H", "loop/add-thing").includes(edited));
+});
+
+test("resume --review after a plan edit once implementation is complete reviews the plan again", (t) => {
+  const repo = stoppedAtArchive(t);
+  writeFile(repo.worktree, TASKS, "## 1. Work\n\n- [x] 1.1 Do the thing\n- [ ] 1.2 Do another thing\n");
+  repo.gitIn(repo.worktree, "commit", "--quiet", "-am", "add a task");
+  const edited = repo.git("rev-parse", "loop/add-thing");
+  const calls = { reviewer: repo.calls("reviewer").length, implementer: repo.calls("implementer").length };
+
+  const resumed = runLoop(repo, ["resume", "add-thing", "--review"]);
+  assert.equal(resumed.status, 0, resumed.stdout);
+  assert.equal(lines(resumed.stdout)[0], "proposal-review: review 1 of 3 started (reviewer)");
+  assert.equal(repo.calls("reviewer").length, calls.reviewer + 1);
+  assert.equal(repo.calls("implementer").length, calls.implementer + 1);
+  assert.ok(repo.git("log", "--format=%H", "loop/add-thing").includes(edited));
+});
+
+test("resume --review drops an owed proposal revision instead of running it first", async (t) => {
+  const repo = makeRepo(t);
+  repo.queue("reviewer", { reply: { findings: [finding("blocking", "no design")] } });
+  repo.queue("reviser", { sleep: 30 }, { edits: { [DESIGN]: "x\n" } });
+  const running = startLoop(repo, ["run", "add-thing"]);
+  await running.waitFor(/plan revision started/);
+  while (repo.calls("reviser").length === 0) await sleep(25);
+  assert.equal(runLoop(repo, ["stop", "add-thing"]).status, 0);
+  await running.exited;
+  assert.match(state(repo).owedReview, /001-proposal-review\.verdict\.json$/);
+  writeFile(repo.worktree, DESIGN, "## Decisions\n\nUse files.\n");
+  repo.gitIn(repo.worktree, "add", DESIGN);
+  repo.gitIn(repo.worktree, "commit", "--quiet", "-m", "supervisor plan edit");
+  const revisions = repo.calls("reviser").length;
+
+  const resumed = runLoop(repo, ["resume", "add-thing", "--review"]);
+  assert.equal(resumed.status, 0, resumed.stdout);
+  assert.equal(lines(resumed.stdout)[0], "proposal-review: review 1 of 3 started (reviewer)");
+  assert.equal(repo.calls("reviser").length, revisions);
+  assert.equal(state(repo).owedReview, null);
+});
+
 test("returning to proposal review within one advancement spends the same budget", (t) => {
   const repo = makeRepo(t);
   writeFile(repo.top, "openspec/loop.local.yaml", "attempts:\n  proposalReview: 1\n");

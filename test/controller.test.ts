@@ -183,6 +183,16 @@ test("resume --implement refuses once OpenSpec moved the change, and leaves the 
   assert.equal(runLoop(repo, ["resume", "add-thing"]).status, 0);
 });
 
+test("resume --review refuses once OpenSpec moved the change, and leaves the run as it was", (t) => {
+  const repo = archivedByHand(t);
+  const before = readFileSync(join(repo.runDir(), "state.json"), "utf8");
+  const refused = runLoop(repo, ["resume", "add-thing", "--review"]);
+  assert.equal(refused.status, 2, refused.stdout);
+  assert.match(refused.stderr, /add-thing is archived in worktree .*; `--review` reopens proposal review only before archival/);
+  assert.equal(readFileSync(join(repo.runDir(), "state.json"), "utf8"), before);
+  assert.ok(!existsSync(join(repo.runDir(), "lock")));
+});
+
 test("resume after the archive commit completes the stage without another commit", (t) => {
   const repo = archivedByHand(t);
   repo.gitIn(repo.worktree, "commit", "--quiet", "-m", "add-thing: archive");

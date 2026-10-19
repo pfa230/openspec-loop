@@ -1189,6 +1189,26 @@ The loop SHALL ship a `loop-propose` skill for Claude Code and Codex that delega
 - **WHEN** the user invokes `loop-propose` in a project with native OpenSpec proposing installed
 - **THEN** it follows that installed workflow to create the planning artifacts and presents their proposed design and changes before the artifact inventory and readiness handoff
 
+### Requirement: Explicit proposal review restart
+
+`loop resume <change> --review` SHALL reopen proposal review and every later stage, starting with a fresh review of the current plan and retaining the work already on the run's branch. Once the change is archived, `--review` SHALL refuse and leave the run as it was.
+
+#### Scenario: Review restarted for an edited plan
+- **WHEN** a run has completed proposal review but has not archived its change, and is resumed with `--review` after a committed plan edit
+- **THEN** proposal review runs again before implementation, and the run continues through its later stages from the existing branch work
+
+#### Scenario: Review restart after archival
+- **WHEN** a run whose change is archived is resumed with `--review`
+- **THEN** the loop refuses and leaves the run as it was
+
+### Requirement: Supervised plan edits return to review
+
+The supervision skill SHALL use `loop resume <change> --review` when next advancing a run after a plan edit it makes.
+
+#### Scenario: Supervisor edits a stopped run's plan
+- **WHEN** a supervising agent changes the plan to recover a run stopped during implementation
+- **THEN** it resumes with `--review`, so proposal review precedes the next implementer turn
+
 ### Requirement: Proposal decision questions
 
 For each decision question asked while `loop-propose` follows native proposing, the skill SHALL explain the relevant context and what the answer changes, compare the options' practical tradeoffs, and identify its recommended option with a reason in self-contained user-facing prose before any compact question picker.
