@@ -5,7 +5,7 @@ The supervision skill currently tells the supervising agent to resume an edited 
 ## What Changes
 
 - Add `loop resume <change> --review` to reopen proposal review and every later stage before archival, retaining the branch's existing work.
-- Require the supervising agent to commit its plan edits on the run's branch and use `--review` when continuing the run.
+- Require the supervising agent to use `--review` when continuing the run after its plan edits.
 - Update the supervision skill and README to describe this recovery, preserving plain resume and `--implement` for their existing uses.
 
 ## Capabilities

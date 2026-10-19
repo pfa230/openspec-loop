@@ -14,8 +14,8 @@
 
 ### Requirement: Supervised plan edits return to review
 
-The supervision skill SHALL commit plan changes it makes on the run's branch and use `loop resume <change> --review` when next advancing that run.
+The supervision skill SHALL use `loop resume <change> --review` when next advancing a run after a plan edit it makes.
 
 #### Scenario: Supervisor edits a stopped run's plan
 - **WHEN** a supervising agent changes the plan to recover a run stopped during implementation
-- **THEN** it commits the edit on the run's branch and resumes with `--review`, so proposal review precedes the next implementer turn
+- **THEN** it resumes with `--review`, so proposal review precedes the next implementer turn
