@@ -136,7 +136,7 @@ The loop SHALL provide `loop setup`, accepting no arguments or options, to insta
 
 Rerunning `loop setup` SHALL replace existing bundled skill directories with the executing package's copies and add missing bundled skills. Replacement SHALL remove obsolete contents within those package-owned directories and overwrite local edits there. Setup SHALL preserve unrelated skill directories, native OpenSpec skills and files outside the current and retired bundled skill destinations. Setup SHALL remove the retired package-owned `openspec-loop`, `openspec-scope` and `openspec-proposals` skill directories after installing their replacements. Repeated setup with the same package SHALL leave the same file contents.
 
-#### Scenario: Upgrade adds the missing scoping skill
+#### Scenario: Upgrade replaces retired skill directories
 - **WHEN** a project has an `openspec-loop`, `openspec-scope` or `openspec-proposals` skill directory and setup runs from the new package
 - **THEN** both tool directories receive `loop-propose`, `loop-proposals`, `loop-run` and `loop-scope`, and the retired directories are removed
 - **AND** unrelated skills and native OpenSpec instructions remain unchanged
