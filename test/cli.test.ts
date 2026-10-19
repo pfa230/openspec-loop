@@ -34,7 +34,7 @@ test("status of a change with no run exits 2", (t) => {
   assert.match(result.stderr, /add-thing has no run; start one with `loop run add-thing`/);
 });
 
-test("--attempts and --implement are accepted only on resume, each once, --attempts as a positive integer", (t) => {
+test("--attempts, --implement and --review are accepted only on resume, each once, --attempts as a positive integer", (t) => {
   const repo = makeRepo(t);
   const malformed = [
     ["run", "add-thing", "--attempts", "1"],
@@ -49,6 +49,10 @@ test("--attempts and --implement are accepted only on resume, each once, --attem
     ["status", "add-thing", "--implement"],
     ["step", "add-thing", "--implement"],
     ["resume", "add-thing", "--implement", "--implement"],
+    ["run", "add-thing", "--review"],
+    ["status", "add-thing", "--review"],
+    ["step", "add-thing", "--review"],
+    ["resume", "add-thing", "--review", "--review"],
     ["resume", "add-thing", "--attempts", "1", "--attempts", "2"],
   ];
   for (const args of malformed) {
@@ -56,7 +60,7 @@ test("--attempts and --implement are accepted only on resume, each once, --attem
     assert.equal(result.status, 2, args.join(" "));
     assert.match(result.stderr, /^Usage: loop /, args.join(" "));
   }
-  for (const extra of [["--attempts", "2"], ["--implement"], ["--implement", "--attempts", "2"], ["--attempts", "2", "--implement"]]) {
+  for (const extra of [["--attempts", "2"], ["--implement"], ["--review"], ["--implement", "--attempts", "2"], ["--attempts", "2", "--implement"], ["--implement", "--review"], ["--review", "--attempts", "2"]]) {
     const accepted = runLoop(repo, ["resume", "add-thing", ...extra]);
     assert.equal(accepted.status, 2, extra.join(" "));
     assert.match(accepted.stderr, /add-thing has no run/, extra.join(" "));

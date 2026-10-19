@@ -82,7 +82,7 @@ function plural(count: number, noun: string): string {
 
 // Makes proposal review and every later stage incomplete. Findings owed to the implementer predate the plan
 // approved next, so they are dropped: implementation after reapproval starts with a full round.
-function reopenPlan(state: RunState): void {
+export function reopenPlan(state: RunState): void {
   for (const stage of STAGES) state.stages[stage] = "pending";
   state.owedFindings = null;
 }
