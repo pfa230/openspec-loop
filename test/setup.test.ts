@@ -8,7 +8,7 @@ import { type Repo, loop, makeRepo, runLoop, writeFile } from "./helpers.js";
 
 const bundled = fileURLToPath(new URL("../../skills/", import.meta.url));
 const tools = [".agents", ".claude"];
-const skills = ["loop-propose", "loop-run", "loop-scope"];
+const skills = ["loop-proposals", "loop-propose", "loop-run", "loop-scope"];
 
 function contents(directory: string): Record<string, string> {
   return Object.fromEntries(readdirSync(directory, { recursive: true }).map(String).sort()
@@ -90,6 +90,7 @@ test("setup refreshes bundled copies, replaces retired skills and preserves unre
     writeFile(repo.top, `${tool}/skills/loop-run/SKILL.md`, "old locally edited supervision");
     writeFile(repo.top, `${tool}/skills/loop-run/obsolete/helper.md`, "obsolete instructions");
     writeFile(repo.top, `${tool}/skills/openspec-loop/SKILL.md`, "retired supervision");
+    writeFile(repo.top, `${tool}/skills/openspec-proposals/SKILL.md`, "retired proposal listing");
     writeFile(repo.top, `${tool}/skills/openspec-scope/SKILL.md`, "retired scoping");
     writeFile(repo.top, `${tool}/skills/openspec-propose/SKILL.md`, "native OpenSpec skill");
     writeFile(repo.top, `${tool}/skills/custom/SKILL.md`, "custom skill");
@@ -101,7 +102,7 @@ test("setup refreshes bundled copies, replaces retired skills and preserves unre
     for (const skill of skills) {
       assert.deepEqual(contents(join(repo.top, tool, "skills", skill)), contents(join(bundled, skill)));
     }
-    for (const skill of ["openspec-loop", "openspec-scope"]) assert.equal(existsSync(join(repo.top, tool, "skills", skill)), false);
+    for (const skill of ["openspec-loop", "openspec-proposals", "openspec-scope"]) assert.equal(existsSync(join(repo.top, tool, "skills", skill)), false);
     assert.equal(readFileSync(join(repo.top, tool, "skills", "openspec-propose", "SKILL.md"), "utf8"), "native OpenSpec skill");
     assert.equal(readFileSync(join(repo.top, tool, "skills", "custom", "SKILL.md"), "utf8"), "custom skill");
     assert.equal(readFileSync(join(repo.top, tool, "skills", ".openspec-target"), "utf8"), "native target metadata");
@@ -150,7 +151,7 @@ test("setup refuses outside a Git working tree without creating files", (t) => {
 });
 
 for (const kind of ["file", "symlink"]) {
-  for (const path of [".agents", ".agents/skills", ".agents/skills/loop-run", ".agents/skills/openspec-scope", ".claude", ".claude/skills", ".claude/skills/loop-scope", ".claude/skills/openspec-loop"]) {
+  for (const path of [".agents", ".agents/skills", ".agents/skills/loop-run", ".agents/skills/loop-proposals", ".agents/skills/openspec-scope", ".agents/skills/openspec-proposals", ".claude", ".claude/skills", ".claude/skills/loop-scope", ".claude/skills/loop-proposals", ".claude/skills/openspec-loop", ".claude/skills/openspec-proposals"]) {
     test(`setup refuses a ${kind} at ${path} before updating either tool`, (t) => {
       const repo = makeRepo(t);
       const other = path.startsWith(".agents") ? ".claude" : ".agents";

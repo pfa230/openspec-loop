@@ -20,7 +20,7 @@ export function setup(cwd = process.cwd()): number {
   try {
     const skills = readdirSync(source, { withFileTypes: true }).filter(entry => entry.isDirectory()).map(entry => entry.name).sort();
     const tools = [".agents", ".claude"];
-    const retired = ["openspec-loop", "openspec-scope"];
+    const retired = ["openspec-loop", "openspec-proposals", "openspec-scope"];
     // Check both tools before changing either one's copies.
     for (const tool of tools) {
       checkDirectory(join(top, tool));

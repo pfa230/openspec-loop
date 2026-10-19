@@ -24,7 +24,7 @@ At startup the CLI appends the directory it was invoked from to PATH, so the ada
 
 For a system-wide Node installation whose npm global prefix belongs to root, configure a user-owned prefix with `npm config set prefix ~/.npm-global` and add `~/.npm-global/bin` to PATH. This allows installation without `sudo`.
 
-To upgrade, run `npm update -g openspec-loop`, then run `loop setup` in each project and commit the refreshed skills. Upgrading from a release with the `openspec-loop` and `openspec-scope` skills replaces them with `loop-run` and `loop-scope`; commit their removal along with the new skills.
+To upgrade, run `npm update -g openspec-loop`, then run `loop setup` in each project and commit the refreshed skills. Upgrading from a release with the `openspec-loop`, `openspec-proposals` and `openspec-scope` skills replaces them with `loop-run`, `loop-proposals` and `loop-scope`; commit their removal along with the new skills.
 
 ## Project setup
 
@@ -40,15 +40,15 @@ In an OpenSpec-initialized repository:
 
    Store uncommitted configuration overrides in the main checkout's `openspec/loop.local.yaml`. Linked worktrees read these overrides automatically.
 
-3. Install the bundled proposing, supervision and scoping skills for Claude Code and Codex, then commit the installed files:
+3. Install the bundled proposing, supervision, scoping and proposal-listing skills for Claude Code and Codex, then commit the installed files:
 
    ```sh
    loop setup
    ```
 
-   The command installs all bundled skills, `loop-propose`, `loop-run` and `loop-scope`, into `.claude/skills/` and `.agents/skills/` at the invoking Git checkout's root. It also works from a subdirectory and targets the invoking linked worktree. It accepts no options and needs no OpenSpec root, loop configuration or worker executables.
+   The command installs all bundled skills, `loop-propose`, `loop-proposals`, `loop-run` and `loop-scope`, into `.claude/skills/` and `.agents/skills/` at the invoking Git checkout's root. It also works from a subdirectory and targets the invoking linked worktree. It accepts no options and needs no OpenSpec root, loop configuration or worker executables.
 
-   Run the same command after each package upgrade and commit the refreshed files. Existing bundled skill directories are replaced completely: local edits are overwritten and obsolete files are removed. Setup also removes the retired `openspec-loop` and `openspec-scope` skill directories. Unrelated skills, native OpenSpec skills and project configuration are preserved. Setup uses the executing package's files, independently of npm's current global prefix.
+   Run the same command after each package upgrade and commit the refreshed files. Existing bundled skill directories are replaced completely: local edits are overwritten and obsolete files are removed. Setup also removes the retired `openspec-loop`, `openspec-proposals` and `openspec-scope` skill directories. Unrelated skills, native OpenSpec skills and project configuration are preserved. Setup uses the executing package's files, independently of npm's current global prefix.
 
 `loop setup` prints each installed skill directory and exits 0 on success. Extra arguments, invocation outside a Git working tree, or a file or symlink blocking a destination directory refuse with exit 2 before changing copies. Source or write failures exit 1 and identify the failing path; some copies may already have been refreshed. Correct the reported cause and rerun `loop setup` to complete the refresh.
 
@@ -245,6 +245,12 @@ git merge --no-edit origin/main       # if not already an ancestor of HEAD
 Resolve and commit any conflicts before retrying `loop scope finish planning` from the original invoking checkout. Both the published tip and current base must be ancestors of the session tip; finish then avoids another rebase and can push without force. Resetting only to the published tip would repeat the rebase and rejection.
 
 After proposals land, explicitly run `loop run <change>` or `loop step <change>` from the default branch. In `pr` mode, merge the proposal PR there first. Enrolling from the multi-proposal session branch includes sibling proposal commits in the selected change's patch. Finishing scoping leaves proposals unarchived and unenrolled, and keeps the session checkout for inspection or manual Git cleanup.
+
+## Proposal backlog
+
+The read-only `loop-proposals` skill shows the active proposals in the resolved OpenSpec root, grouped and ordered. Invoke it as `/loop-proposals` in Claude Code or `$loop-proposals` in Codex, inside a scoping session or after its proposals land in the default checkout. It uses the invoking checkout's resolved root, or an explicitly selected store, and shows which one it used.
+
+It lists every active change native OpenSpec returns, including a draft without a proposal and a proposal without a source issue. Each row shows the change name, date, source issue when recorded and a title or summary; missing information is identified. Bugs are grouped first and the remaining proposals by repository area, with inferred classifications marked. From the proposals' dependencies, correctness and scope it recommends an order of attack with a reason each. It reads only, does not enroll a change and needs no finished scoping session.
 
 ## Running a change
 
