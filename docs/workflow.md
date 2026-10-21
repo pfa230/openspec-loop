@@ -2,20 +2,20 @@
 
 [README](../README.md) · [Configuration](configuration.md) · [Operations](operations.md)
 
-The work starts with an attended OpenSpec proposal. A run takes one committed change through review, implementation, integration, archival and delivery. The bundled skills help prepare and supervise that work; the CLI controls each run.
+Prepare an OpenSpec proposal with the agent, then commit it before starting a run. The loop reviews the plan, implements the change and carries it through to delivery. The bundled skills support proposal authoring and run supervision; the CLI controls each run.
 
 ## Prepare a change
 
 Use `$loop-propose` in Codex or `/loop-propose` in Claude Code. It follows the project's installed native OpenSpec proposing workflow, then summarizes the design and concrete changes before listing the artifacts.
 
-During proposing, settle the decisions implementation depends on and record them in the design. The tasks and specifications should give both the implementer and reviewer enough information to tell whether the change is complete. Committing a proposal does not start a run.
+Before committing the proposal, resolve the questions that affect scope or behavior and record the decisions in the design. The tasks and specifications should give the implementer and reviewer enough information to tell whether the change is complete. A commit alone does not start a run.
 
 There are two places to prepare and run a single change:
 
 - **On its own branch in a worktree.** Propose and commit there, then invoke `loop run <change>` in the clean worktree. The loop uses that branch and worktree.
 - **On the default branch.** Land the committed proposal there, then invoke `loop run <change>`. The loop creates `loop/<change>` and a worktree under the configured `worktrees` directory. The invoking checkout's files and index stay untouched.
 
-Delivery mode affects the base used for integration. In `pr` mode, unpushed commits on the local default branch become part of the pull request. In `merge` mode, an ahead or diverged local default branch stops integration. Land or push the proposals before enrolling from the default branch, or prepare a single change on its own branch. See [Delivery](#delivery).
+Delivery mode determines which branch the loop integrates with. In `pr` mode, unpushed commits on the local default branch become part of the pull request. In `merge` mode, integration stops if the local default branch is ahead of its upstream or has diverged from it. Land or push the proposals before starting a run from the default branch, or prepare a single change on its own branch. See [Delivery](#delivery).
 
 ## Prepare a batch
 
@@ -24,7 +24,7 @@ Use `$loop-scope` in Codex or `/loop-scope` in Claude Code for an attended sessi
 For each selected issue, the skill:
 
 1. Drafts the change through `loop-propose` in the scoping worktree.
-2. Asks for material decisions, records those answers and routine defaults in the design, and trims the scope to one implementable change.
+2. Asks about choices that affect scope or behavior, records the answers and routine defaults in the design, and trims the scope to one implementable change.
 3. Records `Source issue: <URL>` in the proposal and commits that proposal's artifacts separately.
 
 It continues to the next selected issue unless the user requested a review pause. Work requested in an issue but excluded from its proposal becomes a linked follow-up issue and a non-goal in the proposal. Invoking `loop-scope` authorizes those follow-up issues. Source issues stay open until implementation.
@@ -68,7 +68,7 @@ The CLI itself accepts one change per run. Several runs have separate state and 
 
 ## Proposal review
 
-The proposal reviewer examines the proposal, design, spec deltas and tasks. It judges whether the plan can be implemented and verified as one change without further decisions, preserves the design's recorded decisions, and follows the repository's rules for what a change contains. Agent instructions about how to work or report are not review criteria.
+The proposal reviewer examines the proposal, design, spec deltas and tasks. It checks whether an agent can implement and verify the plan as one change without further decisions. It also checks that the plan preserves recorded design decisions and follows the repository's rules for what a change contains. Agent instructions about how to work or report are not review criteria.
 
 Each finding is blocking or minor. A minor finding has a local fix, such as a typo or wrong path, that cannot change behavior or a recorded decision. The loop derives the verdict from the findings:
 
@@ -79,7 +79,7 @@ A finding that requires an unrecorded decision stops the run with a question bef
 
 Each review uses one proposal-review attempt. If the last allowed review returns `REVISE`, the reviser completes that revision and the run stops. A resume grants a fresh budget.
 
-Approval ordinarily starts implementation. With `loop step`, approval instead returns control at the stage boundary. Manual plan edits do not automatically invalidate approval or change the resume point; use [review restart](operations.md#plan-edits-and-decision-stops) when needed.
+After approval, `run` and `resume` continue to implementation. `loop step` returns control so the approved plan can be inspected first. Manual plan edits do not automatically invalidate approval or change where the run resumes; use [review restart](operations.md#plan-edits-and-decision-stops) when needed.
 
 ## Implementation, checks and review
 
@@ -91,7 +91,7 @@ The implementation reviewer checks that the patch implements the whole approved 
 
 If the implementer finds a problem in the plan, it reports the needed change. The plan reviser revises it and returns it to proposal review, retaining the implementation attempt count. The implementer can tick task boxes but cannot otherwise edit the plan: a completed turn that does so stops the run. A turn interrupted before completion is not checked for plan edits.
 
-An implementation attempt includes the implementer turn, checks, review and any approved minor fixes. Failed checks or a standing `REVISE` at the attempt limit stop the run. A fresh resume begins with an implementer turn on the findings, even if the previous attempt stopped during checks or review.
+An implementation attempt includes the implementer turn, checks, review and any approved minor fixes. The run stops when it reaches the attempt limit with failing checks or unresolved blocking findings. Resuming starts another implementer turn to address the findings, even if the previous attempt stopped during checks or review.
 
 ## Integration
 
