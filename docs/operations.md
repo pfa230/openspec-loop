@@ -28,7 +28,7 @@ Resume options:
 
 | Option | Effect |
 |---|---|
-| `--attempts <n>` | Replace both configured attempt budgets for this advancement. |
+| `--attempts <n>` | Replace both configured attempt budgets for this `resume` call. |
 | `--review` | Reopen proposal review and all later stages, retaining the branch's work. A pending revision of the previous plan is dropped. Refused after archival. |
 | `--implement` | Reopen implementation and all later stages, leaving proposal-review status unchanged. Refused after archival. |
 
@@ -85,11 +85,11 @@ Use `$loop-run` in Codex or `/loop-run` in Claude Code. The agent running this s
 
 When a run stops, the supervisor reads the report, transcripts, configured agent command and findings before changing anything. It checks whether the worker failed or the adapter rejected its reply, identifies which edits were committed, and reports which checks and reviews have finished. It states what remains unknown when the records do not establish the cause.
 
-The supervisor can edit the plan and resume the run when the existing instructions, source issue, plan or repository rules settle the decision. It explains the recovery, commits any plan edits on the run's branch and resumes with `--review` so the revised plan is reviewed. After exhausted attempts, it can grant a new budget with `--attempts`. It asks for help when a decision remains open or the same failure returns after its recovery.
+When the existing instructions, source issue, plan or repository rules settle the decision, the supervisor can revise the plan and resume the run. It explains the recovery and commits any plan edits on the run's branch before resuming with `--review`. It can grant a new attempt budget with `--attempts`. It asks for help when a decision remains open or the same failure returns after its recovery.
 
 The user handles problems with the environment, credentials, quota, main checkout or remote, and decides whether to discard a run or change a recorded design decision. The supervisor does not resume a run the user asked to stop. After a successful `step`, it waits for an explicit instruction to continue.
 
-For decision questions, the supervisor first answers those already settled by the available sources and cites each source. It presents every remaining question verbatim, numbered, with the choices, tradeoffs and a grounded recommendation where possible. The user must answer the open questions or approve the recommendations before the supervisor records the decisions in the design, commits them and resumes.
+For decision questions, the supervisor answers those already settled by the available sources and cites the evidence. It presents the remaining questions with their choices, tradeoffs and recommendations. After the user answers or approves the recommendations, it records the decisions in the design, commits them and resumes.
 
 The loop writes the shared Git directory and starts workers. Supervision commands therefore run outside the session's sandbox; Codex requests escalated permissions for each command.
 
@@ -104,7 +104,7 @@ Start with `loop status <change>` and the transcript named by the stop report. A
 | Review asks for a decision | Record the answer in the design on the run's branch, commit and resume. |
 | Implementer changes the plan beyond task marks | Revert the plan changes from the named turn's commit on the run's branch, then resume. |
 
-Resuming implementation starts another implementer turn to address the findings, even if the previous attempt stopped during checks or review. This can add an extra turn. If a check already fails on the base branch, the implementer is not authorized to repair unrelated code to make it pass.
+Resuming implementation starts another implementer turn, even if the previous attempt stopped during checks or review. If a check already fails on the base branch, the implementer is not authorized to repair unrelated code to make it pass.
 
 Uncommitted edits outside the active change directory in a stopped run's worktree join the next implementer commit and become part of the patch. They receive checks and review, except during approved minor fixes, which rerun checks without another review.
 
@@ -120,9 +120,9 @@ This reviews the current plan and continues from the branch's existing work. Use
 
 ### Interrupted processes
 
-A run accepts one active advancement at a time across `run`, `step` and `resume`. If the advancing process dies, `resume` can take over and redo the interrupted step.
+A run accepts only one active `run`, `step` or `resume` command at a time. If that process dies, `resume` can take over and redo the interrupted step.
 
-A SIGKILL or OOM kill can leave the worker running. In that case, resume refuses and identifies its process group. Wait for the group to exit or end it with `kill -- -<group>`, then resume. Confirm its identity with `pgrep -l -g <group>`. If the group ID was reused and belongs to another process, set `stepGroup` to `null` in the run directory's `state.json` instead of killing that process.
+A SIGKILL or OOM kill can leave the worker running. In that case, resume refuses and identifies its process group. Check the group's identity with `pgrep -l -g <group>` before acting. If it belongs to the worker, wait for it to exit or end it with `kill -- -<group>`, then resume. If the group ID was reused and belongs to another process, set `stepGroup` to `null` in the run directory's `state.json` instead of killing that process.
 
 If an interruption leaves a rebase or merge in progress before its conflict reaches the implementer, integration aborts it when retried.
 

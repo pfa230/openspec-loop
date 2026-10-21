@@ -18,7 +18,9 @@ If the npm global prefix belongs to root, set a user-owned prefix to install wit
 npm config set prefix ~/.npm-global
 ```
 
-Add `~/.npm-global/bin` to PATH. At startup, `loop` appends the directory containing the invoked executable to PATH, so it can find adapters installed beside it even when launched by path. For a symlink, this is the directory containing the link. Existing PATH entries keep precedence. The other required commands must still be installed and available.
+Add `~/.npm-global/bin` to PATH.
+
+At startup, `loop` appends the directory containing the invoked executable to PATH, so it can find adapters installed beside it even when launched by path. For a symlink, this is the directory containing the link. Existing PATH entries keep precedence. The other required commands must still be installed and available.
 
 To upgrade:
 
@@ -48,13 +50,13 @@ The loop installs no Git hooks and requires no custom OpenSpec schema.
 
 ## Configuration fields
 
-The [README example](../README.md#getting-started) supplies a complete `openspec/loop.yaml`.
+The [README example](../README.md#getting-started) supplies a complete `openspec/loop.yaml`. After local overrides are applied, a runnable configuration needs all the settings below, including assignments for all four roles. Both attempt counts must be positive integers.
 
 | Field | Meaning |
 |---|---|
 | `defaultBranch` | The project's default branch, specified explicitly. |
 | `worktrees` | Parent directory for default-branch runs (`<worktrees>/<change>`) and scoping sessions (`<worktrees>/scope-<session>`). |
-| `agents` | Aliases mapped to command argument arrays. Each harness/model combination can have its own alias. |
+| `agents` | Aliases mapped to command arrays: the executable first, followed by its arguments as separate strings. |
 | `roles` | Agent aliases for `proposalReviewer`, `planReviser`, `implementer` and `implementationReviewer`. |
 | `attempts.proposalReview` | Proposal reviews allowed in each `run`, `resume` or `step` call. |
 | `attempts.implementation` | Implementation attempts allowed in each `run`, `resume` or `step` call. |
@@ -62,6 +64,8 @@ The [README example](../README.md#getting-started) supplies a complete `openspec
 | `delivery` | `local`, `pr` or `merge`, with no default. See [Delivery](workflow.md#delivery). |
 
 Relative `worktrees` paths resolve against the invoking checkout; absolute paths are used as written. Changing this setting does not move an existing run's worktree. Ignore an in-checkout directory through `.gitignore` or, for one clone, `.git/info/exclude`. The loop does not edit ignore rules, and an unignored worktree makes the checkout dirty.
+
+Agent commands run without shell expansion: `~` and `$HOME` in their arrays are passed literally. Each harness/model combination can have its own alias.
 
 The plan reviser also applies minor plan fixes, and the implementer applies minor implementation fixes. One agent can fill several roles, with a fresh context for every turn. `run`, `step` and `resume` can override the four role assignments; see [Commands](operations.md#commands).
 
@@ -109,7 +113,7 @@ An agent command consists of an adapter and arguments for its harness. The packa
 | `loop-agy` | Antigravity 1.2.17 | none | `--dangerously-skip-permissions` |
 | `loop-opencode` | OpenCode 1.19.1 | `--agent plan` | none |
 
-Choose a model with the harness's model flag, such as `--model` or `-m`. Without restriction arguments, the harness uses its own defaults. Headless Claude Code and Codex cannot edit files by default. OpenCode permission requests are denied unless `--auto` is explicit; configured denies remain in force.
+Choose a model with the harness's model flag, such as `--model` or `-m`. Without restriction arguments, the harness uses its own defaults. Headless Claude Code and Codex cannot edit files by default. OpenCode permission requests are denied unless `--auto` is explicit.
 
 Claude Code's auto mode requires a model and account that support it. Otherwise it starts in its default mode and denies commands the implementer needs, including checks. Auto mode can also refuse edits inside a `.git` directory, which matters when worktrees are placed there. `--permission-mode bypassPermissions` approves those operations; [sandboxing](#sandboxing) supplies a separate filesystem boundary.
 
@@ -117,17 +121,17 @@ Workers receive `SHELL=bash`, because models write Bash-shaped commands. Claude 
 
 ### OpenCode
 
-The OpenCode adapter starts a local server for one worker turn and provides a `loop_reply` tool for the structured response. It accepts the root session's last completed reply-tool call, decodes the JSON string and passes the object to the loop's schema validation. Ordinary text containing JSON does not count as a reply. If a prompt completes without the call, the adapter asks once more in the same session; another completion without it fails the step.
+The OpenCode adapter starts a local server for one worker turn. The worker must submit its response through the `loop_reply` tool; ordinary text containing JSON does not count. The adapter passes the root session's last completed tool reply to the loop for schema validation. If the worker omits the call, the adapter asks once more in the same session; another completion without it fails the step.
 
-The tool rejects missing or non-string input, malformed JSON, non-object values and missing required top-level properties with errors the model can correct during its turn. It does not repair or coerce values. The reply tool loads through a temporary `OPENCODE_CONFIG_DIR`, removed when the worker ends, alongside the harness's normal configuration, plugins and authentication. An existing `OPENCODE_CONFIG_DIR` causes refusal.
+The tool rejects invalid input with errors the model can correct during its turn; it does not repair values. It loads through a temporary `OPENCODE_CONFIG_DIR`, removed when the worker ends, alongside the harness's normal configuration, plugins and authentication. An existing `OPENCODE_CONFIG_DIR` causes refusal.
 
 Supported arguments are `-m`/`--model`, `--agent`, `--variant`, `--auto` and `--pure`, including equals/value forms and explicit false or `--no-auto`/`--no-pure`. Pure mode from the environment is preserved and still loads the reply tool. Other run arguments, including `--attach`, session continuation, file attachments and `--dir`, fail by name before the server starts.
 
 Questions and plan-mode transitions are denied. Permission approval follows the explicit auto setting for both root and delegated sessions; configured denies remain in force. With `--agent plan`, OpenCode rejects reads outside the repository without asking.
 
-Local HTTP requests and the event subscription have no adapter-imposed response-header or body-inactivity deadline. A quiet stream can wait until completion; provider and server limits still apply. Interruption cancels requests and stops the owned server. API or session failures and unexpected server exits fail the step, preserving reported usage.
+The adapter sets no response-header or inactivity timeout for local HTTP requests or the event stream; provider and server limits still apply. Interruption cancels requests and stops the server. API or session failures and unexpected server exits fail the step, preserving reported usage.
 
-The transcript retains the originating transport error, cause chain and available stack. HTTP errors identify the method, path and whether requesting or reading the response failed. Request headers and prompt bodies are not dumped into these diagnostics.
+Transport errors in the transcript include their cause and available stack. HTTP errors identify the method, path and whether sending the request or reading the response failed. Diagnostics omit request headers and prompt bodies.
 
 ### Usage accounting
 

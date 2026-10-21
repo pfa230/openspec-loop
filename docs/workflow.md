@@ -29,14 +29,7 @@ For each selected issue, the skill:
 
 It continues to the next selected issue unless the user requested a review pause. Work requested in an issue but excluded from its proposal becomes a linked follow-up issue and a non-goal in the proposal. Invoking `loop-scope` authorizes those follow-up issues. Source issues stay open until implementation.
 
-The session commands create and deliver the planning branch:
-
-```sh
-loop scope start planning
-loop scope finish planning
-```
-
-Start creates `scope/planning` in `<worktrees>/scope-planning` from the committed local default branch. It does not fetch. Author and commit proposals in the worktree it prints. Finish requires that worktree to be clean, rebases it onto the current base and delivers the proposals together. Run start and finish from the same invoking checkout so they use the same configuration and local overrides.
+The agent creates a scoping branch and worktree from the committed local default branch, without fetching. When planning is complete, ask the agent to finish the session. Finishing requires a clean worktree, rebases the proposals onto the current base and delivers them together.
 
 Scoping and run delivery use the same setting but differ in `local` mode:
 
@@ -52,7 +45,7 @@ See [Scoping commands and recovery](operations.md#scoping-commands-and-recovery)
 
 ## Choose and run a batch
 
-`loop-proposals` lists the active changes in the selected OpenSpec root or store, including drafts and proposals without source issues. It shows each change's name, date, summary and source issue, groups bugs first and other work by area, marks inferred classifications, and recommends an order based on dependencies and scope. It is read-only and can be used during or after scoping.
+`loop-proposals` lists active changes, including drafts and proposals without source issues. It shows each change's name, date, summary and source issue, grouped by bugs and project area. It recommends an order based on dependencies and scope, marking classifications it inferred. The listing is read-only and uses the selected OpenSpec root or store.
 
 From a checkout on the configured default branch, invoke `loop-run` and name the changes to run. For example, in Codex:
 
@@ -60,7 +53,9 @@ From a checkout on the configured default branch, invoke `loop-run` and name the
 $loop-run run add-export and fix-timeout
 ```
 
-The agent running `loop-run` acts as the supervisor. It first reads the plans. If a change needs work the default branch does not yet contain, including another named change, it explains the dependency and proposes dropping that change from the concurrent runs. It waits for user confirmation of the selection before starting any run. Otherwise, it starts all selected runs without waiting for one to finish. Each progress line identifies its change, and one stopped or completed run does not delay the others.
+The agent running `loop-run` acts as the supervisor. It reads the plans and checks that their prerequisites are on the default branch. If any are missing, it explains the dependency, proposes dropping the affected change and waits for confirmation of the selection before starting any run.
+
+Once the selection is ready, it starts all selected runs concurrently. Each progress line identifies its change, and one stopped or completed run does not delay the others.
 
 The supervisor refuses a batch invoked from another branch. It does not schedule dependent changes for later execution. Once prerequisites have landed, select the dependent changes in a subsequent batch.
 
@@ -103,7 +98,7 @@ If integration changes the reviewed patch, the result returns to implementation,
 
 In `merge` mode, the loop first fetches the upstream and synchronizes the local default branch. It can fast-forward a branch that is behind, provided the checkout holding it has no uncommitted tracked changes. It stops if the branch is ahead or diverged.
 
-Rebasing rewrites commits. Earlier review records still identify the commits they covered, which Git retains until it prunes unreachable objects. An already-published run branch can later encounter a non-fast-forward push rejection; see [Delivery recovery](operations.md#delivery-recovery).
+Rebasing rewrites commits; review records still reference the commits they covered before the rebase. If the branch was already pushed, its next push may be rejected; see [Delivery recovery](operations.md#delivery-recovery).
 
 ## Archive
 
@@ -119,7 +114,7 @@ An archive refusal stops the run without committing the archive. Its transcript 
 |---|---|
 | `local` | The archived change remains committed on its branch. No remote is contacted and the default branch is untouched. |
 | `pr` | The loop pushes the run's branch without force, then uses `gh` to open a PR against the default branch's configured upstream. The title is the change name and the body is the archived proposal. The local default branch is untouched. |
-| `merge` | The loop checks that the default branch's checkout has no uncommitted tracked changes and that the run contains that branch. It pushes the run's tip to the upstream branch, then fast-forwards the local default branch. |
+| `merge` | The loop checks that the default branch's checkout has no uncommitted tracked changes and that the run's branch includes the current default-branch tip. It pushes the result to the upstream branch, then fast-forwards the local default branch. |
 
 `pr` and `merge` require a configured upstream for the default branch. The upstream determines the remote and target branch; the loop does not assume `origin/main`. `pr` also requires an installed, authenticated `gh` command.
 
