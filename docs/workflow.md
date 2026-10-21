@@ -27,7 +27,7 @@ For each selected issue, the skill:
 2. Asks for material decisions, records those answers and routine defaults in the design, and trims the scope to one implementable change.
 3. Records `Source issue: <URL>` in the proposal and commits that proposal's artifacts separately.
 
-It continues to the next selected issue unless you requested a review pause. Work requested in an issue but excluded from its proposal becomes a linked follow-up issue and a non-goal in the proposal. Invoking `loop-scope` authorizes those follow-up issues. Source issues stay open until implementation.
+It continues to the next selected issue unless the user requested a review pause. Work requested in an issue but excluded from its proposal becomes a linked follow-up issue and a non-goal in the proposal. Invoking `loop-scope` authorizes those follow-up issues. Source issues stay open until implementation.
 
 The session commands create and deliver the planning branch:
 
@@ -60,11 +60,11 @@ From a checkout on the configured default branch, invoke `loop-run` and name the
 $loop-run run add-export and fix-timeout
 ```
 
-The supervisor first reads their plans. If a change needs work the default branch does not yet contain, including another named change, it explains the dependency and proposes dropping that change from the batch. It starts nothing until you confirm the selection. Otherwise, it starts all selected runs without waiting for one to finish. Each progress line identifies its change, and one stopped or completed run does not delay the others.
+The supervisor first reads their plans. If a change needs work the default branch does not yet contain, including another named change, it explains the dependency and proposes dropping that change from the batch. It waits for user confirmation of the selection before starting any run. Otherwise, it starts all selected runs without waiting for one to finish. Each progress line identifies its change, and one stopped or completed run does not delay the others.
 
 The supervisor refuses a batch invoked from another branch. It does not schedule dependent changes for later execution. Once prerequisites have landed, select the dependent changes in a subsequent batch.
 
-The CLI itself accepts one change per run. Several runs have separate state and worktrees; the `loop-run` skill coordinates them and reports their final outcomes in the order you named them.
+The CLI itself accepts one change per run. Several runs have separate state and worktrees; the `loop-run` skill coordinates them and reports their final outcomes in the requested order.
 
 ## Proposal review
 

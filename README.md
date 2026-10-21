@@ -1,23 +1,21 @@
 # openspec-loop
 
-openspec-loop runs committed OpenSpec changes through proposal review, implementation, checks, code review and delivery. You work with an agent to scope the changes and record the decisions, then run the prepared work unattended. Each role can use a different model.
+openspec-loop runs committed OpenSpec changes through proposal review, implementation, checks, code review and delivery. Planning is attended: the developer and agent define the scope, resolve design questions and record decisions before execution. Prepared changes run unattended, with independently configured models for implementation and review.
 
 ## Why this workflow
 
-I built openspec-loop around two observations from using coding agents. A different model often catches mistakes that the authoring model misses when reviewing its own work. And once a change has a clear specification and concrete tasks, a less expensive model can often implement it well.
+Implementing from a short issue description requires an agent to infer missing requirements and design decisions. Incorrect assumptions may survive implementation and code review, making them expensive to correct later. Attending every execution step also consumes developer time after those decisions are settled.
 
-Getting to that specification still takes judgment. A short issue description can leave important choices open, and an agent working alone may make a plausible decision that misses the intent. Reviewing the resulting code is a costly way to discover that the wrong problem was solved. Staying beside the agent through every implementation step, however, consumes time even when the decisions have already been made.
+OpenSpec separates proposal authoring from implementation. An attended session establishes the requirements, scope and design, then records them in a proposal, specifications and tasks. openspec-loop executes a batch of prepared changes against those artifacts. A run stops when it encounters a decision the plan does not settle, returning that decision for human input.
 
-OpenSpec provides a useful division of work. Proposing is a conversation: clarify the problem, settle the scope, work through tradeoffs and record the result in a proposal, design, specs and tasks. Those artifacts give implementation and review a common reference.
-
-openspec-loop automates the work that follows. The intended workflow is to prepare a batch of changes in an attended session, then let them run through implementation and review. When a run encounters a decision the plan does not settle, it stops with a question. The aim is to spend human attention on those decisions and on preparing the work, while the loop handles the repeated execution steps.
+Independent model assignments reflect two observations from the maintainer's use of coding agents: cross-model review often found errors missed by self-review, and less expensive models often handled implementation when requirements and tasks were explicit. These observations motivate the workflow; the companion benchmark evaluates quality, cost and execution time across model combinations.
 
 ## How it works
 
-1. **Prepare the changes together.** Use `loop-scope` to work through selected issues with an agent. Answer its questions, define each change's scope and commit the finished proposals separately.
+1. **Prepare proposals.** Use `loop-scope` for an attended session over selected issues. Resolve design questions, define each change's scope and commit the finished proposals separately.
 2. **Choose a ready batch.** `loop-proposals` lists the proposals and recommends an order. Changes run together must be implementable against what is already on the default branch.
-3. **Start the runs.** From the default branch, ask `loop-run` to run the selected changes. It starts an independent run and worktree for each, and reports their progress.
-4. **Resolve stops when needed.** The supervisor investigates failures and can revise plans within recorded decisions. It brings unresolved choices back to you. One stopped run does not hold up the others.
+3. **Start the runs.** Invoke `loop-run` from the default branch with the selected change names. It starts an independent run and worktree for each, and reports their progress.
+4. **Resolve stops.** The supervisor investigates failures and can revise plans within recorded decisions. Unresolved decisions require human input. One stopped run does not delay the others.
 
 Each run follows the same stages:
 
@@ -44,11 +42,11 @@ The four roles are assigned separately:
 
 Every worker turn starts in a fresh context. Assign different models to authoring and review to use cross-model review; the loop also accepts the same model in several or all roles. It does not enforce model diversity.
 
-[openspec-loop-bench](https://github.com/pfa230/openspec-loop-bench), under active development, compares model combinations starting from the same committed OpenSpec proposals. It measures delivered quality, reported cost and wall time. Its methodology and dated results belong there; this project's [configuration reference](docs/configuration.md) explains how to use a chosen combination.
+[openspec-loop-bench](https://github.com/pfa230/openspec-loop-bench), under active development, compares model combinations starting from the same committed OpenSpec proposals. It evaluates delivered quality, reported cost and wall time. Its repository contains the methodology and dated results. The [configuration reference](docs/configuration.md) describes how to assign models to roles.
 
 ## Getting started
 
-You need Node 24 or later on Linux or macOS, Git, Bash, and OpenSpec 1.14.0 or later on PATH. Initialize the project with `openspec init` and install OpenSpec's skills for the tools you use. Install and authenticate the agent CLIs before running them unattended.
+Requirements are Node 24 or later on Linux or macOS, Git, Bash, and OpenSpec 1.14.0 or later on PATH. Initialize the project with `openspec init` and install OpenSpec's skills for the selected tools. Install and authenticate the agent CLIs before running them unattended.
 
 The example below uses Codex for review and Claude Code for revision and implementation. Claude Code's auto permission mode requires a supported model and account; see [agent permissions](docs/configuration.md#agents-and-permissions) for alternatives and sandboxing.
 
@@ -77,7 +75,7 @@ checks:
 delivery: local
 ```
 
-Set `defaultBranch` to your project's default branch and replace `npm test` with its required check commands. An explicit `checks: []` means there are no required checks. This example uses `local` delivery, which leaves the completed change on its branch without pushing or changing the default branch.
+Set `defaultBranch` to the project's default branch and replace `npm test` with its required check commands. An explicit `checks: []` means there are no required checks. This example uses `local` delivery, which leaves the completed change on its branch without pushing or changing the default branch.
 
 Add these entries to `.gitignore`:
 
@@ -96,7 +94,7 @@ This installs `loop-propose`, `loop-scope`, `loop-proposals` and `loop-run` into
 
 ### Running a change
 
-For a first run, create a worktree on a new branch from your configured default branch (here, `main`):
+For a first run, create a worktree on a new branch from the configured default branch (here, `main`):
 
 ```sh
 git worktree add .worktrees/first-change -b first-change main

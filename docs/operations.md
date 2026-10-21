@@ -41,7 +41,7 @@ loop step <change>     # implement, check, review and revise
 loop resume <change>   # continue through integration, archive and delivery
 ```
 
-You can keep using `step` through the remaining stages. Each invocation receives fresh configured attempt budgets and follows internal revisions and handoffs until a stage succeeds. If implementation returns to proposal review, or integration returns to implementation, that successful stage can be earlier than the one where the call began. The report names the next stage and continuation commands.
+Use `step` for each remaining stage to retain control at stage boundaries. Each invocation receives fresh configured attempt budgets and follows internal revisions and handoffs until a stage succeeds. If implementation returns to proposal review, or integration returns to implementation, that successful stage can be earlier than the one where the call began. The report names the next stage and continuation commands.
 
 ## Progress and reports
 
@@ -72,11 +72,11 @@ Use `$loop-run` in Codex or `/loop-run` in Claude Code. The skill uses the same 
 
 When a run stops, the supervisor reads the report, transcripts, effective agent command and findings before changing anything. It distinguishes worker or harness failures from rejected replies, and identifies committed and uncommitted work and completed and pending validation. Missing evidence is reported as uncertainty.
 
-It then states and applies a recovery within its scope: a plan edit committed on the run's branch and a resume command. Plan edits restart proposal review with `--review`; exhausted attempts can receive a new budget with `--attempts`. The supervisor hands the stop to you when the recovery needs a decision that the instructions, source issue, plan and repository rules do not settle, or when the same cause recurs after its recovery.
+It then states and applies a recovery within its scope: a plan edit committed on the run's branch and a resume command. Plan edits restart proposal review with `--review`; exhausted attempts can receive a new budget with `--attempts`. The supervisor requests user intervention when recovery needs a decision that the instructions, source issue, plan and repository rules do not settle, or when the same cause recurs after its recovery.
 
 Environment, credential, quota, main-checkout and remote repairs remain with the user, as do discarding a run or changing a recorded design decision. A requested stop stays stopped. A successful `step` boundary waits for inspection and explicit continuation.
 
-For decision questions, the supervisor first answers those already settled by the available sources and cites each source. It presents every remaining question verbatim, numbered, with the choices, tradeoffs and a grounded recommendation where possible. Recommendations need your answer or approval. It then records the decisions in the design, commits them and resumes.
+For decision questions, the supervisor first answers those already settled by the available sources and cites each source. It presents every remaining question verbatim, numbered, with the choices, tradeoffs and a grounded recommendation where possible. The user must answer the open questions or approve the recommendations before the supervisor records the decisions in the design, commits them and resumes.
 
 The loop writes the shared Git directory and starts workers. Supervision commands therefore run outside the session's sandbox; Codex requests escalated permissions for each command.
 
@@ -142,7 +142,7 @@ Continuing after a delivery stop retries delivery without repeating completed in
 
 ### Discard a run
 
-Use `loop status <change>` to locate the run directory and worktree. Stop any active run and preserve work you need before removing them.
+Use `loop status <change>` to locate the run directory and worktree. Stop any active run and preserve needed work before removing them.
 
 For a run enrolled from the default branch, remove the worktree and branch the loop created:
 
@@ -151,7 +151,7 @@ git worktree remove --force "<worktree>"
 git branch -D loop/<change>
 ```
 
-For a run enrolled on an existing branch, retain that branch and worktree unless you intend to delete your own work. Remove the recorded run directory to discard its state:
+For a run enrolled on an existing branch, retain that branch and worktree to preserve their work. Remove the recorded run directory to discard the run's state:
 
 ```sh
 rm -rf "<run directory>"
