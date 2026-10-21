@@ -4,12 +4,12 @@
 
 ## Commands
 
-Run commands from a checkout of the repository. The proposal must be committed; see [Prepare a change](workflow.md#prepare-a-change) for branch and worktree selection.
+Run commands from a checkout of the repository. Commit the proposal before starting its run; see [Prepare a change](workflow.md#prepare-a-change) for branch and worktree selection. Starting a new run registers the change with the loop, a step called enrollment.
 
 | Command | Action |
 |---|---|
-| `loop run <change> [<agents>]` | Enroll and advance a new run until completion or a stop. An already-enrolled change is refused. |
-| `loop step <change> [<agents>]` | Enroll or continue a run, returning after the first pending stage completes successfully. |
+| `loop run <change> [<agents>]` | Start a new run and continue until it finishes or stops. Refuse if a run already exists for the change. |
+| `loop step <change> [<agents>]` | Start or continue a run, returning after the next stage completes successfully. |
 | `loop resume <change> [<agents>] [--attempts <n>] [--implement] [--review]` | Continue from the first incomplete stage, with options to grant a different attempt budget or reopen earlier stages. |
 | `loop status <change>` | Show state, branch, stage status and paths. |
 | `loop stop <change>` | End the current step. Ctrl-C or closing the terminal also stops a foreground run. |
@@ -41,7 +41,7 @@ loop step <change>     # implement, check, review and revise
 loop resume <change>   # continue through integration, archive and delivery
 ```
 
-Use `step` for each remaining stage to retain control at stage boundaries. Each invocation receives fresh configured attempt budgets and follows internal revisions and handoffs until a stage succeeds. If implementation returns to proposal review, or integration returns to implementation, that successful stage can be earlier than the one where the call began. The report names the next stage and continuation commands.
+Use `step` to inspect the result after each stage. Each call starts with the configured attempt budgets and handles revisions until a stage succeeds. It may return to an earlier stage: for example, an implementer can report a plan problem that needs revision and another proposal review. In that case, `step` returns after proposal review succeeds, with implementation still pending. The report names the next stage and the commands to continue.
 
 ## Progress and reports
 
@@ -54,7 +54,7 @@ Each progress line identifies the stage, start or end, and worker alias where ap
 
 An unreported value is `unavailable`; an explicit zero stays zero. Cost is rounded to cents, so less than half a cent appears as `$0.00`. `usage unavailable` means the worker reported nothing. [Usage accounting](configuration.md#usage-accounting) explains the harness differences.
 
-The final report for a completed, stopped or stage-bounded run totals all worker steps across every advancement by role:
+The report at completion, a stop or a stage boundary totals usage by role. It includes every worker step since the run began, including steps from earlier `resume` and `step` calls:
 
 ```text
 Usage by role:
@@ -70,11 +70,11 @@ Every run stores state and transcripts in the repository's Git directory, normal
 
 Use `$loop-run` in Codex or `/loop-run` in Claude Code. The skill uses the same CLI commands as a person at a terminal, relays progress and presents the final report unchanged. [Batch supervision](workflow.md#choose-and-run-a-batch) starts several ready changes concurrently from the default branch.
 
-When a run stops, the supervisor reads the report, transcripts, effective agent command and findings before changing anything. It distinguishes worker or harness failures from rejected replies, and identifies committed and uncommitted work and completed and pending validation. Missing evidence is reported as uncertainty.
+When a run stops, the supervisor reads the report, transcripts, configured agent command and findings before changing anything. It checks whether the worker failed or the adapter rejected its reply, identifies which edits were committed, and reports which checks and reviews have finished. It states what remains unknown when the records do not establish the cause.
 
-It then states and applies a recovery within its scope: a plan edit committed on the run's branch and a resume command. Plan edits restart proposal review with `--review`; exhausted attempts can receive a new budget with `--attempts`. The supervisor requests user intervention when recovery needs a decision that the instructions, source issue, plan and repository rules do not settle, or when the same cause recurs after its recovery.
+The supervisor can edit the plan and resume the run when the existing instructions, source issue, plan or repository rules settle the decision. It explains the recovery, commits any plan edits on the run's branch and resumes with `--review` so the revised plan is reviewed. After exhausted attempts, it can grant a new budget with `--attempts`. It asks for help when a decision remains open or the same failure returns after its recovery.
 
-Environment, credential, quota, main-checkout and remote repairs remain with the user, as do discarding a run or changing a recorded design decision. A requested stop stays stopped. A successful `step` boundary waits for inspection and explicit continuation.
+The user handles problems with the environment, credentials, quota, main checkout or remote, and decides whether to discard a run or change a recorded design decision. The supervisor does not resume a run the user asked to stop. After a successful `step`, it waits for an explicit instruction to continue.
 
 For decision questions, the supervisor first answers those already settled by the available sources and cites each source. It presents every remaining question verbatim, numbered, with the choices, tradeoffs and a grounded recommendation where possible. The user must answer the open questions or approve the recommendations before the supervisor records the decisions in the design, commits them and resumes.
 
@@ -91,13 +91,13 @@ Start with `loop status <change>` and the transcript named by the stop report. A
 | Review asks for a decision | Record the answer in the design on the run's branch, commit and resume. |
 | Implementer changes the plan beyond task marks | Revert the plan changes from the named turn's commit on the run's branch, then resume. |
 
-An implementation resume starts with another implementer turn on the findings. This also applies when the previous attempt stopped during checks or review, so resuming can incur an extra turn. A failing check that already fails on the base does not authorize the implementer to repair unrelated code.
+Resuming implementation starts another implementer turn to address the findings, even if the previous attempt stopped during checks or review. This can add an extra turn. If a check already fails on the base branch, the implementer is not authorized to repair unrelated code to make it pass.
 
 Uncommitted edits outside the active change directory in a stopped run's worktree join the next implementer commit and become part of the patch. They receive checks and review, except during approved minor fixes, which rerun checks without another review.
 
 ### Plan edits and decision stops
 
-The stop report identifies the worktree and branch for decision answers and plan edits. After a decision stop, committing the answer and resuming follows the required proposal review. For other manual edits, choose the continuation explicitly: they do not invalidate an existing approval or reopen stages automatically.
+The stop report identifies the worktree and branch to edit. When a run stops for a decision, record the answer in the design, commit it and resume; the loop returns to proposal review. Other manual plan edits do not automatically invalidate approval or reopen completed stages. To review an edited plan before continuing, use:
 
 ```sh
 loop resume <change> --review
@@ -138,7 +138,7 @@ The restore discards uncommitted OpenSpec edits and the clean removes untracked 
 | Local fast-forward would overwrite a file | Clear the obstruction Git names, preserving any needed work, then resume. |
 | `gh` is missing, unauthenticated or fails after the push | Correct that cause and resume; the earlier push is retained. |
 
-Continuing after a delivery stop retries delivery without repeating completed integration, checks, review or archival. Manually reconciled work needs verification before continuation. The loop reuses an existing open PR for the run's branch and target, and repeated pushes or fast-forwards to the same commit do nothing.
+After a delivery stop, `resume` retries delivery without repeating completed integration, checks, review or archival. Verify any manual conflict resolution or other edits before resuming. The loop reuses an existing open PR for the run's branch and target, and repeated pushes or fast-forwards to the same commit do nothing.
 
 ### Discard a run
 
@@ -157,7 +157,7 @@ For a run enrolled on an existing branch, retain that branch and worktree to pre
 rm -rf "<run directory>"
 ```
 
-Use the exact path printed by status. Enrollment can then start a new run from a committed proposal.
+Use the exact path printed by status. With the old state removed, `loop run` can start a new run from a committed proposal.
 
 ## Scoping commands and recovery
 
@@ -186,7 +186,7 @@ Commit only `openspec/changes/<change>/`, record the source issue in the proposa
 
 Scope finish rebases onto the local default branch in `local` mode and the fetched upstream in `pr` mode. In `merge` mode it first synchronizes the local default branch with the upstream, then rebases onto it. Unlike run integration, a conflicting scope rebase is aborted for attended recovery; there is no automatic merge fallback.
 
-Updates to the default branch require a checkout without uncommitted tracked changes, preserve unrelated untracked files, and refuse to overwrite files, including ignored ones. An ahead or diverged local default in `merge` mode, a dirty default holder, a conflict, a rejected push or a failed fast-forward requires attended recovery. Correct the cause and retry from the original invoking checkout.
+Before updating the default branch, finish checks that its checkout has no uncommitted changes to tracked files. It preserves unrelated untracked files and refuses to overwrite files, including ignored ones. In `merge` mode, it also stops if the local default branch is ahead of its upstream or has diverged from it. Resolve any conflict, rejected push or failed fast-forward before retrying from the checkout where the session was started.
 
 In `pr` mode, finish pushes without force before reusing an open PR or creating one with `gh pr create --fill`. If a retry rebases an already-published session branch, the push can be rejected. Reconcile both histories in the session worktree, substituting the actual remote and branches:
 

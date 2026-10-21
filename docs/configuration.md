@@ -12,13 +12,13 @@ npm install -g openspec-loop
 
 Node 24 or later, Git, Bash, OpenSpec 1.14.0 or later, and the configured agent CLIs must be installed separately. The project must be initialized with OpenSpec and have its native skills or commands installed for the selected tools. Authenticate each harness before running it unattended. `loop-jail` also needs [ai-jail](https://github.com/akitaonrails/ai-jail).
 
-If the npm global prefix belongs to root, a user-owned prefix allows installation without `sudo`:
+If the npm global prefix belongs to root, set a user-owned prefix to install without `sudo`:
 
 ```sh
 npm config set prefix ~/.npm-global
 ```
 
-Add `~/.npm-global/bin` to PATH. At startup, `loop` appends the directory it was invoked from to PATH, so adapters installed beside it can be found even when it was launched by path. Existing PATH entries keep precedence. External prerequisites still need to be available.
+Add `~/.npm-global/bin` to PATH. At startup, `loop` appends the directory containing the invoked executable to PATH, so it can find adapters installed beside it even when launched by path. For a symlink, this is the directory containing the link. Existing PATH entries keep precedence. The other required commands must still be installed and available.
 
 To upgrade:
 
@@ -40,7 +40,9 @@ Setup installs `loop-propose`, `loop-scope`, `loop-proposals` and `loop-run` int
 
 Rerunning setup replaces the bundled skill directories completely, including local edits and obsolete files. It also removes the retired `openspec-loop`, `openspec-scope` and `openspec-proposals` skill directories. Commit those removals when upgrading from a release that installed them. Unrelated skills, native OpenSpec skills and project configuration are preserved.
 
-Setup accepts no arguments or options. It needs a Git working tree but does not require loop configuration, an OpenSpec root or worker executables. It prints each installed directory and exits 0. Extra arguments, invocation outside a working tree, or a file or symlink blocking a destination cause refusal with exit 2 before writes. Source or copy failures exit 1 and identify the path; correct the cause and rerun setup, since some copies may already have been refreshed.
+Setup accepts no arguments or options. It needs a Git working tree but does not require loop configuration, an OpenSpec root or worker executables. On success, it prints each installed directory and exits 0.
+
+Setup exits 2 before writing files if it receives extra arguments, runs outside a Git working tree, or finds a file or symlink blocking a destination. If it cannot read or copy a source file, it exits 1 and identifies the path. Correct the cause and rerun setup; some copies may already have been refreshed.
 
 The loop installs no Git hooks and requires no custom OpenSpec schema.
 
@@ -54,8 +56,8 @@ The [README example](../README.md#getting-started) supplies a complete `openspec
 | `worktrees` | Parent directory for default-branch runs (`<worktrees>/<change>`) and scoping sessions (`<worktrees>/scope-<session>`). |
 | `agents` | Aliases mapped to command argument arrays. Each harness/model combination can have its own alias. |
 | `roles` | Agent aliases for `proposalReviewer`, `planReviser`, `implementer` and `implementationReviewer`. |
-| `attempts.proposalReview` | Proposal reviews allowed per advancement. |
-| `attempts.implementation` | Implementation attempts allowed per advancement. |
+| `attempts.proposalReview` | Proposal reviews allowed in each `run`, `resume` or `step` call. |
+| `attempts.implementation` | Implementation attempts allowed in each `run`, `resume` or `step` call. |
 | `checks` | Required shell commands, run with `sh -c` in the run's worktree. `[]` explicitly means no checks; omitting the field causes refusal. |
 | `delivery` | `local`, `pr` or `merge`, with no default. See [Delivery](workflow.md#delivery). |
 
@@ -88,7 +90,7 @@ roles:
 
 The main checkout is Git's primary working tree, regardless of its current branch. A bare clone has no main checkout, so only the invoking checkout's local file applies. A linked worktree receives the main checkout's settings through this read order, without copying the file.
 
-The commands refuse missing committed configuration, unreadable files, invalid YAML, unknown keys, wrong types and required fields missing after merging. A worktree override cannot hide an invalid main local file. Commands that start workers also refuse undefined role aliases and unavailable agent commands. Unused agent commands are not resolved.
+The commands refuse to proceed if the committed configuration is missing or any applicable file is unreadable, contains invalid YAML, uses unknown keys or has values of the wrong type. After merging the settings, they also check for missing required fields. A worktree override cannot hide an invalid local file in the main checkout. Commands that start workers check that every assigned alias names a defined agent and that its command is available. They do not look up commands for unused agents.
 
 Commands without `/` resolve through PATH. Commands containing `/` resolve against the invoking checkout, even when defined in the main checkout's local file.
 
@@ -168,7 +170,7 @@ The wrapper maps the executable paths for the adapter, harness and OpenSpec read
 | `loop-agy` | `~/.gemini/antigravity-cli/antigravity-oauth-token` | `~/.gemini/antigravity-cli/settings.json` |
 | `loop-opencode` | `~/.local/share/opencode/auth.json` | `~/.config/opencode` |
 
-Writable credentials let token refresh persist. Plugins, MCP logins and session history elsewhere in the harness's state directory are absent. The wrapper uses these default paths: relocating state through `CLAUDE_CONFIG_DIR`, `CODEX_HOME` or `XDG_DATA_HOME` can leave the harness unauthenticated.
+The harness can update the shared credential file when it refreshes a token, so the new credentials survive after the worker exits. Plugins, MCP logins and session history stored elsewhere are absent from the jail. The wrapper uses the default paths above; a harness configured to store its state elsewhere through `CLAUDE_CONFIG_DIR`, `CODEX_HOME` or `XDG_DATA_HOME` may be unable to authenticate inside the jail.
 
 Extend the jail through ai-jail's global `~/.ai-jail` configuration. Top-level keys apply to every command. For example, a Rust toolchain and build cache can be shared as follows, with `CARGO_TARGET_DIR=~/.cache/cargo-target` set in the host environment:
 
