@@ -1,6 +1,6 @@
 # openspec-loop
 
-openspec-loop automates implementation, testing and review of changes planned with OpenSpec. A developer and agent prepare a batch of proposals together before starting the unattended runs.
+openspec-loop combines attended planning with unattended implementation and cross-model review. A developer and agent prepare a batch of OpenSpec proposals, resolving scope and design questions before implementation starts. The loop then implements, tests and reviews each change.
 
 ## Why this workflow
 
@@ -10,12 +10,14 @@ OpenSpec separates planning from implementation. During an attended planning ses
 
 Once a batch of proposals is ready, openspec-loop handles implementation, checks and review without requiring the developer to supervise each agent turn. If review raises a question the plan does not answer, the run stops for a decision.
 
+Cross-model review uses a different model to examine the implementation for mistakes the authoring model missed. Separate role assignments also allow a lower-cost model to implement well-specified tasks while a stronger model handles review.
+
 ## How it works
 
 1. **Prepare proposals.** Use `loop-scope` to work through selected issues. Resolve design questions, define each change's scope and commit the finished proposals separately.
-2. **Choose a ready batch.** `loop-proposals` lists the proposals and recommends an order. Every change in a batch must be able to start from the current default branch, without depending on another unfinished change.
+2. **Choose what to run next.** `loop-proposals` identifies dependencies and recommends an order. Independent changes can run concurrently; dependent changes wait until their prerequisites land.
 3. **Start the runs.** Invoke `loop-run` from the default branch with the selected change names. It starts a separate run and worktree for each, and reports their progress.
-4. **Handle stops.** The supervisor investigates failures and can revise plans without changing recorded decisions. It asks for input when a decision remains open. One stopped run does not delay the others.
+4. **Handle stops.** The agent running `loop-run` investigates failures and can revise plans without changing recorded decisions. It asks for input when a decision remains open. One stopped run does not delay the others.
 
 Each run follows the same stages:
 
@@ -23,15 +25,15 @@ Each run follows the same stages:
 Proposal review -> Implementation, checks and review -> Integration -> Archive -> Delivery
 ```
 
-The loop sends review findings back to the agent responsible for the work and limits the number of attempts. After implementation passes review, it integrates the patch with the current base branch and runs the checks again. Conflicts or changes to the reviewed patch require another implementation attempt. OpenSpec then updates the project's specifications and archives the change. Depending on configuration, the loop leaves the result on a local branch, opens a pull request, or pushes it to the default branch.
+The loop revises the work in response to review findings, within configured attempt limits. Once checks and review pass, it integrates the change, updates the specifications and archives the proposal. Delivery can leave the result on a local branch, open a pull request, or push to the default branch.
 
-The loop decides which stage runs next and saves every worker's transcript. Its CLI runs in the foreground, so keep the process alive while it works. Saved state allows another session to inspect the run or resume it after a stop.
+Each run saves its state and every worker's transcript, so another agent session can inspect it or resume it after a stop.
 
 See [Workflow](docs/workflow.md) for proposing, batch dependencies and review rules.
 
 ## Choosing models
 
-Each role has its own model assignment. This supports cross-model review and lets implementation use a lower-cost model for well-specified changes.
+Configure a model for each of the four roles:
 
 | Role | Work |
 |---|---|
@@ -48,7 +50,7 @@ Every worker turn starts in a fresh context, even when the same model is assigne
 
 Install Node 24 or later on Linux or macOS, Git, Bash, and OpenSpec 1.14.0 or later, with their commands on PATH. Initialize the project with `openspec init` and install OpenSpec's skills for the tools in use. Install and authenticate the agent CLIs before running them unattended.
 
-The example below uses Codex for review and Claude Code for revision and implementation. Claude Code's auto permission mode requires a supported model and account; see [agent permissions](docs/configuration.md#agents-and-permissions) for alternatives and sandboxing.
+The example below configures a Node.js project that uses `npm test` for its checks, Codex for review, and Claude Code for revision and implementation. Replace `npm test` with the commands required by the project. Claude Code's auto permission mode requires a supported model and account; see [agent permissions](docs/configuration.md#agents-and-permissions) for alternatives and sandboxing.
 
 ```sh
 npm install -g openspec-loop
@@ -75,7 +77,7 @@ checks:
 delivery: local
 ```
 
-Set `defaultBranch` to the project's default branch and replace `npm test` with its required check commands. An explicit `checks: []` means there are no required checks. This example uses `local` delivery, which leaves the completed change on its branch without pushing or changing the default branch.
+Set `defaultBranch` to the project's default branch. An explicit `checks: []` means there are no required checks. This example uses `local` delivery, which leaves the completed change on its branch without pushing or changing the default branch.
 
 Add these entries to `.gitignore`:
 
@@ -94,26 +96,20 @@ This installs `loop-propose`, `loop-scope`, `loop-proposals` and `loop-run` into
 
 ### Running a change
 
-For a first run, create a worktree on a new branch from the configured default branch (here, `main`):
+1. Use `loop-propose` to prepare one change with the agent, or `loop-scope` to work through several issues. Review the plans and resolve their questions. `loop-scope` creates a scoping worktree and commits each proposal separately.
+2. Have the agent commit and land the proposals on the configured default branch. For a scoping session, ask the agent to finish it. With the example's `local` delivery, finishing updates the local default branch; other modes are described in the [scoping workflow](docs/workflow.md#prepare-a-batch).
+3. Use `loop-proposals` to inspect dependencies and choose what to run next.
+4. From the default branch, invoke `loop-run` with the selected change names. For example, in Codex:
 
-```sh
-git worktree add .worktrees/first-change -b first-change main
-cd .worktrees/first-change
-```
+   ```text
+   $loop-run run add-export and fix-timeout
+   ```
 
-In that worktree, use `loop-propose` to prepare one change with the agent. Review the plan, resolve its questions and commit its artifacts. The worktree must be clean before starting the run.
+The agent checks dependencies before starting the runs, which create a separate branch and worktree for each change. It monitors progress, handles stops and reports each outcome.
 
-Run this from that worktree, replacing `<change>` with the proposal's name:
+With the example's `local` delivery, each completed implementation and archived proposal remains committed on its run's branch for inspection. Merge a prerequisite's result into the default branch before selecting changes that depend on it.
 
-```sh
-loop run <change>
-```
-
-The loop uses the current branch and worktree. It prints progress and a final report with the outcome and transcript paths. With the example's `local` delivery, the completed implementation and archived proposal remain committed on that branch for inspection.
-
-For batch work, use the [attended scoping workflow](docs/workflow.md#prepare-a-batch). Proposals must land on the default branch before the supervisor starts several runs from it. Dependent changes need to wait until their prerequisites land.
-
-Use `loop status <change>` to inspect a run, `loop stop <change>` to stop it, and `loop resume <change>` to continue after resolving a stop. To advance one stage at a time, use `loop step <change>`. See [Operations](docs/operations.md) for command syntax and recovery.
+Ask the agent running `loop-run` to inspect, stop or resume a run, or to advance one stage at a time. See [Operations](docs/operations.md) for supervision, direct CLI use and recovery.
 
 ## Documentation
 
