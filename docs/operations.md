@@ -32,6 +32,19 @@ Resume options:
 | `--review` | Reopen proposal review and all later stages, retaining the branch's work. A pending revision of the previous plan is dropped. Refused after archival. |
 | `--implement` | Reopen implementation and all later stages, leaving proposal-review status unchanged. Refused after archival. |
 
+### Run directly from the CLI
+
+For manual operation, prepare a single change on its own branch and worktree. For example, with `main` as the configured default branch:
+
+```sh
+git worktree add .worktrees/first-change -b first-change main
+cd .worktrees/first-change
+```
+
+Prepare the proposal there and commit its artifacts. From the clean worktree, run `loop run <change>`, replacing `<change>` with the proposal's name. The loop uses that branch and worktree. From the default branch, it creates them instead.
+
+The CLI runs in the foreground, so keep its process alive while it works. Another session can inspect the saved state or resume after a stop. Direct CLI use does not provide the agent's failure diagnosis and recovery described under [Supervising with an agent](#supervising-with-an-agent).
+
 ### Advance one stage at a time
 
 ```sh
@@ -68,7 +81,7 @@ Every run stores state and transcripts in the repository's Git directory, normal
 
 ## Supervising with an agent
 
-Use `$loop-run` in Codex or `/loop-run` in Claude Code. The skill uses the same CLI commands as a person at a terminal, relays progress and presents the final report unchanged. [Batch supervision](workflow.md#choose-and-run-a-batch) starts several ready changes concurrently from the default branch.
+Use `$loop-run` in Codex or `/loop-run` in Claude Code. The agent running this skill is the supervisor: it uses the same CLI commands as a person at a terminal, relays progress and presents the final report unchanged. [Batch supervision](workflow.md#choose-and-run-a-batch) starts several ready changes concurrently from the default branch.
 
 When a run stops, the supervisor reads the report, transcripts, configured agent command and findings before changing anything. It checks whether the worker failed or the adapter rejected its reply, identifies which edits were committed, and reports which checks and reviews have finished. It states what remains unknown when the records do not establish the cause.
 

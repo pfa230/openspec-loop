@@ -60,7 +60,7 @@ From a checkout on the configured default branch, invoke `loop-run` and name the
 $loop-run run add-export and fix-timeout
 ```
 
-The supervisor first reads their plans. If a change needs work the default branch does not yet contain, including another named change, it explains the dependency and proposes dropping that change from the batch. It waits for user confirmation of the selection before starting any run. Otherwise, it starts all selected runs without waiting for one to finish. Each progress line identifies its change, and one stopped or completed run does not delay the others.
+The agent running `loop-run` acts as the supervisor. It first reads the plans. If a change needs work the default branch does not yet contain, including another named change, it explains the dependency and proposes dropping that change from the concurrent runs. It waits for user confirmation of the selection before starting any run. Otherwise, it starts all selected runs without waiting for one to finish. Each progress line identifies its change, and one stopped or completed run does not delay the others.
 
 The supervisor refuses a batch invoked from another branch. It does not schedule dependent changes for later execution. Once prerequisites have landed, select the dependent changes in a subsequent batch.
 
