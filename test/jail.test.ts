@@ -35,7 +35,7 @@ function executable(path: string, content: string): void {
   chmodSync(path, 0o755);
 }
 
-function jail(t: { after: (fn: () => void) => void }, command: string[], env: Record<string, string> = {}) {
+function jail(t: { after: (fn: () => void) => void }, command: string[], env: Record<string, string> = {}, setup = (base: string) => {}) {
   const base = realpathSync(mkdtempSync(join(tmpdir(), "loop-jail-test-")));
   t.after(() => rmSync(base, { recursive: true, force: true }));
   const repo = join(base, "repo");
@@ -49,6 +49,7 @@ function jail(t: { after: (fn: () => void) => void }, command: string[], env: Re
   const bin = join(base, "bin");
   executable(join(bin, "ai-jail"), AI_JAIL);
   executable(join(bin, "loop-claude"), "#!/bin/sh\n");
+  executable(join(bin, "loop-opencode"), "#!/bin/sh\n");
   // openspec installed as npm does it, reached through a ~/.local/bin-style link.
   executable(join(base, "npm", "lib", "node_modules", "@scope", "openspec", "bin", "openspec.js"), "#!/bin/sh\n");
   mkdirSync(join(base, "npm", "bin"));
@@ -59,6 +60,7 @@ function jail(t: { after: (fn: () => void) => void }, command: string[], env: Re
   mkdirSync(run, { recursive: true });
   writeFileSync(join(run, "prompt.md"), "Do the work.\n");
   writeFileSync(join(run, "schema.json"), "{}\n");
+  setup(base);
   const paths = ["prompt.md", "schema.json", "reply.json", "usage.json"].map((file) => join(run, file));
   const log = join(base, "ai-jail.json");
   const result = spawnSync(process.execPath, [JAIL, ...command, ...paths], {
@@ -94,6 +96,18 @@ test("loop-jail shares Claude Code's credential file writable and its settings a
   assert.ok(writable.includes(join(base, "home", ".claude", ".credentials.json")));
   assert.ok(readOnly.includes(join(base, "home", ".claude", "settings.json")));
   assert.ok(readOnly.includes(join(base, "home", ".claude", "CLAUDE.md")));
+});
+
+test("loop-jail maps the target of a symlink in OpenCode's configuration directory read-only", (t) => {
+  const { base, result, readOnly } = jail(t, ["loop-opencode"], {}, (base) => {
+    const config = join(base, "home", ".config", "opencode");
+    mkdirSync(config, { recursive: true });
+    mkdirSync(join(base, "dotfiles"));
+    writeFileSync(join(base, "dotfiles", "opencode.jsonc"), "{}\n");
+    symlinkSync("../../../dotfiles/opencode.jsonc", join(config, "opencode.jsonc"));
+  });
+  assert.equal(result.status, 0, result.stderr);
+  assert.ok(readOnly.includes(join(base, "dotfiles", "opencode.jsonc")));
 });
 
 test("loop-jail fails naming ai-jail when it is not installed", (t) => {

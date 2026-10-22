@@ -4,7 +4,7 @@
 // read-only. Since the run directory lies inside the read-only Git directory, the wrapped command writes its reply and
 // usage to a writable host directory, and the wrapper copies them to the loop's paths after it exits.
 import { spawn } from "node:child_process";
-import { accessSync, constants, copyFileSync, lstatSync, mkdtempSync, readlinkSync, rmSync } from "node:fs";
+import { accessSync, constants, copyFileSync, lstatSync, mkdtempSync, readdirSync, readlinkSync, rmSync, statSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { basename, delimiter, dirname, join, resolve, sep } from "node:path";
 import { fail } from "./adapters/common.js";
@@ -60,7 +60,16 @@ function chain(name: string): string[] {
 const readOnly = new Set([git(worktree, "rev-parse", "--path-format=absolute", "--git-common-dir"), join(worktree, ".git")]);
 const executables = [command, shipped?.harness, "openspec"].filter((name): name is string => name !== undefined);
 for (const dir of executables.flatMap(chain)) if (!inWorktree(dir)) readOnly.add(dir);
-for (const file of shipped?.readOnly ?? []) readOnly.add(join(home, file));
+// A read-only configuration directory also maps the target of each symlink directly inside it, which ai-jail does
+// not follow.
+for (const file of shipped?.readOnly ?? []) {
+  const path = join(home, file);
+  readOnly.add(path);
+  if (!statSync(path, { throwIfNoEntry: false })?.isDirectory()) continue;
+  for (const entry of readdirSync(path, { withFileTypes: true })) {
+    if (entry.isSymbolicLink()) readOnly.add(resolve(path, readlinkSync(join(path, entry.name))));
+  }
+}
 
 const relay = mkdtempSync(join(tmpdir(), "loop-jail-"));
 const writable = [relay, ...(shipped?.writable ?? []).map((file) => join(home, file))];
