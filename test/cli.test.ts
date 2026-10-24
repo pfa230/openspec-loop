@@ -20,6 +20,8 @@ function withoutBin(repo: Repo): string {
 test("loop prints usage and exits 2", (t) => {
   const repo = makeRepo(t);
   for (const args of [[], ["run"], ["step"], ["unknown", "add-thing"], ["run", "add-thing", "extra"], ["step", "add-thing", "extra"], ["run", "add-thing", "a", "b", "c"],
+    ["status", "add-thing", "--json", "--json"], ["status", "--json", "add-thing"],
+    ...["run", "step", "resume", "stop"].map((command) => [command, "add-thing", "--json"]),
     ["scope"], ["scope", "start"], ["scope", "finish"], ["scope", "other", "session"], ["scope", "start", "session", "extra"], ["scope", "finish", "session", "--force"]]) {
     const result = loop(args, { cwd: repo.top, env: repo.env });
     assert.equal(result.status, 2, args.join(" "));
@@ -29,9 +31,12 @@ test("loop prints usage and exits 2", (t) => {
 
 test("status of a change with no run exits 2", (t) => {
   const repo = makeRepo(t);
-  const result = runLoop(repo, ["status", "add-thing"]);
-  assert.equal(result.status, 2);
-  assert.match(result.stderr, /add-thing has no run; start one with `loop run add-thing`/);
+  for (const extra of [[], ["--json"]]) {
+    const result = runLoop(repo, ["status", "add-thing", ...extra]);
+    assert.equal(result.status, 2);
+    assert.match(result.stderr, /add-thing has no run; start one with `loop run add-thing`/);
+    assert.equal(result.stdout, "");
+  }
 });
 
 test("--attempts, --implement and --review are accepted only on resume, each once, --attempts as a positive integer", (t) => {

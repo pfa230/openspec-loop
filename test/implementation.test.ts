@@ -230,6 +230,15 @@ test("a review finding with a question stops the run, and resume after a recorde
   );
   assert.equal(repo.calls("implementer").length, 1);
 
+  const status = runLoop(repo, ["status", "add-thing"]);
+  assert.match(status.stdout, /JSON or YAML\?/);
+  assert.ok(status.stdout.includes(`Recovery: ${state(repo).stop!.recovery}\n`));
+  const json = runLoop(repo, ["status", "add-thing", "--json"]);
+  assert.equal(json.status, 0, json.stderr);
+  assert.deepEqual(JSON.parse(json.stdout), {
+    version: 1, status: "stopped", branch: "loop/add-thing", worktree: repo.worktree, report: status.stdout,
+  });
+
   writeFile(repo.worktree, DESIGN, "## Decisions\n\nUse JSON.\n");
   repo.gitIn(repo.worktree, "add", DESIGN);
   repo.gitIn(repo.worktree, "commit", "--quiet", "-m", "decide format");

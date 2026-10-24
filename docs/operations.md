@@ -11,7 +11,7 @@ Run commands from a checkout of the repository. Commit the proposal before start
 | `loop run <change> [<agents>]` | Start a new run and continue until it finishes or stops. Refuse if a run already exists for the change. |
 | `loop step <change> [<agents>]` | Start or continue a run, returning after the next stage completes successfully. |
 | `loop resume <change> [<agents>] [--attempts <n>] [--implement] [--review]` | Continue from the first incomplete stage, with options to grant a different attempt budget or reopen earlier stages. |
-| `loop status <change>` | Show state, branch, stage status and paths. |
+| `loop status <change> [--json]` | Show state, branch, stage status and paths, optionally as JSON. |
 | `loop stop <change>` | End the current step. Ctrl-C or closing the terminal also stops a foreground run. |
 
 `run`, `resume` and `step` exit 0 on completion or a successful stage boundary, 1 on a stop, and 2 on refusal. A successful `step` does not necessarily mean the run is complete; read its report. `status` and `stop` exit 2 if the run does not exist.
@@ -31,6 +31,39 @@ Resume options:
 | `--attempts <n>` | Replace both configured attempt budgets for this `resume` call. |
 | `--review` | Reopen proposal review and all later stages, retaining the branch's work. A pending revision of the previous plan is dropped. Refused after archival. |
 | `--implement` | Reopen implementation and all later stages, leaving proposal-review status unchanged. Refused after archival. |
+
+### JSON status and host integration
+
+`loop status <change> --json` prints one JSON object followed by a newline. Pass `--json` once, after the change name; it is only accepted by `status`. Without it, status prints the ordinary text report. A successful query exits 0, including when the run is stopped. Refusals retain exit 2, a diagnostic on stderr and empty stdout.
+
+The response has exactly these five fields:
+
+| Field | Meaning |
+|---|---|
+| `version` | The number `1`, identifying this response contract. |
+| `status` | `advancing` for a live controller, `stopped` for a recorded stop without a lock holder, `complete` when every stage is complete, `between-stages` at a successful stage boundary, or `interrupted` otherwise, matching ordinary status. |
+| `branch` | The recorded run branch as a string. |
+| `worktree` | The recorded run worktree path as a string. |
+| `report` | The ordinary status text, including its trailing newline, decision questions and recovery instructions when present. Display it or pass it to a supervising agent; its wording is not a machine contract. |
+
+For example, a completed local run started from the default branch in `/srv/project` produces this response (formatted here for readability):
+
+```json
+{
+  "version": 1,
+  "status": "complete",
+  "branch": "loop/add-thing",
+  "worktree": "/srv/project/.worktrees/add-thing",
+  "report": "Run add-thing: complete\nBranch: loop/add-thing\nStages:\n  proposal-review  complete\n  implementation   complete\n  integration      complete\n  archive          complete\n  delivery         complete\nWorktree: /srv/project/.worktrees/add-thing\nRun directory: /srv/project/.git/openspec-loop/add-thing\nTranscripts: /srv/project/.git/openspec-loop/add-thing/transcripts\n"
+}
+```
+
+A host application can use this interface with a working Linux/macOS installation, configured and authenticated workers, and a committed proposal in a clean worktree:
+
+1. Set `delivery: local` in the [loop configuration](configuration.md). Launch `loop run <change>`, keep the process alive and display its stdout for live activity.
+2. Query `loop status <change> --json` when needed, including after reconnecting. Treat it as the current observation; polling can miss intermediate transitions. Use `loop stop <change>` when the user requests a stop.
+3. For stops or interruptions, display `report` and follow [recovery](#recovering-a-stopped-run) before resuming. Record decision answers in the design on the run's branch and commit them. After a host's plan edits, use `loop resume <change> --review` so the revised plan is reviewed before implementation continues.
+4. On `complete`, read the branch SHA with `git -C "<worktree>" rev-parse "<branch>"`, substituting the returned strings. The host owns publication, CI, QA and merging. Local delivery integrates against the local default branch and retains the run's branch and worktree; the host must keep that base current and validate the eventual remote merge.
 
 ### Run directly from the CLI
 

@@ -106,6 +106,13 @@ for (const command of ["run", "step"]) {
 
     const status = runLoop(repo, ["status", "add-thing"]);
     assert.match(status.stdout, new RegExp(`^Run add-thing: advancing in process ${running.child.pid}, at implementation`));
+    const advancing = runLoop(repo, ["status", "add-thing", "--json"]);
+    assert.equal(advancing.status, 0, advancing.stderr);
+    const observation = JSON.parse(advancing.stdout);
+    assert.deepEqual(observation, {
+      version: 1, status: "advancing", branch: "loop/add-thing", worktree: repo.worktree, report: observation.report,
+    });
+    assert.match(observation.report, new RegExp(`^Run add-thing: advancing in process ${running.child.pid}, at implementation`));
 
     for (const other of ["run", "resume", "step"]) {
       const refused = runLoop(repo, [other, "add-thing"]);
@@ -128,6 +135,11 @@ for (const command of ["run", "step"]) {
     const statusAfter = runLoop(repo, ["status", "add-thing"]);
     assert.match(statusAfter.stdout, /^Run add-thing: stopped at implementation\nCause: stopped by the user\nRecovery: loop resume add-thing\n/);
     assert.match(statusAfter.stdout, /\n {2}proposal-review {2}complete\n {2}implementation {3}pending\n/);
+    const stoppedStatus = runLoop(repo, ["status", "add-thing", "--json"]);
+    assert.equal(stoppedStatus.status, 0, stoppedStatus.stderr);
+    assert.deepEqual(JSON.parse(stoppedStatus.stdout), {
+      version: 1, status: "stopped", branch: "loop/add-thing", worktree: repo.worktree, report: statusAfter.stdout,
+    });
     assert.equal(runLoop(repo, ["stop", "add-thing"]).stdout, "Run add-thing is not advancing.\n");
 
     step.use(false);
@@ -177,6 +189,11 @@ for (const command of ["run", "step"]) {
       status.stdout,
       new RegExp(`^Run add-thing: interrupted at implementation; process ${controller} died\nRecovery: loop resume add-thing\n`),
     );
+    const interrupted = runLoop(repo, ["status", "add-thing", "--json"]);
+    assert.equal(interrupted.status, 0, interrupted.stderr);
+    assert.deepEqual(JSON.parse(interrupted.stdout), {
+      version: 1, status: "interrupted", branch: "loop/add-thing", worktree: repo.worktree, report: status.stdout,
+    });
 
     step.use(false);
     const resumed = runLoop(repo, [command === "step" ? "step" : "resume", "add-thing"]);
