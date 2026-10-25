@@ -25,6 +25,15 @@ for (const branch of [undefined, "add-thing"]) {
       assert.equal(repo.calls("verifier").length, index === 0 ? 0 : 1);
       assert.match(result.stdout, /proposalReviewer: 1 step; input 10, output unavailable, cost \$0\.50/);
       const status = runLoop(repo, ["status", "add-thing"]);
+      const json = runLoop(repo, ["status", "add-thing", "--json"]);
+      assert.equal(json.status, 0, json.stderr);
+      assert.equal(json.stdout, `${JSON.stringify({
+        version: 1,
+        status: index < STAGES.length - 1 ? "between-stages" : "complete",
+        branch: state.branch,
+        worktree: state.worktree,
+        report: status.stdout,
+      })}\n`);
       if (index < STAGES.length - 1) {
         assert.match(result.stdout, new RegExp(`returned control between stages after ${stage}\\.\nNext stage: ${STAGES[index + 1]}\nContinue: loop step add-thing or loop resume add-thing\n`));
         assert.match(status.stdout, new RegExp(`^Run add-thing: between stages\nNext stage: ${STAGES[index + 1]}`));

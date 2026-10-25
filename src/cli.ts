@@ -12,7 +12,7 @@ const launchDirectory = dirname(resolve(process.argv[1]!));
 process.env.PATH = process.env.PATH === undefined ? launchDirectory : `${process.env.PATH}${delimiter}${launchDirectory}`;
 
 const COMMANDS = { run, step, status, stop, resume };
-const USAGE = "Usage: loop <status|stop> <change>\n       loop <run|step> <change> [<proposalReviewer> <planReviser> <implementer> <implementationReviewer>]\n       loop resume <change> [<the four agents>] [--attempts <n>] [--implement] [--review]\n       loop scope <start|finish> <session>\n       loop setup\n";
+const USAGE = "Usage: loop status <change> [--json]\n       loop stop <change>\n       loop <run|step> <change> [<proposalReviewer> <planReviser> <implementer> <implementationReviewer>]\n       loop resume <change> [<the four agents>] [--attempts <n>] [--implement] [--review]\n       loop scope <start|finish> <session>\n       loop setup\n";
 
 interface Args {
   name: keyof typeof COMMANDS;
@@ -21,6 +21,7 @@ interface Args {
   attempts?: number;
   implement: boolean;
   review: boolean;
+  json?: boolean;
 }
 
 // Returns the requested command and its arguments, or undefined for malformed syntax.
@@ -33,6 +34,7 @@ function parseArgs(argv: string[]): Args | { name: "scope"; action: "start" | "f
   }
   if (name === undefined || !Object.hasOwn(COMMANDS, name) || change === undefined) return undefined;
   const args: Args = { name: name as keyof typeof COMMANDS, change, implement: false, review: false };
+  if (name === "status" && extra.length === 1 && extra[0] === "--json") return { ...args, json: true };
   const options = extra.findIndex((arg) => arg.startsWith("--"));
   const aliases = options === -1 ? extra.length : options;
   if (aliases === 4 && name !== "status" && name !== "stop") args.roles = extra.splice(0, 4);
@@ -67,10 +69,11 @@ if (parsed === undefined) {
     } else if (parsed.name === "scope") {
       process.exitCode = parsed.action === "start" ? await startScope(parsed.session) : await finishScope(parsed.session);
     } else {
-      const { name, change, roles, attempts, implement, review } = parsed;
+      const { name, change, roles, attempts, implement, review, json } = parsed;
       process.exitCode = name === "resume" ? await resume(change, roles, attempts, implement, review)
         : name === "run" || name === "step" ? await COMMANDS[name](change, roles)
-        : await COMMANDS[name](change);
+        : name === "status" ? await status(change, json)
+        : await stop(change);
     }
   } catch (error) {
     if (!(error instanceof Refusal)) throw error;

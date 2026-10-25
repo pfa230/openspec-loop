@@ -29,9 +29,12 @@ test("loop prints usage and exits 2", (t) => {
 
 test("status of a change with no run exits 2", (t) => {
   const repo = makeRepo(t);
-  const result = runLoop(repo, ["status", "add-thing"]);
-  assert.equal(result.status, 2);
-  assert.match(result.stderr, /add-thing has no run; start one with `loop run add-thing`/);
+  for (const extra of [[], ["--json"]]) {
+    const result = runLoop(repo, ["status", "add-thing", ...extra]);
+    assert.equal(result.status, 2);
+    assert.match(result.stderr, /add-thing has no run; start one with `loop run add-thing`/);
+    assert.equal(result.stdout, "");
+  }
 });
 
 test("--attempts, --implement and --review are accepted only on resume, each once, --attempts as a positive integer", (t) => {

@@ -137,28 +137,35 @@ export async function stop(change: string): Promise<number> {
   return 0;
 }
 
-export async function status(change: string): Promise<number> {
+export async function status(change: string, json = false): Promise<number> {
   const dir = runDir(topLevel(process.cwd()), change);
   const state = existingState(dir, change);
   const holder = lockHolder(dir);
   const recovery = `loop resume ${change}`;
   let summary: string;
+  let observation: "advancing" | "stopped" | "complete" | "between-stages" | "interrupted";
   if (holder?.alive) {
+    observation = "advancing";
     summary = `advancing in process ${holder.pid}${state.current ? `, at ${state.current}` : ""}`;
   } else if (state.stop && !holder) {
+    observation = "stopped";
     summary = `stopped at ${state.stop.stage}\nCause: ${state.stop.cause}\nRecovery: ${state.stop.recovery}`;
   } else if (STAGES.every((stage) => state.stages[stage] === "complete")) {
+    observation = "complete";
     summary = "complete";
   } else if (!holder && state.current === null && state.stop === null) {
+    observation = "between-stages";
     summary = `between stages\n${continuation(state)}`;
   } else {
+    observation = "interrupted";
     const at = state.current ? ` at ${state.current}` : "";
     const died = holder ? `; process ${holder.pid} died` : "";
     summary = `interrupted${at}${died}\nRecovery: ${recovery}`;
   }
   const width = Math.max(...STAGES.map((stage) => stage.length));
   const stages = STAGES.map((stage) => `  ${stage.padEnd(width)}  ${state.stages[stage]}\n`).join("");
-  process.stdout.write(`Run ${change}: ${summary}\nBranch: ${state.branch}\nStages:\n${stages}${locations(dir, state)}`);
+  const report = `Run ${change}: ${summary}\nBranch: ${state.branch}\nStages:\n${stages}${locations(dir, state)}`;
+  process.stdout.write(json ? `${JSON.stringify({ version: 1, status: observation, branch: state.branch, worktree: state.worktree, report })}\n` : report);
   return 0;
 }
 
